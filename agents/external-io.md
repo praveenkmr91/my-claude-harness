@@ -1,7 +1,7 @@
 ---
 name: external-io
 model: opus
-description: Runs payload-heavy external tool work — any MCP server or external CLI (e.g. Jira, Figma, Chrome DevTools) — off the main thread so large MCP results never land in main context. Use for multi-call pulls, large reads, and browser verification; returns a distilled answer plus a path to any raw slice saved. Not for a single small lookup (cheaper inline), and never for an outward write the user has not approved verbatim.
+description: Runs payload-heavy external tool work — any MCP server, web fetch or external CLI (e.g. Jira, Figma, Chrome DevTools) — off the main thread so large MCP results never land in main context. Use for multi-call pulls, large reads, and browser verification; returns a distilled answer plus a path to any raw slice saved. Not for a single small lookup (cheaper inline), and never for an outward write the user has not approved verbatim.
 disallowedTools: Edit, NotebookEdit, Agent
 ---
 

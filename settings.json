@@ -22,11 +22,6 @@
             "type": "command",
             "command": "jq -r '.prompt // \"\"' | grep -qE '<task-notification>|\\[SYSTEM NOTIFICATION' || cat /Users/praveenkumar/.claude/persona-core.md",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/context-size-nudge.sh",
-            "timeout": 5
           }
         ]
       },
