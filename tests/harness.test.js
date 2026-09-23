@@ -21,6 +21,7 @@ const RULE_DOCS = [
   'subagent-tiers.md',
   'plan-mode.md',
   'plugin-curation.md',
+  'harness.md',
 ];
 
 const HOOK_SCRIPTS = fs.readdirSync(path.join(ROOT, 'hooks')).filter((f) => /\.(sh|js)$/.test(f));
@@ -167,6 +168,26 @@ test.describe('rule and hook agree', () => {
       assert.match(read(doc), docPattern, `${doc} no longer states the rule the hook enforces`);
     });
   }
+});
+
+test('plugin-curation.md: every enabledPlugins key has exactly one row in the table matching its value', () => {
+  const enabled = JSON.parse(read('settings.json')).enabledPlugins;
+  const doc = read('plugin-curation.md');
+  const table = (heading) => {
+    const section = doc.split(/\n(?=## )/).find((s) => s.startsWith(heading));
+    return [...section.matchAll(/^\| `([^`]+@[^`]+)` \|/gm)].map((m) => m[1]);
+  };
+  const rows = [
+    ...table('## Always-on core').map((key) => [key, true]),
+    ...table('## Tombstones').map((key) => [key, false]),
+  ];
+  const documented = rows.map(([key]) => key);
+  const problems = [
+    ...documented.filter((key, i) => documented.indexOf(key) !== i).map((key) => `${key}: more than one row`),
+    ...rows.filter(([key, value]) => enabled[key] !== value).map(([key, value]) => `${key}: doc says ${value}, settings says ${enabled[key]}`),
+    ...Object.keys(enabled).filter((key) => !documented.includes(key)).map((key) => `${key}: no row`),
+  ];
+  assert.deepEqual(problems, []);
 });
 
 test.describe('always-load budget', () => {

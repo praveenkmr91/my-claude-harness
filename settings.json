@@ -127,6 +127,34 @@
             "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(git:*)",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "if": "Bash(gh pr:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "if": "Bash(cp:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "if": "Bash(rm:*)",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash|mcp__claude_ai_Figma__download_assets",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/harness-context.sh",
+            "timeout": 5
           }
         ]
       }
@@ -183,7 +211,7 @@
     "impeccable@impeccable": true,
     "kotlin-lsp@claude-plugins-official": false,
     "claude-hud@claude-hud": true,
-    "modern-web-guidance@googlechrome": true
+    "modern-web-guidance@googlechrome": false
   },
   "extraKnownMarketplaces": {
     "superpowers-dev": {

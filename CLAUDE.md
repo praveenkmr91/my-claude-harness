@@ -60,18 +60,13 @@
   - Fable reviews plans only — never writes or reviews code, Opus-main-thread onto `Plan`; a subagent never reaches it and returns the question to the dispatcher. Escalation is tagged `[tier-override: <why>]`.
 
 ## Config & harness
-- **Harness tests: `node --test ~/.claude/tests/*.test.js` after any edit to CLAUDE.md, a rule doc, a hook, or settings hooks.** Checks pointers resolve, frontmatter, hook syntax, rule↔hook agreement, always-load word ceilings (`tests/budget-baseline.json`), and duplicated sentences across rule docs. Red = fix the drift or raise the baseline deliberately, never allowlist.
-- **Plan-mode rules live in `~/.claude/plan-mode.md`**, hook-injected on `EnterPlanMode` (no unprompted ExitPlanMode, one Fable consult, approved plan = the file).
-- **One tier owns a rule.** Layered config (global CLAUDE.md → framework ref → project memory): general principle lives in exactly one tier; others hold pointer or specific instance. Promote/demote = move + pointer, never copy.
-- **Review depth: spec owned by `~/.claude/review-routing.md`**, hook-injected on review asks. Six verbs (review, battery, harden, trim, audit, verify); "review" alone lets the hook pick verb and lenses from the files the task touched; main thread at session tier, findings verified at source, ≥75 only; battery only when named.
-- **Hydrogen guidance is repo-gated — never add unconditional Hydrogen rules here.** `hydrogen.md` loads only via a Hydrogen repo's `CLAUDE.local.md` import; `hooks/hydrogen-context.sh` and `hooks/hydrogen-util-guard.sh` exit unless the toplevel `package.json` depends on `@additiv-hydrogen`.
-- **Plugin curation record = `~/.claude/plugin-curation.md`** — read before touching `enabledPlugins`; `false` entries are deliberate tombstones, curation reverts on plugin updates, usage oracle = transcripts not name-greps.
+- **Editing `~/.claude` (rule docs, hooks, settings)? `~/.claude/harness.md` owns the maintenance rules** — `hooks/harness-context.sh` injects it on first contact with `~/.claude` each session.
+- **Review depth: `~/.claude/review-routing.md` owns it** (hook-injected on review asks) — battery only when named, never proactively.
 - **Auto-mode classifier denial = stop and ask, never route around.** On "Blocked by classifier": finish independent work, then hand me the exact blocked action (command or file + change) in one message and stop — I retry it from `/permissions` → Recently denied, or exit auto mode. No splitting the action into smaller writes, no alternate tool for the same write.
 - **`<private>…</private>` = use now, never persist.** Content inside the tags never lands in memory files, .remember/, CLAUDE.md, commits, or any artifact — reference it this session only.
 
 ## Tooling gotchas
 - **zsh: quote grep globs.** Unquoted `--include=*.tsx` dies as "no matches found" before grep runs, and the empty result reads as "nothing exists". Always `--include='*.tsx'`; an empty grep is unverified until the command exited 0.
-- **Figma MCP `download_assets`: commit the `export`, never `svgAssets`.** `svgAssets` drops instance transforms — a rotated or flipped instance comes back wrong and nothing downstream can tell. `export` (`defaultFormat: "svg"`) is the whole-node render (frame, offset, rotation, background rects to strip); it is `null` and `get_metadata` says "invalid node selection" unless the node's page is open in Figma desktop.
 - **Don't `cp` from `node_modules/`.** Check `package.json` scripts for eject command first.
 - **Lockfiles: never full-regen to clean.** Drop removed dep: surgically delete stanza (`file:` local entries have no integrity hash) or `npm install --package-lock-only` — never `rm lock && install`, re-pins every `^`/`~` to today's registry (silent toolchain drift). Lockfile diff far bigger than change = diff resolved-version set before trusting.
 - **Dep version ground-truth = lockfile.** Exact-version work (patch-package) pins to *resolved* version in `package-lock.json`. `package.json` only range — sanity gate (installed version outside range → node_modules stale). Trust `node_modules/*/package.json` only right after clean install.
