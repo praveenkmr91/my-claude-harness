@@ -57,7 +57,7 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 
 ## Account-side (not settable from `~/.claude`)
 - claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls (2026-09-23). Optional hygiene only — unused connectors surface as deferred names, so disconnecting saves near-zero context. Figma, Claude Docs, Atlassian kept.
-- claude.ai account skills (negotiation, morning, docx/xlsx/pptx/pdf): 0 invocations → toggle off in claude.ai settings if unwanted.
+- claude.ai account skills: hidden via `skillOverrides` (2026-09-23, 0 uses). docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`. Keep `docs` (Claude Docs connector needs it).
 
 ## Mechanics
 - **Drift is machine-guarded:** `hooks/plugin-drift-guard.sh` (SessionStart) diffs `enabledPlugins` against `plugin-curation.expected.json` — silent when clean, banner on drift. Deliberate change → `--accept`, then update the tables here. Snapshot is script-written only; never hand-edit.
