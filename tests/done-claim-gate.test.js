@@ -14,8 +14,9 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'done-claim-gate-'));
 test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
 let seq = 0;
-function run(reply, { bashCommand, stopHookActive = false } = {}) {
+function run(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false } = {}) {
   const content = [{ type: 'text', text: reply }];
+  if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
   fs.writeFileSync(transcriptPath, [
@@ -44,6 +45,16 @@ test('done-claim gate', async (t) => {
   await t.test('ignores negations and questions', () => {
     assert.equal(run('Not done yet: two edits remain.'), 0);
     assert.equal(run('Is this done?'), 0);
+  });
+
+  await t.test('ignores turns that edited no code file', () => {
+    assert.equal(run('Done: saved that as feedback in memory.', { editedFile: null }), 0);
+    assert.equal(run('Committed 8dca3c4, lint-staged green.', { editedFile: null, bashCommand: 'git commit -m x' }), 0);
+    assert.equal(run('Done: the rule doc is updated.', { editedFile: '/repo/CLAUDE.md' }), 0);
+  });
+
+  await t.test('counts a Bash write to a code file as an edit', () => {
+    assert.equal(run('Fixed.', { editedFile: null, bashCommand: "sed -i '' 's/a/b/' src/app.tsx" }), 2);
   });
 
   await t.test('skips the retry after a block', () => {
