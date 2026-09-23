@@ -170,6 +170,24 @@ test.describe('rule and hook agree', () => {
   }
 });
 
+test('block-dangerous-git.sh: every command family it guards has its own if-gate', () => {
+  const families = [
+    ['git', /git (push|commit|add)/],
+    ['gh pr', /gh pr \(create\|edit\)/],
+    ['cp', /\\bcp\\b[^\n]*node_modules/],
+    ['rm', /\\brm\\b[^\n]*package-lock/],
+  ];
+  const script = read('hooks/block-dangerous-git.sh');
+  const gates = JSON.parse(read('settings.json')).hooks.PreToolUse
+    .flatMap((entry) => entry.hooks)
+    .filter((hook) => hook.command.endsWith('hooks/block-dangerous-git.sh'))
+    .map((hook) => hook.if);
+  for (const [family, guard] of families) {
+    assert.match(script, guard, `script no longer guards ${family}; drop it from this list`);
+    assert.ok(gates.includes(`Bash(${family}:*)`), `no Bash(${family}:*) if-gate: the ${family} guard never runs`);
+  }
+});
+
 test('plugin-curation.md: every enabledPlugins key has exactly one row in the table matching its value', () => {
   const enabled = JSON.parse(read('settings.json')).enabledPlugins;
   const doc = read('plugin-curation.md');
