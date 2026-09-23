@@ -1,0 +1,27 @@
+# Deny-by-default: ~/.claude is 1.7G of runtime state — transcripts (projects/),
+# plugins/, security/, caches — and only the hand-authored config belongs in git.
+# A new top-level file is INVISIBLE until re-included here; tests/config-tracking.test.js
+# fails on any untracked top-level .md so the drift surfaces instead of rotting.
+/*
+
+!/.gitignore
+!/CLAUDE.md
+!/persona-core.md
+!/plan-mode.md
+!/subagent-tiers.md
+!/review-battery.md
+!/review-routing.md
+!/hydrogen.md
+!/hydrogen-reference.md
+!/plugin-curation.md
+!/plugin-curation.expected.json
+!/settings.json
+!/agents/
+!/commands/
+!/hooks/
+!/output-styles/
+!/tests/
+!/skills/
+
+# skills/synced is vendored by the sync job, not authored here.
+/skills/synced/

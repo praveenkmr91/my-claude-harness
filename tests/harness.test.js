@@ -1,0 +1,197 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const ROOT = path.resolve(__dirname, '..');
+const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
+const words = (text) => text.split(/\s+/).filter(Boolean).length;
+
+const RULE_DOCS = [
+  'CLAUDE.md',
+  'persona-core.md',
+  'hydrogen.md',
+  'hydrogen-reference.md',
+  'review-routing.md',
+  'review-battery.md',
+  'subagent-tiers.md',
+  'plan-mode.md',
+  'plugin-curation.md',
+];
+
+const HOOK_SCRIPTS = fs.readdirSync(path.join(ROOT, 'hooks')).filter((f) => /\.(sh|js)$/.test(f));
+
+function frontmatter(text) {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return null;
+  const data = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const kv = line.match(/^([A-Za-z_-]+):\s*(.*)$/);
+    if (kv) data[kv[1]] = kv[2].trim().replace(/^"(.*)"$/, "$1");
+  }
+  return data;
+}
+
+test.describe('pointers resolve', () => {
+  for (const doc of RULE_DOCS) {
+    test(`${doc}: every ~/.claude/ path and hooks/ script exists`, () => {
+      const text = read(doc);
+      const refs = new Set([
+        ...(text.match(/~\/\.claude\/[A-Za-z0-9_./-]+/g) || []).map((p) => p.replace(/^~\/\.claude\//, '')),
+        ...(text.match(/\bhooks\/[a-z0-9-]+\.(?:sh|js)(?![.\w])/g) || []),
+      ]);
+      const missing = [...refs].filter((rel) => !exists(rel.replace(/[.,;:)]+$/, '')));
+      assert.deepEqual(missing, [], `${doc} points at missing paths`);
+    });
+  }
+
+  test('settings.json: every hook command path exists', () => {
+    const commands = JSON.stringify(JSON.parse(read('settings.json')).hooks);
+    const paths = new Set(commands.match(/\/Users\/praveenkumar\/\.claude\/[A-Za-z0-9_./-]+/g) || []);
+    const missing = [...paths].filter((p) => !fs.existsSync(p));
+    assert.deepEqual(missing, []);
+  });
+
+  test('agent names cited in review docs exist in agents/, skills/ or a plugin', () => {
+    const installed = new Set();
+    for (const f of fs.readdirSync(path.join(ROOT, 'agents'))) installed.add(f.replace(/\.md$/, ''));
+    for (const d of fs.readdirSync(path.join(ROOT, 'skills'))) installed.add(d);
+    const out = execFileSync('find', [path.join(ROOT, 'plugins'), '-path', '*/agents/*.md'], { encoding: 'utf8' });
+    for (const f of out.split('\n').filter(Boolean)) installed.add(path.basename(f, '.md'));
+
+    const cited = new Set();
+    for (const doc of ['review-routing.md', 'review-battery.md', 'subagent-tiers.md']) {
+      for (const name of read(doc).match(/\b[a-z]+(?:-[a-z]+)*-(?:analyzer|reviewer|hunter|simplifier|explorer)\b/g) || []) {
+        cited.add(name.replace(/^[a-z-]+:/, ''));
+      }
+    }
+    const missing = [...cited].filter((n) => !installed.has(n));
+    assert.deepEqual(missing, []);
+  });
+});
+
+test.describe('frontmatter', () => {
+  const skillDirs = fs.readdirSync(path.join(ROOT, 'skills')).filter((d) => exists(`skills/${d}/SKILL.md`));
+  for (const dir of skillDirs) {
+    test(`skills/${dir}: name matches directory, description present`, () => {
+      const fm = frontmatter(read(`skills/${dir}/SKILL.md`));
+      assert.ok(fm, 'no frontmatter');
+      assert.equal(fm.name, dir);
+      assert.ok(fm.description, 'missing description');
+    });
+  }
+  for (const file of fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.endsWith('.md'))) {
+    test(`agents/${file}: name matches filename, description present`, () => {
+      const fm = frontmatter(read(`agents/${file}`));
+      assert.ok(fm, 'no frontmatter');
+      assert.equal(fm.name, path.basename(file, '.md'));
+      assert.ok(fm.description, 'missing description');
+    });
+  }
+});
+
+test.describe('hook scripts', () => {
+  for (const script of HOOK_SCRIPTS) {
+    test(`hooks/${script} parses`, () => {
+      const abs = path.join(ROOT, 'hooks', script);
+      if (script.endsWith('.sh')) execFileSync('bash', ['-n', abs]);
+      else execFileSync('node', ['--check', abs]);
+    });
+  }
+
+  test('hooks invoked by bare path are executable', () => {
+    const commands = JSON.parse(read('settings.json')).hooks;
+    const bare = JSON.stringify(commands).match(/"command":"\/Users\/praveenkumar\/\.claude\/hooks\/[^"\s]+/g) || [];
+    for (const entry of bare) {
+      const abs = entry.replace(/^"command":"/, '');
+      assert.doesNotThrow(() => fs.accessSync(abs, fs.constants.X_OK), `${abs} not executable`);
+    }
+  });
+
+  test('shellcheck over hooks/*.sh', { skip: !hasBinary('shellcheck') && 'shellcheck not installed' }, () => {
+    for (const script of HOOK_SCRIPTS.filter((f) => f.endsWith('.sh'))) {
+      execFileSync('shellcheck', ['-S', 'warning', path.join(ROOT, 'hooks', script)]);
+    }
+  });
+});
+
+function hasBinary(name) {
+  try {
+    execFileSync('which', [name], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test('agent-file-scope: flags writes outside the brief, tolerates a sentence-ending path', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'scope-'));
+  fs.mkdirSync(path.join(home, '.claude', 'hooks-logs'), { recursive: true });
+  const listed = path.join(home, 'listed.txt');
+  const unlisted = path.join(home, 'unlisted.txt');
+  fs.writeFileSync(listed, '');
+  fs.writeFileSync(unlisted, '');
+  const transcript = path.join(home, 'agent.jsonl');
+  fs.writeFileSync(transcript, [
+    JSON.stringify({ type: 'user', message: { content: `Edit ${listed}.` } }),
+    JSON.stringify({ type: 'assistant', message: { content: [
+      { type: 'tool_use', name: 'Edit', input: { file_path: listed } },
+      { type: 'tool_use', name: 'Write', input: { file_path: unlisted } },
+    ] } }),
+  ].join('\n'));
+  const payload = JSON.stringify({ stop_hook_active: false, agent_type: 'test', cwd: home, agent_transcript_path: transcript });
+  const out = execFileSync('bash', [path.join(ROOT, 'hooks', 'agent-file-scope.sh')], { input: payload, encoding: 'utf8', env: { ...process.env, HOME: home } });
+  const message = JSON.parse(out).systemMessage;
+  assert.match(message, new RegExp(unlisted));
+  assert.doesNotMatch(message, new RegExp(listed));
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test.describe('rule and hook agree', () => {
+  const pairs = [
+    ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
+    ['hooks/reply-length-cap.sh', /cap=450[\s\S]*cap=300[\s\S]*cap=180/, 'persona-core.md', /180 words[\s\S]*300 when[\s\S]*450 for depth \+ heavy/],
+    ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'CLAUDE.md', /on a review\/planning agent is denied/],
+    ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'CLAUDE.md', /Explore → Haiku always/],
+    ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'CLAUDE.md', /sub-Opus session the hook injects Opus/],
+    ['hooks/enforce-subagent-model.sh', /Fable needs a confirmed Opus session/, 'subagent-tiers.md', /fails CLOSED/],
+    ['hooks/comment-delta-check.js', /ZERO by default/, 'CLAUDE.md', /default to ZERO/],
+    ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
+  ];
+  for (const [hook, hookPattern, doc, docPattern] of pairs) {
+    test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {
+      assert.match(read(hook), hookPattern, `${hook} no longer enforces this`);
+      assert.match(read(doc), docPattern, `${doc} no longer states the rule the hook enforces`);
+    });
+  }
+});
+
+test.describe('always-load budget', () => {
+  const baseline = JSON.parse(read('tests/budget-baseline.json'));
+  for (const [doc, ceiling] of Object.entries(baseline)) {
+    test(`${doc} ≤ ${ceiling} words`, () => {
+      const count = words(read(doc));
+      assert.ok(count <= ceiling, `${doc} is ${count} words, ceiling ${ceiling}; trim or raise the baseline deliberately`);
+    });
+  }
+});
+
+test('one tier owns a rule: no sentence repeated across rule docs', () => {
+  const docs = RULE_DOCS.filter((d) => d !== 'persona-core.md');
+  const seen = new Map();
+  const dupes = [];
+  for (const doc of docs) {
+    for (const raw of read(doc).split(/(?<=[.!?])\s+|\n/)) {
+      const sentence = raw.replace(/[*`_>-]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (words(sentence) < 10) continue;
+      const owner = seen.get(sentence);
+      if (owner && owner !== doc) dupes.push(`${owner} + ${doc}: "${sentence.slice(0, 80)}"`);
+      else seen.set(sentence, doc);
+    }
+  }
+  assert.deepEqual(dupes, []);
+});

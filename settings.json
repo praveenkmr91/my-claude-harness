@@ -1,0 +1,289 @@
+{
+  "env": {
+    "ENABLE_CODE_SECURITY_REVIEW": "0"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/review-routing-once.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.prompt // \"\"' | grep -qE '<task-notification>|\\[SYSTEM NOTIFICATION' || cat /Users/praveenkumar/.claude/persona-core.md",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/context-size-nudge.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-plan-mode.sh UserPromptSubmit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/Users/praveenkumar/.claude/hooks/plugin-drift-guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/lint-on-edit.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/comment-delta-check.js\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/hydrogen-util-guard.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/opus-write-nudge.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-plan-mode.sh PostToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // \"\"' | { read -r f; case \"$f\" in */node_modules/*) echo 'BLOCKED: never hand-edit files under node_modules — changes vanish on the next install. Use patch-package, pinned to the resolved version in package-lock.json.' >&2; exit 2;; esac; }",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/enforce-subagent-model.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Glob|Read|Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/hydrogen-context.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/protect-secrets.js\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "if": "Bash(git:*)",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/reply-length-cap.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/done-claim-gate.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/agent-file-scope.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash -c 'cols=${COLUMNS:-}; case \"$cols\" in \"\"|*[!0-9]*) cols=$(stty size 2>/dev/null </dev/tty | awk '\"'\"'{print $2}'\"'\"');; esac; case \"$cols\" in \"\"|*[!0-9]*) cols=120;; esac; export COLUMNS=$(( cols > 4 ? cols - 4 : 1 )); plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '\"'\"'{ print $(NF-1) \"\\t\" $(0) }'\"'\"' | grep -E '\"'\"'^[0-9]+\\.[0-9]+\\.[0-9]+[[:space:]]'\"'\"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec \"/Users/praveenkumar/.bun/bin/bun\" --env-file /dev/null \"${plugin_dir}src/index.ts\"'"
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": false,
+    "figma@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": false,
+    "explanatory-output-style@claude-plugins-official": false,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "firecrawl@claude-plugins-official": false,
+    "commit-commands@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false,
+    "superpowers@superpowers-dev": false,
+    "atomic-agents@claude-plugins-official": false,
+    "chrome-devtools-mcp@claude-plugins-official": false,
+    "caveman@caveman": false,
+    "code-simplifier@claude-plugins-official": false,
+    "context7@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": false,
+    "remember@claude-plugins-official": true,
+    "investment-banking@claude-for-financial-services": false,
+    "impeccable@impeccable": true,
+    "kotlin-lsp@claude-plugins-official": false,
+    "claude-hud@claude-hud": true,
+    "modern-web-guidance@googlechrome": true
+  },
+  "extraKnownMarketplaces": {
+    "superpowers-dev": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/obra/superpowers.git"
+      }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "claude-for-financial-services": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/financial-services"
+      }
+    },
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable"
+      }
+    },
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    },
+    "googlechrome": {
+      "source": {
+        "source": "github",
+        "repo": "GoogleChrome/modern-web-guidance"
+      }
+    }
+  },
+  "outputStyle": "peer-engineer",
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-fable-5-1": {
+      "effortLevel": "medium"
+    },
+    "claude-opus-5": {
+      "effortLevel": "high"
+    }
+  },
+  "advisorModel": "claude-fable-5-1",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "theme": "light",
+  "agentPushNotifEnabled": false,
+  "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "In @additiv-hydrogen repos, `npx eslint --fix <file>` on touched files is routine; whole-src lint (`npm run lint`), `npm run eject:hydrogen`, and `npm run upload:resourceset` change many files or a shared backend — confirm scope/target before running"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: additiv (GitHub org additiv-implementations; user is a principal frontend engineer there)",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: all work repos are private under github.com/additiv-implementations",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: None configured — CI workflows reference secrets by name only (GitHub Actions secrets); values never appear in the repo or in chat",
+      "**Default / protected branches**: varies per repo (develop in idn-shared repos, main elsewhere); no rulesets or protected branches configured",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Source control**: repos under github.com/additiv-implementations and their origin remotes only",
+      "**Trusted internal domains**: *.additiv.dev (app environments), *.azure-api.net additiv APIM gateways (additiv-apim-*), node-registry.bit.cloud, npm.pkg.github.com",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: DFS/WMS backends behind the additiv APIM gateways; per-environment app hosts under *.additiv.dev",
+      "**Internal package registry**: node-registry.bit.cloud; npm.pkg.github.com",
+      "**Sensitive data locations & audiences**: .env, .env.local, .env.production, and other .gitignored env files; release.*.js client secrets; Authorization Bearer tokens present in axios error objects (never log raw errors — status/message only); share only with audiences cleared at the [named+specifics] bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries prod or production as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries prod or production as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: software development — frontend R&D on ~33 @additiv-hydrogen web apps (React/Vite) plus mobile",
+      "**Trusted repos**: everything under /Users/praveenkumar/Documents/projects (private additiv-implementations clones and the Hydrogen source monorepo) — confidential material is fine there; secrets and personal/entrusted sensitive data are never cleared into a repo regardless of visibility",
+      "**Org-specific CLIs**: Hydrogen repos' project scripts — npm run eject:hydrogen, npm run upload:resourceset (where present); Hydrogen dev servers pin a fixed port per repo and must not auto-fallback",
+      "routine under a repo's src/, custom/, and scripts/ prefixes for lint/build/eject workflows"
+    ]
+  }
+}
