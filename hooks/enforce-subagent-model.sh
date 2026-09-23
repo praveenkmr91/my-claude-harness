@@ -1,20 +1,12 @@
 #!/bin/bash
 # PreToolUse hook on Agent: keep each dispatch on the tier its work KIND earns —
 # fable(4) > opus(3) > sonnet(2) > haiku(1).
-# Policy (~/.claude/subagent-tiers.md):
-#   planning / code review / debugging -> opus, never sonnet or haiku;
-#   code, docs or config to a plan      -> sonnet (the `implementer` agent);
-#   no-judgment work, exploration       -> haiku (`checker`, `Explore`);
-#   reviewing a PLAN                    -> fable, from an Opus main thread only.
-# Fable never writes or rewrites code, and never reviews code — that is Opus work.
-# A worker never reaches Fable at all, not even with a tier-override: it returns the
-# question to the dispatcher, which owns the escalation call. One decision-maker per consult.
+# Policy: ~/.claude/subagent-tiers.md.
 # Escapes: "fork" (inherits parent); "[tier-override: <why>]" in the prompt — which lifts
 # every gate here EXCEPT a worker reaching for fable.
 # Session model = last assistant .message.model in transcript_path (tracks live
 # /model switches, unlike settings.json). Fail-open on malformed input, unreadable
-# transcript, or unknown session model — EXCEPT fable, which fails closed: it is the
-# costliest tier, so an unknown session tier must not be a way to reach it.
+# transcript, or unknown session model — EXCEPT fable, which fails closed.
 
 input=$(cat)
 

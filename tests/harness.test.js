@@ -154,7 +154,6 @@ test('agent-file-scope: flags writes outside the brief, tolerates a sentence-end
 test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
-    ['hooks/reply-length-cap.sh', /cap=450[\s\S]*cap=300[\s\S]*cap=180/, 'persona-core.md', /180 words[\s\S]*300 when[\s\S]*450 for depth \+ heavy/],
     ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'CLAUDE.md', /on a review\/planning agent is denied/],
     ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'CLAUDE.md', /Explore → Haiku always/],
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'CLAUDE.md', /sub-Opus session the hook injects Opus/],

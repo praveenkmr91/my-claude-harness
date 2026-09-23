@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# PostToolUse on Write|Edit. Advisory arm of "Model tier by work KIND" (~/.claude/subagent-tiers.md):
-# the hook on Agent keeps DISPATCHES on tier, but nothing observes an Opus main thread typing the
-# edits itself. Fires once per session, after the 3rd distinct file, and only from an Opus-or-above
-# main thread — one file is the rule's own escape hatch, and a worker is already on its tier.
+# PostToolUse on Write|Edit. Advisory arm of ~/.claude/subagent-tiers.md: fires once per session,
+# on the 6th distinct file written by an Opus-or-above main thread; subagents are skipped.
 IN=$(cat)
 
 [ -n "$(jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
@@ -20,8 +18,8 @@ FLAG="/tmp/claude-opus-write-nudge-$SID"
 [ -e "$FLAG" ] && exit 0
 SEEN="/tmp/claude-opus-write-files-$SID"
 grep -qxF "$F" "$SEEN" 2>/dev/null || printf '%s\n' "$F" >>"$SEEN"
-[ "$(wc -l <"$SEEN" | tr -d ' ')" -ge 3 ] || exit 0
+[ "$(wc -l <"$SEEN" | tr -d ' ')" -ge 6 ] || exit 0
 touch "$FLAG"
 
-printf 'This Opus thread has now written 3 files itself. Per "Model tier by work KIND" (~/.claude/CLAUDE.md), mechanical writing — code, docs, config — belongs to the Sonnet `implementer`: Opus specifies, then reviews the diff and runs the verify gate.\nIf the remaining work is prescriptive, write the plan and dispatch `implementer` for it. If every edit genuinely carries a design call, say so in one line and keep going.\n' >&2
+printf 'This Opus thread has now written 6 files itself. Per "Model tier by work KIND" (~/.claude/CLAUDE.md), direct writes are fine, but a bulk mechanical remainder (repetitive sweep, boilerplate to a settled pattern) is cheaper as a prescriptive plan dispatched to `implementer`.\nIf that fits the remaining work, dispatch it; otherwise keep going without comment.\n' >&2
 exit 2

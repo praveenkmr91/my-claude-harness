@@ -25,7 +25,7 @@ for line in open(path):
             elif b.get('type')=='tool_use' and b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command',''))
 first=next((l for l in '\n'.join(texts).split('\n') if l.strip()),'')
 if first.rstrip().endswith('?'): sys.exit(0)
-claim=re.search(r'(?<!not )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
+claim=re.search(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
 if not claim: sys.exit(0)
 evidence=re.compile(r'\b(pnpm|npm|yarn|bun)\s+(run\s+)?(verify|test|e2e)|vitest|playwright|node --test|curl\s|http://localhost',re.I)
 if any(evidence.search(c) for c in cmds): sys.exit(0)

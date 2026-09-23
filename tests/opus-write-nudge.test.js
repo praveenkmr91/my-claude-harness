@@ -48,39 +48,39 @@ function writeN(n, opts) {
 }
 
 test('opus write nudge', async (t) => {
-  await t.test('fires on the 3rd distinct file from an opus session', () => {
+  await t.test('fires on the 6th distinct file from an opus session', () => {
     const sessionId = newSession();
-    assert.equal(writeN(2, { sessionId }).code, 0);
-    const third = run({ sessionId, file: '/tmp/f2.ts' });
-    assert.equal(third.code, 2);
-    assert.match(third.stderr, /implementer/);
+    assert.equal(writeN(5, { sessionId }).code, 0);
+    const sixth = run({ sessionId, file: '/tmp/f5.ts' });
+    assert.equal(sixth.code, 2);
+    assert.match(sixth.stderr, /implementer/);
   });
 
-  await t.test('same file three times does not fire — distinct files are the signal', () => {
+  await t.test('same file six times does not fire — distinct files are the signal', () => {
     const sessionId = newSession();
-    for (let i = 0; i < 3; i++) assert.equal(run({ sessionId, file: '/tmp/same.ts' }).code, 0);
+    for (let i = 0; i < 6; i++) assert.equal(run({ sessionId, file: '/tmp/same.ts' }).code, 0);
   });
 
   await t.test('fires once per session', () => {
     const sessionId = newSession();
-    assert.equal(writeN(3, { sessionId }).code, 2);
+    assert.equal(writeN(6, { sessionId }).code, 2);
     assert.equal(run({ sessionId, file: '/tmp/f9.ts' }).code, 0);
   });
 
   await t.test('silent below opus — sonnet is already the intended writer', () => {
-    assert.equal(writeN(4, { sessionId: newSession(), tier: 'sonnet' }).code, 0);
+    assert.equal(writeN(7, { sessionId: newSession(), tier: 'sonnet' }).code, 0);
   });
 
   await t.test('fires from fable too — above opus is still the wrong tier to type edits', () => {
-    assert.equal(writeN(3, { sessionId: newSession(), tier: 'fable' }).code, 2);
+    assert.equal(writeN(6, { sessionId: newSession(), tier: 'fable' }).code, 2);
   });
 
   await t.test('silent for a subagent — a worker is already on its tier', () => {
-    assert.equal(writeN(4, { sessionId: newSession(), agentId: 'agent-1' }).code, 0);
+    assert.equal(writeN(7, { sessionId: newSession(), agentId: 'agent-1' }).code, 0);
   });
 
   await t.test('fails open on an unreadable transcript', () => {
-    assert.equal(writeN(4, { sessionId: newSession(), transcriptPath: '/nonexistent' }).code, 0);
+    assert.equal(writeN(7, { sessionId: newSession(), transcriptPath: '/nonexistent' }).code, 0);
   });
 
   await t.test('fails open with no session id', () => {
