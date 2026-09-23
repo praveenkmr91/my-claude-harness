@@ -55,8 +55,8 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 - `codebase-design`, `domain-modeling`, `grilling`, `improve-codebase-architecture` — from mattpocock/skills@c55ee46 (2026-09-19). Plugin not installed: ships 25 skills always-on.
 - `react-best-practices` — from vercel-labs/agent-skills (2026-07-29), Next.js/RSC rules pruned. Refresh = re-clone + diff.
 
-## Account-side (not settable from `~/.claude`)
-- claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls (2026-09-23). Optional hygiene only — unused connectors surface as deferred names, so disconnecting saves near-zero context. Figma, Claude Docs, Atlassian kept.
+## claude.ai account connectors and skills
+- claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls (2026-09-23), not settable from `~/.claude`. Optional hygiene only — unused connectors surface as deferred names, so disconnecting saves near-zero context. Figma, Claude Docs, Atlassian kept.
 - claude.ai account skills: hidden via `skillOverrides` (2026-09-23, 0 uses). docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`. Keep `docs` (Claude Docs connector needs it).
 
 ## Mechanics

@@ -67,7 +67,6 @@
 
 ## Tooling gotchas
 - **zsh: quote grep globs.** Unquoted `--include=*.tsx` dies as "no matches found" before grep runs, and the empty result reads as "nothing exists". Always `--include='*.tsx'`; an empty grep is unverified until the command exited 0.
-- **Don't `cp` from `node_modules/`.** Check `package.json` scripts for eject command first.
 - **Lockfiles: never full-regen to clean.** Drop removed dep: surgically delete stanza (`file:` local entries have no integrity hash) or `npm install --package-lock-only` — never `rm lock && install`, re-pins every `^`/`~` to today's registry (silent toolchain drift). Lockfile diff far bigger than change = diff resolved-version set before trusting.
 - **Dep version ground-truth = lockfile.** Exact-version work (patch-package) pins to *resolved* version in `package-lock.json`. `package.json` only range — sanity gate (installed version outside range → node_modules stale). Trust `node_modules/*/package.json` only right after clean install.
 - **Browser verification: no routine screenshots.** `take_snapshot` (a11y tree) for structure/labels/state, `evaluate_script` geometry assertions (`getBoundingClientRect`, `elementsFromPoint`, computed z-index) for anything visual, console for errors. Screenshot only on explicit ask — thousands of tokens the user doesn't read.
