@@ -1,6 +1,6 @@
 <review-routing>
 - Six verbs are the only entry points; everything else is a lens a verb pulls in.
-- Default ask is **review**: the hook's `<review-joins verb=… lenses=…>` line below has picked verb + lenses from the files the task touched — load exactly those.
+- Default ask is **review**; the hook's `<review-joins>` line picks verb + lenses from the files the task touched — load exactly those.
 - A named verb overrides the hook's `verb=`; its `lenses=` still ride along.
 - Announce the pass in one line, then do it — main thread, session tier, unless the verb says otherwise.
 
@@ -16,9 +16,10 @@
 Hook joins (scope = files the task edited or committed; dirty tree as fallback):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
 - Styled files → /impeccable pass, named in the plan line.
-- HIGH-risk path (auth, session, token, payment, checkout, order, wallet) or an ask naming shared state / public API / money-moving mutation → harden set.
+- HIGH-risk path (auth, session, token, payment, checkout, order, wallet) or an ask naming shared state / public API / money-moving mutation → harden set; with bulk → battery.
 - Bulk (≥200 added lines or ≥3 new files) → trim set minus `/simplify` (report, never auto-apply): /delete-list, /shortcut-debt, comment-analyzer, modern-ts-analyzer.
 - a11y-audit never auto-joins; write-time a11y (CLAUDE.md) still applies.
+- Auto: the Stop gate blocks a code turn that claims done or asks to commit with no review pass; run the verb it names.
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses), advisor. Trivial change → lint + tsc. Explore locates code, never judges it.
 

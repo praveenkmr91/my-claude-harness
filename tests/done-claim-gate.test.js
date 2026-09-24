@@ -13,9 +13,12 @@ const HOOK_PATH = path.join(ROOT, 'hooks', 'done-claim-gate.sh');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'done-claim-gate-'));
 test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
+const LENS_READ = { type: 'tool_use', name: 'Read', input: { file_path: '/Users/x/.claude/agents/reuse-analyzer.md' } };
+
 let seq = 0;
-function run(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false } = {}) {
+function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, review, cwd } = {}) {
   const content = [{ type: 'text', text: reply }];
+  if (review) content.unshift(review);
   if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
@@ -23,9 +26,10 @@ function run(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActi
     JSON.stringify({ type: 'user', message: { content: 'go' } }),
     JSON.stringify({ type: 'assistant', message: { content } }),
   ].join('\n'));
-  const payload = { transcript_path: transcriptPath, stop_hook_active: stopHookActive };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' }).status;
+  const payload = { transcript_path: transcriptPath, stop_hook_active: stopHookActive, cwd };
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
 }
+const run = (reply, opts) => runFull(reply, opts).status;
 
 test('done-claim gate', async (t) => {
   await t.test('blocks a claim with no test or runtime command this turn', () => {
@@ -33,8 +37,39 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Tests passes now.'), 2);
   });
 
-  await t.test('allows a claim backed by a test run', () => {
-    assert.equal(run('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js' }), 0);
+  await t.test('allows a claim backed by a test run and a review pass', () => {
+    assert.equal(run('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js', review: LENS_READ }), 0);
+  });
+
+  await t.test('blocks a tested claim when no review pass ran', () => {
+    const { status, stderr } = runFull('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js' });
+    assert.equal(status, 2);
+    assert.match(stderr, /REVIEW NOT RUN[\s\S]*`review` pass/);
+    assert.doesNotMatch(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+  });
+
+  await t.test('blocks a commit ask with no review pass', () => {
+    const { status, stderr } = runFull('Diff is above.\nSay yes and I will commit.');
+    assert.equal(status, 2);
+    assert.match(stderr, /asks to commit/);
+    assert.equal(run('Diff is above.\nCommitted as ae56e51. Want me to push?'), 0);
+  });
+
+  await t.test('counts review agents, skills and lens reads as a review pass', () => {
+    const ask = 'Diff is above.\nSay yes and I will commit.';
+    assert.equal(run(ask, { review: LENS_READ }), 0);
+    assert.equal(run(ask, { review: { type: 'tool_use', name: 'Agent', input: { subagent_type: 'pr-review-toolkit:code-reviewer' } } }), 0);
+    assert.equal(run(ask, { review: { type: 'tool_use', name: 'Skill', input: { skill: 'impeccable:impeccable' } } }), 0);
+    assert.equal(run(ask, { review: { type: 'tool_use', name: 'Agent', input: { subagent_type: 'Explore' } } }), 2);
+  });
+
+  await t.test('names the verb the classifier picks for the repo', () => {
+    const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
+    fs.mkdirSync(path.join(repo, 'src', 'auth'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'auth', 'useAuth.ts'), '');
+    spawnSync('git', ['init', '-q'], { cwd: repo });
+    const { stderr } = runFull('Diff is above.\nSay yes and I will commit.', { cwd: repo });
+    assert.match(stderr, /`harden` pass/);
   });
 
   await t.test('ignores the noun form of "passes"', () => {
