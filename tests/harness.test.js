@@ -173,6 +173,21 @@ test('review-routing: high-risk matches whole words, not substrings', () => {
   fs.rmSync(`/tmp/claude-review-routing-${sessionId}`, { force: true });
 });
 
+test('audit-due: nudges an unaudited repo on startup, silent once stamped', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'audit-'));
+  const repo = path.join(home, 'repo');
+  fs.mkdirSync(repo);
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const hook = path.join(ROOT, 'hooks', 'audit-due.sh');
+  const env = { ...process.env, HOME: home };
+  const start = (source) => execFileSync('bash', [hook], { input: JSON.stringify({ source, cwd: repo }), encoding: 'utf8', env });
+  assert.match(JSON.parse(start('startup')).systemMessage, /Audit due for repo \(no audit on record\)/);
+  assert.equal(start('clear'), '');
+  execFileSync('bash', [hook, '--stamp'], { cwd: repo, env });
+  assert.equal(start('startup'), '');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
@@ -183,6 +198,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/comment-delta-check.js', /ZERO by default/, 'CLAUDE.md', /default to ZERO/],
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
     ['hooks/done-claim-gate.sh', /REVIEW NOT RUN/, 'review-routing.md', /Stop gate blocks/],
+    ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {

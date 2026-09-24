@@ -42,6 +42,11 @@
             "type": "command",
             "command": "bash \"/Users/praveenkumar/.claude/hooks/plugin-drift-guard.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/audit-due.sh",
+            "timeout": 5
           }
         ]
       }
