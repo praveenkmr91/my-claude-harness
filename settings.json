@@ -9,6 +9,15 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "skillOverrides": {
+    "anthropic-skills:docx": "name-only",
+    "anthropic-skills:xlsx": "name-only",
+    "anthropic-skills:pptx": "name-only",
+    "anthropic-skills:pdf": "name-only",
+    "anthropic-skills:stanford-gsb-negotiation": "off",
+    "anthropic-skills:morning": "off",
+    "anthropic-skills:import-memory": "off"
+  },
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -279,6 +288,9 @@
     },
     "claude-opus-5": {
       "effortLevel": "high"
+    },
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
     }
   },
   "advisorModel": "claude-fable-5-1",
@@ -318,14 +330,5 @@
       "**Org-specific CLIs**: Hydrogen repos' project scripts — npm run eject:hydrogen, npm run upload:resourceset (where present); Hydrogen dev servers pin a fixed port per repo and must not auto-fallback",
       "routine under a repo's src/, custom/, and scripts/ prefixes for lint/build/eject workflows"
     ]
-  },
-  "skillOverrides": {
-    "anthropic-skills:docx": "name-only",
-    "anthropic-skills:xlsx": "name-only",
-    "anthropic-skills:pptx": "name-only",
-    "anthropic-skills:pdf": "name-only",
-    "anthropic-skills:stanford-gsb-negotiation": "off",
-    "anthropic-skills:morning": "off",
-    "anthropic-skills:import-memory": "off"
   }
 }
