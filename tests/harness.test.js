@@ -152,6 +152,27 @@ test('agent-file-scope: flags writes outside the brief, tolerates a sentence-end
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+test('review-routing: high-risk matches whole words, not substrings', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'routing-'));
+  fs.mkdirSync(path.join(home, '.claude'));
+  fs.writeFileSync(path.join(home, '.claude', 'review-routing.md'), '');
+  const repo = path.join(home, 'repo');
+  for (const file of ['src/useAuth.ts', 'src/use-session.ts', 'src/recorder.ts', 'author-rules/x.md', 'styles/tokens.css']) {
+    fs.mkdirSync(path.join(repo, path.dirname(file)), { recursive: true });
+    fs.writeFileSync(path.join(repo, file), '');
+  }
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const sessionId = `harness-${process.pid}-${Date.now()}`;
+  const payload = JSON.stringify({ prompt: 'review', session_id: sessionId });
+  const out = execFileSync('bash', [path.join(ROOT, 'hooks', 'review-routing-once.sh')], { input: payload, cwd: repo, encoding: 'utf8', env: { ...process.env, HOME: home } });
+  const risk = out.match(/high-risk=(.*?) bulk=/)[1];
+  assert.match(risk, /useAuth\.ts/);
+  assert.match(risk, /use-session\.ts/);
+  assert.doesNotMatch(risk, /recorder|author-rules|tokens\.css/);
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(`/tmp/claude-review-routing-${sessionId}`, { force: true });
+});
+
 test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],

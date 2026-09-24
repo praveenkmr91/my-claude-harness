@@ -1,16 +1,16 @@
 <review-routing>
 - Six verbs are the only entry points; everything else is a lens a verb pulls in.
 - Default ask is **review**: the hook's `<review-joins verb=… lenses=…>` line below has picked verb + lenses from the files the task touched — load exactly those.
-- A named verb (battery / harden / trim / audit / verify) overrides the hook's `verb=`; its `lenses=` still ride along.
+- A named verb overrides the hook's `verb=`; its `lenses=` still ride along.
 - Announce the pass in one line, then do it — main thread, session tier, unless the verb says otherwise.
 
 | Verb | Members | Runs as |
 |---|---|---|
 | **review** — also "code review", "check this", "de-vibe", "modernise", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand (`~/.claude/agents/*-analyzer.md`) | Main thread; every finding verified at source; never the battery |
-| **battery** — also "full review", "agents" | The eight agents in `~/.claude/review-battery.md` (Read only on this verb) | Agents; leads confirmed at source before relaying |
+| **battery** — also "full review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read only on this verb) | Agents; leads confirmed at source before relaying |
 | **harden** | adversarial-reviewer + security-review skills (main thread); silent-failure-hunter + type-design-analyzer (agents) | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
-| **audit** `bloat` \| `a11y` \| `arch` \| `perf` \| `security` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit (broad) / core-web-vitals (targeted); security-review | Whole repo, one flavor per ask |
+| **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling. Security → harden |
 | **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor (lint + tsc is the every-change gate in CLAUDE.md, not a verify member) | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
 
 Hook joins (scope = files the task edited or committed; dirty tree as fallback):

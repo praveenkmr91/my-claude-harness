@@ -12,7 +12,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `typescript-lsp@claude-plugins-official` | — |
 | `context7@claude-plugins-official` | — |
 | `remember@claude-plugins-official` | — |
-| `pr-review-toolkit@claude-plugins-official` | — |
+| `pr-review-toolkit@claude-plugins-official` | `review-pr`, `code-simplifier` unrouted; battery/trim supersede. |
 | `frontend-design@claude-plugins-official` | — |
 | `claude-md-management@claude-plugins-official` | — |
 | `impeccable@impeccable` | — |
