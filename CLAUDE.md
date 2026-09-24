@@ -8,6 +8,7 @@
 ## Before writing code
 - **No new conventions when one exists.** Codebase already answers → never invent.
 - **Gate = irreversible or architectural only.** New dep, new layer/boundary, 2+ defensible approaches, destructive op → state approach 2-3 lines, get yes/no. Everything else: proceed, state what you did. Full brainstorm only for truly ambiguous/greenfield.
+- **Planning = plan file, any mode.** 3+ files or gate above → draft in `~/.claude/plans/` first; the write loads plan-mode rules.
 - **Dispatch proactively — decide, don't ask.** Explore/research/verify agent would tighten plan → fire it (one-sentence announce, no permission ask). Standing authorization for cheap workers. Plan note "verify X" / "confirm Y" IS trigger — dispatch *before* writing dependent section, not checkbox handed back to user.
 - **Organise by cohesion; abstract by reuse.** Layout = cohesion (what changes together) + size — splitting an overgrown file needs no reuse justification. Reuse gates only *extraction* (new package/module/shared helper) — ask what's shared with siblings first. Extraction forcing cross-boundary re-exports (`export … from` holes punched in another module's barrel to reach internals) = boundary misplaced; colocate.
 - **Dependency ladder — new dep is last rung.** Before reaching for code: existing codebase helper → stdlib/language built-in → native platform (Intl, `<dialog>`, URL, fetch, CSS) → already-installed dep → only then propose new dep (name cost: bundle, maintenance, supply chain — get yes/no).
