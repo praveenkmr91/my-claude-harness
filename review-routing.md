@@ -6,10 +6,10 @@
 
 | Verb | Members | Runs as |
 |---|---|---|
-| **review** — also "code review", "check this", "de-vibe", "modernise", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand | Main thread; every finding verified at source; never the battery |
-| **battery** — also "full review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read only on this verb) | Agents; leads confirmed at source before relaying |
-| **harden** | adversarial-reviewer + security-review skills (main thread) | Cheap escalation for a hot path; joins battery on HIGH risk |
-| **trim** | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
+| **review** — also "code review", "check this", "look over", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand | Main thread; every finding verified at source; never the battery |
+| **battery** — also "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read only on this verb) | Agents; leads confirmed at source before relaying |
+| **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer + security-review skills (main thread) | Cheap escalation for a hot path; joins battery on HIGH risk |
+| **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
 | **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor (lint + tsc is the every-change gate in CLAUDE.md, not a verify member) | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
 
