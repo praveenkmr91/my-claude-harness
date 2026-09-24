@@ -9,18 +9,15 @@ inp=json.loads(sys.argv[1])
 if inp.get('stop_hook_active'): sys.exit(0)
 path=inp.get('transcript_path')
 if not path: sys.exit(0)
-REVIEW_SKILLS={'adversarial-reviewer','security-review','delete-list','simplify','shortcut-debt','react-best-practices','impeccable','code-review','review-pr'}
-REVIEW_AGENTS={'reuse-analyzer','placement-analyzer','modern-ts-analyzer'}
-lens_read=re.compile(r'/\.claude/agents/(reuse|placement)-analyzer\.md$')
-def is_review(b):
+lens_read=re.compile(r'/\.claude/agents/([a-z-]+)\.md$')
+def lens_ran(b):
     i=b.get('input',{})
-    if b.get('name')=='Skill': return i.get('skill','').split(':')[-1] in REVIEW_SKILLS
-    if b.get('name') in ('Agent','Task'):
-        a=i.get('subagent_type','')
-        return a in REVIEW_AGENTS or a.startswith('pr-review-toolkit:')
-    return b.get('name')=='Read' and bool(lens_read.search(i.get('file_path','')))
+    if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
+    if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
+    m=b.get('name')=='Read' and lens_read.search(i.get('file_path',''))
+    return m.group(1) if m else None
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
-texts=[]; cmds=[]; edits=[]; reviewed=False
+texts=[]; cmds=[]; edits=[]; ran=set()
 for line in open(path):
     try: r=json.loads(line)
     except: continue
@@ -29,7 +26,7 @@ for line in open(path):
         c=r.get('message',{}).get('content')
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
         if txt.strip() and not txt.lstrip().startswith('<'):
-            texts=[]; cmds=[]; edits=[]; reviewed=False
+            texts=[]; cmds=[]; edits=[]; ran=set()
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
             if not isinstance(b,dict): continue
@@ -37,7 +34,7 @@ for line in open(path):
             if b.get('type')!='tool_use': continue
             if b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command',''))
             elif b.get('name') in ('Write','Edit','NotebookEdit'): edits.append(b.get('input',{}).get('file_path',''))
-            elif is_review(b): reviewed=True
+            else: ran.add(lens_ran(b))
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 bash_write=re.compile(r'sed -i|write_text|\btee\b|>\s*\S+\.\w+')
 if not (any(code.search(e) for e in edits) or any(bash_write.search(c) and code.search(c) for c in cmds)): sys.exit(0)
@@ -50,7 +47,7 @@ problems=[]
 evidence=re.compile(r'\b(pnpm|npm|yarn|bun)\s+(run\s+)?(verify|test|e2e)|vitest|playwright|node --test|curl\s|http://localhost',re.I)
 if claim and not any(evidence.search(c) for c in cmds):
     problems.append("DONE-CLAIM WITHOUT EVIDENCE: the first line claims "+repr(claim.group(0))+" but no test or runtime command ran this turn — static-clean (lint + tsc) is not done. Exercise the change (tests, Playwright, curl, browser) and report the output, or reword the first line as a status, not a claim.")
-if (claim or commit_ask) and not reviewed:
+if claim or commit_ask:
     verb,lenses='review','reuse-analyzer,placement-analyzer'
     cwd=inp.get('cwd')
     if cwd and os.path.isdir(cwd):
@@ -59,7 +56,8 @@ if (claim or commit_ask) and not reviewed:
         except subprocess.TimeoutExpired: joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
-    problems.append(f"REVIEW NOT RUN: this turn edited code and {'claims done' if claim else 'asks to commit'} with no review pass. Run the `{verb}` pass (lenses: {lenses}) per ~/.claude/review-routing.md, fix what it confirms, then report — or, if the change is trivial, say so in one line (lint + tsc covers it).")
+    missing=[l for l in lenses.split(',') if l not in ran]
+    if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {'claims done' if claim else 'asks to commit'}, and the `{verb}` pass names those lenses. Run each per ~/.claude/review-routing.md (lens by hand, skill, or agent), fix what they confirm, then report — or, if the change is trivial, say so in one line (lint + tsc covers it).")
 if problems:
     print('\n'.join(problems),file=sys.stderr)
     sys.exit(2)

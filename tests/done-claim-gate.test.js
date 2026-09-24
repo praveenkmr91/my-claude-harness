@@ -13,12 +13,12 @@ const HOOK_PATH = path.join(ROOT, 'hooks', 'done-claim-gate.sh');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'done-claim-gate-'));
 test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
-const LENS_READ = { type: 'tool_use', name: 'Read', input: { file_path: '/Users/x/.claude/agents/reuse-analyzer.md' } };
+const lensRead = (name) => ({ type: 'tool_use', name: 'Read', input: { file_path: `/Users/x/.claude/agents/${name}.md` } });
+const BASE_LENSES = [lensRead('reuse-analyzer'), lensRead('placement-analyzer')];
 
 let seq = 0;
-function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, review, cwd } = {}) {
-  const content = [{ type: 'text', text: reply }];
-  if (review) content.unshift(review);
+function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, reviews = [], cwd } = {}) {
+  const content = [...reviews, { type: 'text', text: reply }];
   if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
@@ -37,14 +37,14 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Tests passes now.'), 2);
   });
 
-  await t.test('allows a claim backed by a test run and a review pass', () => {
-    assert.equal(run('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js', review: LENS_READ }), 0);
+  await t.test('allows a claim backed by a test run and every named lens', () => {
+    assert.equal(run('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js', reviews: BASE_LENSES }), 0);
   });
 
   await t.test('blocks a tested claim when no review pass ran', () => {
     const { status, stderr } = runFull('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js' });
     assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN[\s\S]*`review` pass/);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer[\s\S]*`review` pass/);
     assert.doesNotMatch(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
   });
 
@@ -55,12 +55,22 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Diff is above.\nCommitted as ae56e51. Want me to push?'), 0);
   });
 
-  await t.test('counts review agents, skills and lens reads as a review pass', () => {
+  await t.test('names only the lenses that did not run', () => {
     const ask = 'Diff is above.\nSay yes and I will commit.';
-    assert.equal(run(ask, { review: LENS_READ }), 0);
-    assert.equal(run(ask, { review: { type: 'tool_use', name: 'Agent', input: { subagent_type: 'pr-review-toolkit:code-reviewer' } } }), 0);
-    assert.equal(run(ask, { review: { type: 'tool_use', name: 'Skill', input: { skill: 'impeccable:impeccable' } } }), 0);
-    assert.equal(run(ask, { review: { type: 'tool_use', name: 'Agent', input: { subagent_type: 'Explore' } } }), 2);
+    const { status, stderr } = runFull(ask, { reviews: [lensRead('reuse-analyzer')] });
+    assert.equal(status, 2);
+    assert.match(stderr, /REVIEW NOT RUN for placement-analyzer:/);
+    assert.equal(run(ask, { reviews: [lensRead('reuse-analyzer'), { type: 'tool_use', name: 'Agent', input: { subagent_type: 'placement-analyzer' } }] }), 0);
+  });
+
+  await t.test('requires the content-signalled reviewer, satisfied by its plugin agent', () => {
+    const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
+    fs.writeFileSync(path.join(repo, 'api.ts'), 'p.catch(() => null);');
+    spawnSync('git', ['init', '-q'], { cwd: repo });
+    const ask = 'Diff is above.\nSay yes and I will commit.';
+    assert.match(runFull(ask, { cwd: repo, reviews: BASE_LENSES }).stderr, /REVIEW NOT RUN for silent-failure-hunter:/);
+    const hunter = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'pr-review-toolkit:silent-failure-hunter' } };
+    assert.equal(run(ask, { cwd: repo, reviews: [...BASE_LENSES, hunter] }), 0);
   });
 
   await t.test('names the verb the classifier picks for the repo', () => {

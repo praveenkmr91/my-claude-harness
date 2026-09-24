@@ -16,10 +16,11 @@
 Hook joins (scope = files the task edited or committed; dirty tree as fallback):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
 - Styled files → /impeccable pass, named in the plan line.
-- HIGH-risk path (auth, session, token, payment, checkout, order, wallet) or an ask naming shared state / public API / money-moving mutation → harden set; with bulk → battery.
-- Bulk (≥200 added lines or ≥3 new files) → trim set minus `/simplify` (report, never auto-apply): /delete-list, /shortcut-debt, comment-analyzer, modern-ts-analyzer.
+- HIGH-risk path or an ask naming shared state / public API / money-moving mutation → harden set; with bulk, + code-reviewer.
+- Bulk (≥200 added lines or ≥3 new files) → trim set minus `/simplify` (report, never auto-apply).
+- Added web code → one agent per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.sh`.
 - a11y-audit never auto-joins; write-time a11y (CLAUDE.md) still applies.
-- Auto: the Stop gate blocks a code turn that claims done or asks to commit with no review pass; run the verb it names.
+- Auto: the Stop gate blocks a code turn's done-claim or commit ask until every named lens ran.
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses), advisor. Trivial change → lint + tsc. Explore locates code, never judges it.
 

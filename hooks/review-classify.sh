@@ -27,5 +27,18 @@ VERB=review; LENSES=reuse-analyzer,placement-analyzer
 [ "$STYLED" = yes ] && LENSES="$LENSES,impeccable"
 [ -n "$RISK" ] && { VERB=harden; LENSES="$LENSES,adversarial-reviewer,security-review,silent-failure-hunter,type-design-analyzer"; }
 BULK=no; { [ "$ADDED" -ge 200 ] || [ "$NEWFILES" -ge 3 ]; } && { BULK=yes; LENSES="$LENSES,delete-list,shortcut-debt,comment-analyzer,modern-ts-analyzer"; }
-[ -n "$RISK" ] && [ "$BULK" = yes ] && VERB=battery
+lens() { case ",$LENSES," in *",$1,"*) ;; *) LENSES="$LENSES,$1";; esac; }
+[ -n "$RISK" ] && [ "$BULK" = yes ] && lens code-reviewer
+# Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
+CODE=('*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.vue' ':!*.test.*' ':!*.spec.*' ':!**/__tests__/**' ':!tests/**')
+ADDED_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${CODE[@]}" 2>/dev/null; git diff HEAD -- "${CODE[@]}" 2>/dev/null; } | grep -E '^\+' | grep -vE '^\+\+\+' | cut -c2-; git ls-files --others --exclude-standard -z -- "${CODE[@]}" 2>/dev/null | xargs -0 cat 2>/dev/null)
+has() { grep -qE "$1" <<<"$ADDED_TEXT"; }
+has 'catch[[:space:]]*[({]|\.catch\(|\?\?|\|\|[[:space:]]*(null|undefined|\[\]|\{\}|0|false)([^[:alnum:]_]|$)' && lens silent-failure-hunter
+has '^[[:space:]]*(export[[:space:]]+)?(declare[[:space:]]+)?(type|interface|enum|(abstract[[:space:]]+)?class)[[:space:]]+[A-Z]' && lens type-design-analyzer
+[ "$(grep -cE '^[[:space:]]*(//|/\*|\*)' <<<"$ADDED_TEXT")" -ge 3 ] && lens comment-analyzer
+has '(^|[^.[:alnum:]_$])var[[:space:]]|\.indexOf\([^)]*\)[[:space:]]*[!=<>]=*[[:space:]]*-1|Object\.assign\([[:space:]]*\{\}|\.apply\([[:space:]]*(this|null)|\.substr\(|(^|[^.[:alnum:]_$])require\(' && lens modern-ts-analyzer
+if jq -e '(.scripts.test // "") as $t | $t != "" and ($t | test("no test specified") | not)' "$(git rev-parse --show-toplevel)/package.json" >/dev/null 2>&1 \
+  && grep -qE '\.(ts|tsx|js|jsx|vue)$' <<<"$FILES" && ! grep -qE '\.(test|spec)\.|__tests__/|(^|/)tests?/' <<<"$FILES"; then
+  lens pr-test-analyzer
+fi
 echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT styled=$STYLED high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES>"
