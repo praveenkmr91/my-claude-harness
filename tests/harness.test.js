@@ -188,6 +188,28 @@ test('audit-due: nudges an unaudited repo on startup, silent once stamped', () =
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+test('review-lens-nudge: names lenses on a code edit, once per turn and lens set', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'lens-'));
+  const repo = path.join(home, 'repo');
+  fs.mkdirSync(repo);
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  fs.writeFileSync(path.join(repo, 'api.ts'), 'p.catch(() => null);\n');
+  const transcript = path.join(home, 't.jsonl');
+  fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { content: 'build it' } }));
+  const sessionId = `harness-lens-${process.pid}-${Date.now()}`;
+  const edit = (file) => execFileSync('bash', [path.join(ROOT, 'hooks', 'review-lens-nudge.sh')], {
+    input: JSON.stringify({ tool_input: { file_path: path.join(repo, file) }, cwd: repo, transcript_path: transcript, session_id: sessionId }),
+    encoding: 'utf8',
+  });
+  assert.match(JSON.parse(edit('api.ts')).hookSpecificOutput.additionalContext, /Review lenses for this change: .*silent-failure-hunter/);
+  assert.equal(edit('api.ts'), '');
+  assert.equal(edit('README.md'), '');
+  fs.appendFileSync(transcript, '\n' + JSON.stringify({ type: 'user', message: { content: 'next' } }));
+  assert.match(edit('api.ts'), /Review lenses/);
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(`/tmp/claude-review-lenses-${sessionId}`, { force: true });
+});
+
 test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
@@ -199,6 +221,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
     ['hooks/done-claim-gate.sh', /REVIEW NOT RUN/, 'review-routing.md', /Stop gate blocks/],
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
+    ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {

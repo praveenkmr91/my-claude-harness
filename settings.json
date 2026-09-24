@@ -69,6 +69,11 @@
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/opus-write-nudge.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/review-lens-nudge.sh",
+            "timeout": 8
           }
         ]
       },
