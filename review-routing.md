@@ -6,9 +6,9 @@
 
 | Verb | Members | Runs as |
 |---|---|---|
-| **review** — also "code review", "check this", "de-vibe", "modernise", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand (`~/.claude/agents/*-analyzer.md`) | Main thread; every finding verified at source; never the battery |
+| **review** — also "code review", "check this", "de-vibe", "modernise", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand | Main thread; every finding verified at source; never the battery |
 | **battery** — also "full review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read only on this verb) | Agents; leads confirmed at source before relaying |
-| **harden** | adversarial-reviewer + security-review skills (main thread); silent-failure-hunter + type-design-analyzer (agents) | Cheap escalation for a hot path; joins battery on HIGH risk |
+| **harden** | adversarial-reviewer + security-review skills (main thread) | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
 | **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor (lint + tsc is the every-change gate in CLAUDE.md, not a verify member) | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
@@ -16,11 +16,12 @@
 Hook joins (scope = files the task edited or committed; dirty tree as fallback):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
 - Styled files → /impeccable pass, named in the plan line.
-- HIGH-risk path or an ask naming shared state / public API / money-moving mutation → harden set; with bulk, + code-reviewer.
-- Bulk (≥200 added lines or ≥3 new files) → trim set minus `/simplify` (report, never auto-apply).
-- Added web code → one agent per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.sh`.
+- HIGH-risk path or an ask naming shared state / public API / money-moving mutation → adversarial-reviewer + security-review; with bulk, + code-reviewer.
+- Bulk (≥200 added lines or ≥3 new files) → /delete-list (report, never auto-apply).
+- Added web code → one lens per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.sh`.
 - a11y-audit never auto-joins; write-time a11y (CLAUDE.md) still applies.
-- Auto: the Stop gate blocks a code turn's done-claim or commit ask until every named lens ran.
+- Per joined lens: hand pass first (Read its definition: `~/.claude/agents/` or `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/pr-review-toolkit/agents/`), agent only on a lead. Reply carries one line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`.
+- Auto: the Stop gate blocks a code turn's done-claim or commit ask until every named lens has its line.
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses), advisor. Trivial change → lint + tsc. Explore locates code, never judges it.
 

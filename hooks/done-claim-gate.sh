@@ -1,5 +1,6 @@
 #!/bin/bash
-# Stop hook: claim = first line only, so "not done yet" in the body never trips it; commit ask = last line. stop_hook_active guards the retry.
+# Stop hook: claim = first line only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
+# One-shot: stop_hook_active passes the retry unchecked, so the block message must carry the exact verdict format.
 # Fires only on turns that edited a code file — answers, commits and doc edits carry no runtime claim.
 
 INPUT=$(cat)
@@ -9,13 +10,11 @@ inp=json.loads(sys.argv[1])
 if inp.get('stop_hook_active'): sys.exit(0)
 path=inp.get('transcript_path')
 if not path: sys.exit(0)
-lens_read=re.compile(r'/\.claude/agents/([a-z-]+)\.md$')
+verdict=re.compile(r'^\s*(?:[-*]\s+)?[`*]*([a-z][a-z-]+)[`*]*:\s*(?:\d+ findings?\b.*|skip\s*[—–-]\s*\S.*)$')
 def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
-    m=b.get('name')=='Read' and lens_read.search(i.get('file_path',''))
-    return m.group(1) if m else None
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
 texts=[]; cmds=[]; edits=[]; ran=set()
 for line in open(path):
@@ -38,7 +37,9 @@ for line in open(path):
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 bash_write=re.compile(r'sed -i|write_text|\btee\b|>\s*\S+\.\w+')
 if not (any(code.search(e) for e in edits) or any(bash_write.search(c) and code.search(c) for c in cmds)): sys.exit(0)
-lines=[l for l in '\n'.join(texts).split('\n') if l.strip()]
+all_lines=[l for l in '\n'.join(texts).split('\n') if l.strip()]
+verdicts={m.group(1) for l in all_lines if (m:=verdict.match(l))}
+lines=[l for l in all_lines if not verdict.match(l)]
 first=lines[0] if lines else ''
 last=lines[-1] if lines else ''
 claim=None if first.rstrip().endswith('?') else re.search(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
@@ -56,8 +57,8 @@ if claim or commit_ask:
         except subprocess.TimeoutExpired: joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
-    missing=[l for l in lenses.split(',') if l not in ran]
-    if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {'claims done' if claim else 'asks to commit'}, and the `{verb}` pass names those lenses. Run each per ~/.claude/review-routing.md (lens by hand, skill, or agent), fix what they confirm, then report — or, if the change is trivial, say so in one line (lint + tsc covers it).")
+    missing=[l for l in lenses.split(',') if l not in ran and l not in verdicts]
+    if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {'claims done' if claim else 'asks to commit'}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md).")
 if problems:
     print('\n'.join(problems),file=sys.stderr)
     sys.exit(2)

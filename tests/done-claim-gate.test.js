@@ -13,8 +13,7 @@ const HOOK_PATH = path.join(ROOT, 'hooks', 'done-claim-gate.sh');
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'done-claim-gate-'));
 test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
-const lensRead = (name) => ({ type: 'tool_use', name: 'Read', input: { file_path: `/Users/x/.claude/agents/${name}.md` } });
-const BASE_LENSES = [lensRead('reuse-analyzer'), lensRead('placement-analyzer')];
+const BASE_VERDICTS = 'reuse-analyzer: 0 findings\nplacement-analyzer: skip — single-file change';
 
 let seq = 0;
 function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, reviews = [], cwd } = {}) {
@@ -38,7 +37,7 @@ test('done-claim gate', async (t) => {
   });
 
   await t.test('allows a claim backed by a test run and every named lens', () => {
-    assert.equal(run('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js', reviews: BASE_LENSES }), 0);
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'node --test tests/*.test.js' }), 0);
   });
 
   await t.test('blocks a tested claim when no review pass ran', () => {
@@ -55,12 +54,28 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Diff is above.\nCommitted as ae56e51. Want me to push?'), 0);
   });
 
-  await t.test('names only the lenses that did not run', () => {
+  await t.test('names only the lenses without a verdict line or a run', () => {
     const ask = 'Diff is above.\nSay yes and I will commit.';
-    const { status, stderr } = runFull(ask, { reviews: [lensRead('reuse-analyzer')] });
+    const { status, stderr } = runFull(`reuse-analyzer: 0 findings\n${ask}`);
     assert.equal(status, 2);
     assert.match(stderr, /REVIEW NOT RUN for placement-analyzer:/);
-    assert.equal(run(ask, { reviews: [lensRead('reuse-analyzer'), { type: 'tool_use', name: 'Agent', input: { subagent_type: 'placement-analyzer' } }] }), 0);
+    const placementAgent = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'placement-analyzer' } };
+    assert.equal(run(`reuse-analyzer: 0 findings\n${ask}`, { reviews: [placementAgent] }), 0);
+  });
+
+  await t.test('a skip without a reason, or a bare definition Read, is not a verdict', () => {
+    const ask = 'Diff is above.\nSay yes and I will commit.';
+    assert.equal(run(`reuse-analyzer: skip\nplacement-analyzer: skip —\n${ask}`), 2);
+    const reads = ['reuse-analyzer', 'placement-analyzer'].map((name) => ({ type: 'tool_use', name: 'Read', input: { file_path: `/Users/x/.claude/agents/${name}.md` } }));
+    assert.equal(run(ask, { reviews: reads }), 2);
+  });
+
+  await t.test('verdict lines do not mask the first-line claim or the last-line commit ask', () => {
+    const { status, stderr } = runFull(`${BASE_VERDICTS}\nDone: the edits landed.`);
+    assert.equal(status, 2);
+    assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    assert.equal(run(`Diff is above.\nSay yes and I will commit.\n${BASE_VERDICTS}`), 0);
+    assert.match(runFull(`Diff is above.\nSay yes and I will commit.\nreuse-analyzer: 0 findings`).stderr, /asks to commit/);
   });
 
   await t.test('requires the content-signalled reviewer, satisfied by its plugin agent', () => {
@@ -68,9 +83,9 @@ test('done-claim gate', async (t) => {
     fs.writeFileSync(path.join(repo, 'api.ts'), 'p.catch(() => null);');
     spawnSync('git', ['init', '-q'], { cwd: repo });
     const ask = 'Diff is above.\nSay yes and I will commit.';
-    assert.match(runFull(ask, { cwd: repo, reviews: BASE_LENSES }).stderr, /REVIEW NOT RUN for silent-failure-hunter:/);
+    assert.match(runFull(`${BASE_VERDICTS}\n${ask}`, { cwd: repo }).stderr, /REVIEW NOT RUN for silent-failure-hunter:/);
     const hunter = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'pr-review-toolkit:silent-failure-hunter' } };
-    assert.equal(run(ask, { cwd: repo, reviews: [...BASE_LENSES, hunter] }), 0);
+    assert.equal(run(`${BASE_VERDICTS}\n${ask}`, { cwd: repo, reviews: [hunter] }), 0);
   });
 
   await t.test('names the verb the classifier picks for the repo', () => {

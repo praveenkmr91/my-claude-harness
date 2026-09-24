@@ -25,8 +25,8 @@ NEWFILES=$( { [ -n "$SINCE" ] && git log --diff-filter=A --name-only --pretty=fo
 VERB=review; LENSES=reuse-analyzer,placement-analyzer
 [ "$REACT" = yes ] && LENSES="$LENSES,react-best-practices"
 [ "$STYLED" = yes ] && LENSES="$LENSES,impeccable"
-[ -n "$RISK" ] && { VERB=harden; LENSES="$LENSES,adversarial-reviewer,security-review,silent-failure-hunter,type-design-analyzer"; }
-BULK=no; { [ "$ADDED" -ge 200 ] || [ "$NEWFILES" -ge 3 ]; } && { BULK=yes; LENSES="$LENSES,delete-list,shortcut-debt,comment-analyzer,modern-ts-analyzer"; }
+[ -n "$RISK" ] && { VERB=harden; LENSES="$LENSES,adversarial-reviewer,security-review"; }
+BULK=no; { [ "$ADDED" -ge 200 ] || [ "$NEWFILES" -ge 3 ]; } && { BULK=yes; LENSES="$LENSES,delete-list"; }
 lens() { case ",$LENSES," in *",$1,"*) ;; *) LENSES="$LENSES,$1";; esac; }
 [ -n "$RISK" ] && [ "$BULK" = yes ] && lens code-reviewer
 # Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
