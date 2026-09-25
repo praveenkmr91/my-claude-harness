@@ -164,6 +164,11 @@
             "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(rm:*)",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/bash-write-guard.js\"",
+            "timeout": 5
           }
         ]
       },
