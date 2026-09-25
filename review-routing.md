@@ -7,7 +7,7 @@
 | Verb | Members | Runs as |
 |---|---|---|
 | **review** — also "code review", "check this", "look over", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand | Main thread; every finding verified at source; never the battery |
-| **battery** — also "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read only on this verb) | Agents; leads confirmed at source before relaying |
+| **battery** — also "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read it only on this verb) | Agents; leads confirmed at source before relaying |
 | **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer + security-review skills (main thread) | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
@@ -23,7 +23,7 @@ Hook joins (scope = files the task edited or committed; dirty tree as fallback):
 - Per joined lens: hand pass first (Read its definition: `~/.claude/agents/` or `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/pr-review-toolkit/agents/`), agent only on a lead. Reply carries one line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`.
 - Auto: code edits nudge the lens list mid-turn; the Stop gate blocks a code turn's done-claim or commit ask until every named lens has its line.
 
-Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses), advisor. Trivial change → lint + tsc. Explore locates code, never judges it.
+Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Trivial change → lint + tsc. Explore locates code, never judges it.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
