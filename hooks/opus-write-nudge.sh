@@ -21,5 +21,5 @@ grep -qxF "$F" "$SEEN" 2>/dev/null || printf '%s\n' "$F" >>"$SEEN"
 [ "$(wc -l <"$SEEN" | tr -d ' ')" -ge 6 ] || exit 0
 touch "$FLAG"
 
-printf 'This Opus thread has now written 6 files itself. Per "Model tier by work KIND" (~/.claude/CLAUDE.md), direct writes are fine, but a bulk mechanical remainder (repetitive sweep, boilerplate to a settled pattern) is cheaper as a prescriptive plan dispatched to `implementer`.\nIf that fits the remaining work, dispatch it; otherwise keep going without comment.\n' >&2
+printf 'This Opus thread has now written 6 files itself. Per "Model tier by work KIND" (~/.claude/CLAUDE.md), direct writes are fine, but remaining approved-plan steps (names, props and paths settled) or a bulk mechanical remainder are cheaper dispatched to `implementer`, one step per dispatch.\nIf that fits the remaining work, dispatch it; otherwise keep going without comment.\n' >&2
 exit 2

@@ -18,7 +18,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `impeccable@impeccable` | — |
 | `security-guidance@claude-plugins-official` | Pattern-only since 2026-09-04: `env.ENABLE_CODE_SECURITY_REVIEW="0"` disables its Opus Stop/commit review (secret-leak bug `anthropics/claude-code#90010`). Verify after restart: `~/.claude/security/log.txt` gains no `Stop hook:` lines. Revert when #90010 closes. Narrower: `ENABLE_STOP_REVIEW=0` (keeps commit review, same leak surface); kill switch `SECURITY_GUIDANCE_DISABLE=1`. |
 | `commit-commands@claude-plugins-official` | Only `/clean_gone` earns it; `/commit` conflicts with never-commit-without-approval. Revisit if it misfires. |
-| `claude-hud@claude-hud` | Added 2026-08-24. Pure `statusLine`, zero context/network cost. The hand-rolled predecessor's `.bak` no longer exists — rollback = disable + write a new `statusLine`. |
+| `claude-hud@claude-hud` | Added 2026-08-24. Pure `statusLine`, zero context/network cost. Rollback = disable + write a new `statusLine`. |
 
 ## Tombstones (`false`, kept installed) — deliberate, do NOT "clean up"
 | Plugin | Since | Why |
@@ -54,6 +54,7 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 - `systematic-debugging`, `verification-before-completion` — from superpowers (2026-07-28). Refresh = re-enable plugin, diff.
 - `codebase-design`, `domain-modeling`, `grilling`, `improve-codebase-architecture` — from mattpocock/skills@c55ee46 (2026-09-19). Plugin not installed: ships 25 skills always-on.
 - `react-best-practices` — from vercel-labs/agent-skills (2026-07-29), Next.js/RSC rules pruned. Refresh = re-clone + diff.
+- `tdd`, `/learn` — from superpowers 6.4.1 + affaan-m/ECC@e482e57 (2026-09-25); ECC not installed.
 
 ## claude.ai account connectors and skills
 - claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls (2026-09-23), not settable from `~/.claude`. Optional hygiene only — unused connectors surface as deferred names, so disconnecting saves near-zero context. Figma, Claude Docs, Atlassian kept.

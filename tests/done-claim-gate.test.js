@@ -16,13 +16,13 @@ test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 const BASE_VERDICTS = 'reuse-analyzer: 0 findings\nplacement-analyzer: skip — single-file change';
 
 let seq = 0;
-function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, reviews = [], cwd } = {}) {
+function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, reviews = [], cwd, prompt = 'go' } = {}) {
   const content = [...reviews, { type: 'text', text: reply }];
   if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
   fs.writeFileSync(transcriptPath, [
-    JSON.stringify({ type: 'user', message: { content: 'go' } }),
+    JSON.stringify({ type: 'user', message: { content: prompt } }),
     JSON.stringify({ type: 'assistant', message: { content } }),
   ].join('\n'));
   const payload = { transcript_path: transcriptPath, stop_hook_active: stopHookActive, cwd };
@@ -115,6 +115,31 @@ test('done-claim gate', async (t) => {
 
   await t.test('counts a Bash write to a code file as an edit', () => {
     assert.equal(run('Fixed.', { editedFile: null, bashCommand: "sed -i '' 's/a/b/' src/app.tsx" }), 2);
+  });
+
+  await t.test('counts a browser MCP call or an external-io run as runtime evidence', () => {
+    const snapshot = { type: 'tool_use', name: 'mcp__chrome-devtools__take_snapshot', input: {} };
+    const worker = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'external-io' } };
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [snapshot] }), 0);
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [worker] }), 0);
+    const listing = { type: 'tool_use', name: 'mcp__claude_ai_Figma__get_metadata', input: {} };
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [listing] }), 2);
+  });
+
+  await t.test('a review verb named in the prompt needs real member calls, even on a no-edit turn', () => {
+    const agent = (subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } });
+    const skill = (name) => ({ type: 'tool_use', name: 'Skill', input: { skill: name } });
+    const { status, stderr } = runFull('adversarial-reviewer: 0 findings\nsecurity-review: 0 findings', { editedFile: null, prompt: 'harden the auth hook' });
+    assert.equal(status, 2);
+    assert.match(stderr, /NAMED VERB NOT RUN[\s\S]*`harden`[\s\S]*adversarial-reviewer, security-review/);
+    assert.equal(run('Two findings below.', { editedFile: null, prompt: 'harden the auth hook', reviews: [skill('adversarial-reviewer'), skill('security-review')] }), 0);
+    const battery = ['code-reviewer', 'silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'comment-analyzer', 'modern-ts-analyzer'];
+    assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery', reviews: battery.slice(1).map(agent) }), 2);
+    assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery', reviews: battery.map((m) => agent(`pr-review-toolkit:${m}`)) }), 0);
+  });
+
+  await t.test('a question about a verb is not a request for it', () => {
+    assert.equal(run('It runs seven agents.', { editedFile: null, prompt: 'what does the battery run?' }), 0);
   });
 
   await t.test('skips the retry after a block', () => {

@@ -22,7 +22,7 @@
 ## Code craft — write like a human, not vibe-coded
 - **Comments = footguns only — default to ZERO.** Write none first; add one only when you can name the specific wrong edit/assumption it prevents (bar = a future reader trips without it, NOT "was non-obvious to me while writing"). State the trap, not the history: no essays, no labels on obvious blocks, no justifying absent code, no explaining library internals, no restating the code, no repeating the same why across sibling files. Land the right density on the FIRST pass.
 - **No premature abstraction.** Inline until 3+ real repetitions — config array + `.map` over 2 items = vibe-coded.
-- **No speculative generality.** Every param/option/prop/type-param needs a caller that passes it today. "Might need it" = delete it; add when the second caller exists.
+- **No speculative generality.** Every param/option/prop/type-param needs a caller that passes it today. "Might need it" = delete it; add when the second caller exists. Exception — shared UI-component library: its contract is the design spec plus the generic surface popular libs expose (`className`, rest props, `ref`, optional slots); caller count never adds, keeps or removes a prop there.
 - **Guard real states, not impossible ones.** Optional-chain/null-check only where the type or contract says nullable; no try/catch around non-throwing code. Over-defense hides the actual contract and reads machine-generated.
 - **Name by intent.** `clearErrorOnChange`, not `handleChange`.
 - **Readable over terse. Fewer lines ≠ better.** Keep named single-use intermediates (`const isValid = await trigger()`) — say what value means, read top-to-bottom. Never fold into nested expression to save line.
@@ -55,7 +55,7 @@
 - **Model tier by work KIND.** Spec: `~/.claude/subagent-tiers.md`; `hooks/enforce-subagent-model.sh` enforces.
   - Brain work (review, architecture, planning, debugging) → Opus or above. Sonnet or Haiku on a review/planning agent is denied; from a sub-Opus session the hook injects Opus.
   - Code carrying a design call → Opus, written directly.
-  - Bulk mechanical work (a repetitive multi-file sweep, boilerplate to a settled pattern) whose prescriptive plan is much shorter than its diff → Sonnet `implementer`; Opus then reviews the diff, applies the review's fixes itself, and runs the verify gate.
+  - Approved-plan steps (every name, prop shape and path already settled in the plan) and bulk mechanical sweeps → Sonnet `implementer`, one step or slice per dispatch; Opus then reviews the diff, applies the review's fixes itself, and runs the verify gate.
   - No-judgment work (named checks, listings, censuses) → Haiku `checker`. Explore → Haiku always — its "no matches" is not proof of absence.
   - Payload-heavy external tool work → `external-io` (Opus) or `fork`, so the payload stays out of main context.
   - Fable reviews plans only — never writes or reviews code, Opus-main-thread onto `Plan`; a subagent never reaches it and returns the question to the dispatcher. Escalation is tagged `[tier-override: <why>]`.
@@ -63,7 +63,7 @@
 ## Config & harness
 - **Editing `~/.claude` (rule docs, hooks, settings)? `~/.claude/harness.md` owns the maintenance rules** — `hooks/harness-context.sh` injects it on first contact with `~/.claude` each session.
 - **Review depth: `~/.claude/review-routing.md` owns it** (hook-injected on review asks) — battery only when named, never proactively.
-- **Auto-mode classifier denial = stop and ask, never route around.** On "Blocked by classifier": finish independent work, then hand me the exact blocked action (command or file + change) in one message and stop — I retry it from `/permissions` → Recently denied, or exit auto mode. No splitting the action into smaller writes, no alternate tool for the same write.
+- **Classifier or hook denial = stop and ask, never route around.** On a classifier block or hook-refused tool call: finish independent work, hand me the exact blocked action in one message, stop — I retry via `/permissions` → Recently denied, exiting auto mode, or `!`. No smaller pieces, no alternate tool — unless the denial names the sanctioned route.
 - **`<private>…</private>` = use now, never persist.** Content inside the tags never lands in memory files, .remember/, CLAUDE.md, commits, or any artifact — reference it this session only.
 
 ## Tooling gotchas

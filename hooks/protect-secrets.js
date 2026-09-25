@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Localized 2026-09-04 from karanb192/claude-code-hooks plugins/protect-secrets/protect-secrets.js @ 70c8224 (MIT). Frozen copy — refresh = re-clone + diff.
+// Locally tuned: grep-env, xargs-cat-env, find-exec-cat-env and rm-env need `.env` as a path token on one line — a refresh must keep that, or `import.meta.env` greps and plain `xargs wc` pipelines get denied again.
 /**
  * Protect Secrets - PreToolUse Hook for Read|Edit|Write|Bash
  * Prevents reading, modifying, or exfiltrating sensitive files.
@@ -104,7 +105,7 @@ const SENSITIVE_FILES = [
 // Bash patterns that expose or exfiltrate secrets
 const BASH_PATTERNS = [
   // CRITICAL
-  { level: 'critical', id: 'grep-env',           regex: /\b(grep|rg|egrep|fgrep|ag|awk|gawk)\b(?:"[^"]*"|'[^']*'|[^|;&])*\.env\b/i, reason: 'Reading .env via text tools exposes secrets' },
+  { level: 'critical', id: 'grep-env',           regex: /\b(grep|rg|egrep|fgrep|ag|awk|gawk)\b(?:"[^"\n]*"|'[^'\n]*'|[^|;&\n])*(?:^|[\s/'"=*])\.env\b/i, reason: 'Reading .env via text tools exposes secrets' },
   { level: 'critical', id: 'cat-env',            regex: /\b(cat|less|head|tail|more|bat|view)\s+[^|;]*\.env\b/i,           reason: 'Reading .env file exposes secrets' },
   { level: 'critical', id: 'cat-ssh-key',        regex: /\b(cat|less|head|tail|more|bat)\s+[^|;]*(id_rsa|id_ed25519|id_ecdsa|id_dsa|\.pem|\.key)\b/i, reason: 'Reading private key' },
   { level: 'critical', id: 'cat-aws-creds',      regex: /\b(cat|less|head|tail|more)\s+[^|;]*\.aws\/credentials/i,         reason: 'Reading AWS credentials' },
@@ -131,14 +132,14 @@ const BASH_PATTERNS = [
   { level: 'high', id: 'cp-ssh-key',             regex: /\bcp\b[^;|&]*(id_rsa|id_ed25519|\.pem|\.key)\b/i,                 reason: 'Copying private key' },
   { level: 'high', id: 'mv-env',                 regex: /\bmv\b[^;|&]*\.env\b/i,                                           reason: 'Moving .env file' },
   { level: 'high', id: 'rm-ssh-key',             regex: /\brm\b[^;|&]*(id_rsa|id_ed25519|id_ecdsa|authorized_keys)/i,     reason: 'Deleting SSH key' },
-  { level: 'high', id: 'rm-env',                 regex: /\brm\b.*\.env\b/i,                                                 reason: 'Deleting .env file' },
+  { level: 'high', id: 'rm-env',                 regex: /\brm\b[^;|&\n]*(?:^|[\s/'"=*])\.env\b/i,                                                reason: 'Deleting .env file' },
   { level: 'high', id: 'rm-aws-creds',           regex: /\brm\b[^;|&]*\.aws\/credentials/i,                                reason: 'Deleting AWS credentials' },
   { level: 'high', id: 'truncate-secrets',       regex: /\btruncate\b.*\.(env|pem|key)\b|(?:^|[;&|]\s*)>\s*\.env\b/i,      reason: 'Truncating secrets file' },
 
   // HIGH - Process environ
   { level: 'high', id: 'proc-environ',           regex: /\/proc\/[^/]*\/environ/,                                          reason: 'Reading process environment' },
-  { level: 'high', id: 'xargs-cat-env',          regex: /xargs.*cat|\.env.*xargs/i,                                         reason: 'Reading .env via xargs' },
-  { level: 'high', id: 'find-exec-cat-env',      regex: /find\b.*\.env.*-exec|find\b.*-exec.*(cat|less)/i,                 reason: 'Finding and reading .env files' },
+  { level: 'high', id: 'xargs-cat-env',          regex: /(?:^|[\s/'"=*])\.env\b[^;&\n]*\|\s*xargs\b/i,                      reason: 'Reading .env via xargs' },
+  { level: 'high', id: 'find-exec-cat-env',      regex: /\bfind\b[^;|&\n]*(?:^|[\s/'"=*])\.env\b[^;|&\n]*-exec\b/i,       reason: 'Finding and reading .env files' },
 
   // STRICT
   { level: 'strict', id: 'grep-password',        regex: /\bgrep\b[^|;]*(-r|--recursive)[^|;]*(password|secret|api.?key|token|credential)/i, reason: 'Grep for secrets may expose them' },
