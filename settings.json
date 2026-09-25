@@ -191,6 +191,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|WebFetch|WebSearch|mcp__plugin_context7_context7__resolve-library-id|mcp__plugin_context7_context7__query-docs",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/docs-context.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [

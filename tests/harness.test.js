@@ -223,6 +223,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
     ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
     ['hooks/bash-write-guard.js', /Use Write or Edit/, 'harness.md', /bash-write-guard\.js` blocks them/],
+    ['hooks/docs-context.sh', /library-docs\.md/, 'CLAUDE.md', /cites `pkg@x\.y\.z`/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {
