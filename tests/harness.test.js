@@ -142,6 +142,7 @@ test('agent-file-scope: flags writes outside the brief, tolerates a sentence-end
     JSON.stringify({ type: 'assistant', message: { content: [
       { type: 'tool_use', name: 'Edit', input: { file_path: listed } },
       { type: 'tool_use', name: 'Write', input: { file_path: unlisted } },
+      { type: 'tool_use', name: 'Write', input: { file_path: '/private/tmp/claude-501/x/scratchpad/notes.md' } },
     ] } }),
   ].join('\n'));
   const payload = JSON.stringify({ stop_hook_active: false, agent_type: 'test', cwd: home, agent_transcript_path: transcript });
@@ -149,6 +150,7 @@ test('agent-file-scope: flags writes outside the brief, tolerates a sentence-end
   const message = JSON.parse(out).systemMessage;
   assert.match(message, new RegExp(unlisted));
   assert.doesNotMatch(message, new RegExp(listed));
+  assert.doesNotMatch(message, /scratchpad/);
   fs.rmSync(home, { recursive: true, force: true });
 });
 
@@ -181,9 +183,14 @@ test('audit-due: nudges an unaudited repo on startup, silent once stamped', () =
   const hook = path.join(ROOT, 'hooks', 'audit-due.sh');
   const env = { ...process.env, HOME: home };
   const start = (source) => execFileSync('bash', [hook], { input: JSON.stringify({ source, cwd: repo }), encoding: 'utf8', env });
-  assert.match(JSON.parse(start('startup')).systemMessage, /Audit due for repo \(no audit on record\)/);
+  const nudge = JSON.parse(start('startup'));
+  assert.match(nudge.systemMessage, /Audit due for repo \(no audit on record\)/);
+  assert.equal(nudge.hookSpecificOutput, undefined);
   assert.equal(start('clear'), '');
-  execFileSync('bash', [hook, '--stamp'], { cwd: repo, env });
+  const skill = (name) => execFileSync('bash', [hook, '--on-skill'], { input: JSON.stringify({ tool_input: { skill: name }, cwd: repo }), encoding: 'utf8', env });
+  skill('react-best-practices');
+  assert.match(start('startup'), /Audit due/);
+  skill('delete-audit');
   assert.equal(start('startup'), '');
   fs.rmSync(home, { recursive: true, force: true });
 });

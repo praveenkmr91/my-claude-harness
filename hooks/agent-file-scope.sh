@@ -47,6 +47,7 @@ in_scope() {
 unlisted=""
 while IFS= read -r file; do
   [ -z "$file" ] && continue
+  case "$file" in /tmp/*|/private/tmp/*) continue ;; esac
   in_scope "$file" || unlisted+="  $file"$'\n'
 done <<<"$written"
 
