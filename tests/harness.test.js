@@ -175,6 +175,26 @@ test('review-routing: high-risk matches whole words, not substrings', () => {
   fs.rmSync(`/tmp/claude-review-routing-${sessionId}`, { force: true });
 });
 
+test('correction-learn: fires on repeated corrections, silent on ordinary prompts', () => {
+  const hook = path.join(ROOT, 'hooks', 'correction-learn.sh');
+  const fires = (prompt) => execFileSync('bash', [hook], { input: JSON.stringify({ prompt }), encoding: 'utf8' }).includes('<correction-learn>');
+  // Prompts copied from session transcripts (2026-09-13..25 census).
+  for (const p of [
+    'i told u many times. make the components flexible regarless of callers yet.',
+    'why do u keep missing ? all figma calls must go through tooling/',
+    'i didnt approve plan. i only told u to review. whats wrong with u',
+    'waht the heck. i said its ok not to be parllel. use sonnet stupid',
+    'how many times do i have to tell u not to be too verbose',
+  ]) assert.ok(fires(p), p);
+  for (const p of [
+    'approved again',
+    'why do u need seperate branch?',
+    'as i said, now we have liberty/ freedom/ power to decide on architecture.',
+    'meeting ended. lets find answers on our own instead of rushing to asking stupid questions',
+    '<task-notification>i told you</task-notification>',
+  ]) assert.ok(!fires(p), p);
+});
+
 test('audit-due: nudges an unaudited repo on startup, silent once stamped', () => {
   const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'audit-'));
   const repo = path.join(home, 'repo');
