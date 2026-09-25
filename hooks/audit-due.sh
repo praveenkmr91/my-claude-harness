@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# SessionStart: tell the user when this repo has no audit on record in 30 days. `--stamp` records one (run from the repo);
+# SessionStart: tell the user when this repo has had no audit in 30 days; the first startup in a repo starts that clock
+# silently rather than nudging every session until the first audit. `--stamp` records one (run from the repo);
 # `--on-skill` (PostToolUse Skill) stamps automatically when an audit-verb skill runs.
 # Every failure path exits 0 silently.
 if [ "$1" != --stamp ]; then
@@ -17,7 +18,7 @@ fi
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 DIR="$HOME/.claude/state/audit"
 STAMP="$DIR/$(tr '/' '_' <<<"$TOP")"
-if [ "$1" = --stamp ]; then mkdir -p "$DIR" && touch "$STAMP"; exit 0; fi
+if [ "$1" = --stamp ] || [ ! -e "$STAMP" ]; then mkdir -p "$DIR" && touch "$STAMP"; exit 0; fi
 [ -n "$(find "$STAMP" -mtime -30 2>/dev/null)" ] && exit 0
-if [ -e "$STAMP" ]; then AGE="last audit $(( ($(date +%s) - $(date -r "$STAMP" +%s)) / 86400 )) days ago"; else AGE="no audit on record"; fi
-jq -n --arg m "Audit due for $(basename "$TOP") ($AGE) — type \`audit\` when convenient." '{systemMessage: $m}'
+DAYS=$(( ($(date +%s) - $(date -r "$STAMP" +%s)) / 86400 ))
+jq -n --arg m "Audit due for $(basename "$TOP") (no audit in $DAYS days) — type \`audit\` when convenient." '{systemMessage: $m}'

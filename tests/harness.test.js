@@ -195,7 +195,7 @@ test('correction-learn: fires on repeated corrections, silent on ordinary prompt
   ]) assert.ok(!fires(p), p);
 });
 
-test('audit-due: nudges an unaudited repo on startup, silent once stamped', () => {
+test('audit-due: first startup starts the clock silently, nudges after 30 days, silent once stamped', () => {
   const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'audit-'));
   const repo = path.join(home, 'repo');
   fs.mkdirSync(repo);
@@ -203,8 +203,12 @@ test('audit-due: nudges an unaudited repo on startup, silent once stamped', () =
   const hook = path.join(ROOT, 'hooks', 'audit-due.sh');
   const env = { ...process.env, HOME: home };
   const start = (source) => execFileSync('bash', [hook], { input: JSON.stringify({ source, cwd: repo }), encoding: 'utf8', env });
+  assert.equal(start('startup'), '');
+  const stamp = path.join(home, '.claude', 'state', 'audit', fs.realpathSync(repo).replaceAll('/', '_'));
+  const monthAgo = new Date(Date.now() - 31 * 86400 * 1000);
+  fs.utimesSync(stamp, monthAgo, monthAgo);
   const nudge = JSON.parse(start('startup'));
-  assert.match(nudge.systemMessage, /Audit due for repo \(no audit on record\)/);
+  assert.match(nudge.systemMessage, /Audit due for repo \(no audit in 31 days\)/);
   assert.equal(nudge.hookSpecificOutput, undefined);
   assert.equal(start('clear'), '');
   const skill = (name) => execFileSync('bash', [hook, '--on-skill'], { input: JSON.stringify({ tool_input: { skill: name }, cwd: repo }), encoding: 'utf8', env });
