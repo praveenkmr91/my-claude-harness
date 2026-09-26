@@ -22,6 +22,7 @@
 !/agents/
 !/commands/
 !/hooks/
+!/automation/
 !/output-styles/
 !/tests/
 !/skills/
