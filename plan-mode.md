@@ -4,6 +4,7 @@ PLAN MODE RULES (hook-injected on EnterPlanMode or the first plan-file Write/Edi
 - **One Fable consult on the drafted plan.** Before showing it, one advisor pass (settings `advisorModel`) for gaps, wrong layer, missed sibling, lifecycle holes (refresh / remount / double-fire); fold findings in, then present. Advisor unavailable → one `Plan` agent, `model: "fable"`, `[tier-override: plan review]`. Never a loop, never co-authoring.
 - **Trivial plan → skip pre-mortem and consult.**
 - **Approved plan = the file, not the context.** Draft at `~/.claude/plans/<slug>.md`. Repo work: on approval move it to `docs/plans/<slug>.md`, name the path in one line, implementation runs from it; the shipping commit moves it to `docs/plans/shipped/`. Harness / global-config work (`~/.claude/`): the plan stays in `~/.claude/plans/`, nothing lands in a repo.
+- **Handoff prompt for an implementing session carries the gates, not just the plan path.** Per step: review + hook-joined lenses, harden on auth/token/money steps, step verify + lint + tsc + named live check, local commit. Before the final step: battery + harden + trim over the full range. Final: verify (runtime replay → advisor) before the shipping commit.
 - **Patterns to mirror.** For naming, error handling and tests, cite the sibling `path:line` the plan copies; none found → say so, never invent one.
 - **Every step carries its own check** (`→ verify: <command or observation>`); a step with no check is not a step.
 - **Plan drift mid-implementation → edit the file, never just the chat.**
