@@ -5,7 +5,7 @@ set -u
 export PATH="/opt/homebrew/bin:/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/bin:/bin"
 
 SCRIPTS="$HOME/.claude/skills/a11y-audit/scripts"
-PROMPT='No cap. Run three audits on this repo in sequence: /delete-audit; improve-codebase-architecture as a report only (skip grilling, write no HTML); a11y-audit scan phase only, no fixes. Bash allows only single commands of `git log ...` and `python3 '"$SCRIPTS"'/...` with that exact absolute path (no pipes, chains or ~): run the a11y scanner and contrast checker and mine git log for hot spots that way; use Read, Grep and Glob for everything else. Stamping is automatic. Reply with one ranked markdown report, biggest finding first, with file:line on every finding.'
+PROMPT='No cap. Run three audits on this repo in sequence: /delete-audit; improve-codebase-architecture as a report only (skip grilling, write no HTML); a11y-audit scan phase only, no fixes. Bash allows only single commands of `git log ...` and `python3 '"$SCRIPTS"'/...` with that exact absolute path (no pipes, chains or ~): run the a11y scanner and contrast checker and mine git log for hot spots that way; use Read, Grep and Glob for everything else. Stamping is automatic. If docs/audits/audit.md exists it is last week'"'"'s report: read it first and tag every finding NEW, OPEN (still present) or FIXED (listed there, gone now). Reply with one ranked markdown report, biggest finding first, with file:line on every finding.'
 ALLOW=(Read Grep Glob Skill "Bash(python3 $SCRIPTS/*)")
 DENY=(Edit Write NotebookEdit Agent "Bash(pnpm *)" "Bash(npm *)" "Bash(npx *)"
   mcp__claude_ai_Atlassian_Rovo__addCommentToJiraIssue
@@ -23,8 +23,8 @@ for repo in "$@"; do
         --no-session-persistence --max-budget-usd 10 --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}") \
         > "$dir/$day.json" 2> "$dir/$day.err" \
      && jq -e '.is_error == false' "$dir/$day.json" > /dev/null; then
-    jq -r '.result' "$dir/$day.json" > "$out/$day.md"
-    reports+=("$out/$day.md")
+    { printf '_Generated %s_\n\n' "$day"; jq -r '.result' "$dir/$day.json"; } > "$out/audit.md"
+    reports+=("$out/audit.md")
   else
     failed+=("$name (log: $dir/$day.err)")
   fi
