@@ -65,6 +65,7 @@
 - **Review depth: `~/.claude/review-routing.md` owns it** (hook-injected on review asks) — battery only when named, never proactively.
 - **Classifier or hook denial = stop and ask, never route around.** On a classifier block or hook-refused tool call: finish independent work, hand me the exact blocked action in one message, stop — I retry via `/permissions` → Recently denied, exiting auto mode, or `!`. No smaller pieces, no alternate tool — unless the denial names the sanctioned route.
 - **`<private>…</private>` = use now, never persist.** Content inside the tags never lands in memory files, .remember/, CLAUDE.md, commits, or any artifact — reference it this session only.
+- **Ask before writing, moving or deleting outside the repo, or a file I placed.** Raise the concern first, then wait. A repo secret stays put, gitignored.
 
 ## Tooling gotchas
 - **zsh: quote grep globs.** Unquoted `--include=*.tsx` dies as "no matches found" before grep runs, and the empty result reads as "nothing exists". Always `--include='*.tsx'`; an empty grep is unverified until the command exited 0.
