@@ -59,9 +59,11 @@ function shellTargets(command, vars, sessionCwd) {
     const sources = m[1].trim().split(/\s+/).filter((s) => s && !s.startsWith('-')).map((s) => expand(s, vars));
     const dest = expand(m[2], vars);
     const cwd = cwdAt(m.index, command, vars, sessionCwd);
-    // A scratch .bak restored over its original is a revert, not authored content.
-    for (const source of sources.filter((s) => SCRATCH.test(s) && SOURCE_EXT.test(s))) {
-      const landed = SOURCE_EXT.test(dest) ? dest : `${dest.replace(/\/$/, '')}/${source.split('/').pop()}`;
+    // Judged by where it lands, since a staged file can carry any name. A scratch .bak restored over
+    // its original is a revert, not authored content.
+    for (const source of sources.filter((s) => SCRATCH.test(s) && !s.endsWith('.bak'))) {
+      const isFile = SOURCE_EXT.test(dest) || DOTFILE.test(dest);
+      const landed = isFile ? dest : `${dest.replace(/\/$/, '')}/${source.split('/').pop()}`;
       if (isGuarded(landed, cwd)) found.push(landed);
     }
   }

@@ -29,6 +29,8 @@ test('bash write guard', async (t) => {
     ['python edit through an unresolved parameter', "python3 - <<'EOF'\nimport pathlib\ndef sub(p,old,new):\n    f=pathlib.Path(p); f.write_text(f.read_text().replace(old,new))\nsub('src/init.spec.ts','a','b')\nEOF"],
     ['stage in scratch then copy in', `cat > ${SCRATCH}/x.tsx <<'EOF'\nx\nEOF\ncp ${SCRATCH}/x.tsx src/x.tsx`],
     ['copy from scratch into a directory', 'cp /tmp/x.tsx src/components/'],
+    ['move an extensionless scratch file onto a dotfile', `S=${SCRATCH}/npmrc.restore; { echo x; } > $S && mv $S /Users/me/repo/.npmrc`],
+    ['copy an oddly named scratch file onto a source file', `cp ${SCRATCH}/staged.txt src/a.ts`],
     ['python shutil copy into the repo', "python3 -c \"import shutil; shutil.copy('/tmp/x.ts', 'src/x.ts')\""],
     ['dotfile append', "printf 'dist/\\n' >> .gitignore"],
     ['relative write after cd into the repo', `cd ${SCRATCH} && cd /Users/me/repo && echo x > src/a.ts`],
