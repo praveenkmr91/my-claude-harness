@@ -255,6 +255,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
     ['hooks/bash-write-guard.js', /Use Write or Edit/, 'harness.md', /bash-write-guard\.js` blocks them/],
     ['hooks/docs-context.sh', /library-docs\.md/, 'CLAUDE.md', /cites `pkg@x\.y\.z`/],
+    ['hooks/plan-lint.js', /rephrase as an instruction/, 'plan-mode.md', /plan-lint\.js` refuses/],
+    ['hooks/bash-write-guard.js', /edit plan files with Write or Edit/, 'harness.md', /which only Write or Edit may change/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {

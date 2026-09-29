@@ -28,6 +28,10 @@ const WRITE_CALL_ARG = [
 const PY_STRING_ASSIGN = /\b(\w+)\s*=\s*(?:(?:pathlib\.)?Path\(\s*)?(['"])([^'"\n]+)\2/g;
 const PY_ALIAS_ASSIGN = /\b(\w+)\s*=\s*(?:pathlib\.)?Path\(\s*(\w+)\s*\)/g;
 const PATH_TOKEN = /[\w.~$\/-]+\.[A-Za-z]+\b/g;
+const SED_I = /^\s*(?:\w+=\S*\s+)*sed\s(?:\S+\s)*?(?:-[A-Za-z]*i\S*|--in-place\S*)(?=\s|$)/;
+const PERL_I = /^\s*(?:\w+=\S*\s+)*perl\s(?:\S+\s)*?-[A-Za-z]*i\S*(?=\s|$)/;
+const GIT_MV = /^\s*(?:\w+=\S*\s+)*git\s+mv\s/;
+const REPO_PLANS = /(^|\/)plans\/[^/]+\.md$/;
 
 function shellVars(command) {
   const vars = { HOME: process.env.HOME, TMPDIR: process.env.TMPDIR };
@@ -97,6 +101,18 @@ function interpreterTargets(command, vars, sessionCwd) {
   return candidates.map((t) => expand(t, vars)).filter((t) => isGuarded(t, cwd));
 }
 
+const isPlanPath = (target) => REPO_PLANS.test(target) || target.startsWith(`${process.env.HOME}/.claude/plans/`);
+
+function planEditTargets(command, vars) {
+  const found = [];
+  for (const segment of command.split(/[;&|\n]+/)) {
+    const tokens = segment.trim().split(/\s+/).map((t) => expand(t.replace(/^['"]|['"]$/g, ''), vars));
+    if (SED_I.test(segment) || PERL_I.test(segment)) found.push(...tokens.filter(isPlanPath));
+    if (GIT_MV.test(segment) && isPlanPath(tokens[tokens.length - 1])) found.push(tokens[tokens.length - 1]);
+  }
+  return found;
+}
+
 let raw = '';
 process.stdin.on('data', (chunk) => (raw += chunk));
 process.stdin.on('end', () => {
@@ -114,6 +130,13 @@ process.stdin.on('end', () => {
   const executed = command.replace(HEREDOC_BODY, (body, opener) => (INTERPRETER.test(opener) ? body : opener));
   const vars = shellVars(shellOnly);
   const sessionCwd = input.cwd ?? '';
+  const planTargets = [...new Set(planEditTargets(shellOnly, vars))];
+  if (planTargets.length > 0) {
+    process.stderr.write(
+      `BLOCKED: shell edit of ${planTargets.join(', ')}. edit plan files with Write or Edit, so plan-lint sees them.\n`,
+    );
+    process.exit(2);
+  }
   const targets = [
     ...new Set([...shellTargets(shellOnly, vars, sessionCwd), ...interpreterTargets(executed, vars, sessionCwd)]),
   ];
@@ -122,7 +145,7 @@ process.stdin.on('end', () => {
   process.stderr.write(
     `BLOCKED: shell write to ${targets.join(', ')}. Use Write or Edit to create or change source, config and doc files — ` +
       'the Write|Edit hooks (comment check, util guard, implementer nudge, review lenses) never see a heredoc, redirect, ' +
-      'tee, inline-script or copy-from-scratch write. sed -i one-liners, git mv, and output under /tmp or the scratchpad stay allowed.\n',
+      'tee, inline-script or copy-from-scratch write. sed -i one-liners, git mv, and output under /tmp or the scratchpad stay allowed, except on plan files.\n',
   );
   process.exit(2);
 });

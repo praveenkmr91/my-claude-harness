@@ -43,7 +43,22 @@ test('bash write guard', async (t) => {
     });
   }
 
+  const planEdits = [
+    ['sed -i on a repo plan', "sed -i '' 's/a/b/' docs/plans/holdings.md"],
+    ['perl -pi on a repo plan', "perl -pi -e 's/a/b/' /Users/me/repo/docs/plans/holdings.md"],
+    ['perl -i.bak on a harness plan', "perl -i.bak -pe 's/a/b/' ~/.claude/plans/plan-lint.md"],
+    ['git mv into docs/plans', 'git mv /tmp/draft.md docs/plans/draft.md'],
+  ];
+  for (const [name, command] of planEdits) {
+    await t.test(`blocks ${name}`, () => {
+      const res = run(command);
+      assert.equal(res.code, 2);
+      assert.match(res.stderr, /edit plan files with Write or Edit, so plan-lint sees them/);
+    });
+  }
+
   const allowed = [
+    ['sed -i on a non-plan file', "sed -i '' 's/a/b/' docs/layout.md"],
     ['sed -i one-liner', "sed -i '' 's#a#b#g' packages/core.i18n/package.json"],
     ['git mv', 'git mv packages/a/banner packages/b/banner'],
     ['stderr and null redirects', 'pnpm verify 2>&1 > /dev/null'],
