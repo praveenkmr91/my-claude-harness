@@ -1,6 +1,6 @@
 ---
 name: react-best-practices
-description: React performance rulebook (Vercel Engineering, 61 rules, Next.js-specific content pruned). Use when writing, reviewing, or refactoring React components — re-render patterns, async waterfalls, bundle size, effect hygiene.
+description: React performance rulebook (Vercel Engineering, 61 rules, Next.js-specific content pruned). Use when writing, reviewing, or refactoring React components — re-render patterns, async waterfalls, bundle size, effect hygiene. Perf only: an ask for "React best practices/standards" means the whole standard (rules of React/hooks, effects per react.dev "You Might Not Need an Effect", state design, keys, composition, a11y, loading/error states, typing), this rulebook being one part.
 license: MIT
 provenance: localized 2026-07-29 from vercel-labs/agent-skills @1.0.0; Next.js/RSC/api-route rules pruned (Vite SPA stack); refresh = re-clone + diff
 metadata:

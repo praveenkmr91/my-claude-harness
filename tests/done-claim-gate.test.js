@@ -138,6 +138,25 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery', reviews: battery.map((m) => agent(`pr-review-toolkit:${m}`)) }), 0);
   });
 
+  await t.test('a ticket key is not the trim verb', () => {
+    assert.equal(run('Fix is below.', { editedFile: null, prompt: 'ticket: https://x.atlassian.net/browse/TRIM-48' }), 0);
+    assert.equal(run('Findings below.', { editedFile: null, prompt: 'trim the diff' }), 2);
+  });
+
+  await t.test('isMeta records (skill bodies, hand-backs, hook feedback) do not reset the turn', () => {
+    const skill = (name) => ({ type: 'tool_use', name: 'Skill', input: { skill: name } });
+    const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+    fs.writeFileSync(transcriptPath, [
+      { type: 'user', message: { content: 'harden the auth hook' } },
+      { type: 'assistant', message: { content: [skill('adversarial-reviewer'), skill('security-review')] } },
+      { type: 'user', isMeta: true, message: { content: 'You are a senior security engineer doing a security review' } },
+      { type: 'user', isMeta: true, message: { content: 'Stop hook feedback: the prompt asks for `trim`' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Two findings below.' }] } },
+    ].map((r) => JSON.stringify(r)).join('\n'));
+    const { status } = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+    assert.equal(status, 0);
+  });
+
   await t.test('a question about a verb is not a request for it', () => {
     assert.equal(run('It runs seven agents.', { editedFile: null, prompt: 'what does the battery run?' }), 0);
   });

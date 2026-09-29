@@ -24,7 +24,8 @@ for line in open(path):
     if t=='user':
         c=r.get('message',{}).get('content')
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
-        if txt.strip() and not txt.lstrip().startswith('<'):
+        # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
+        if txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta'):
             texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=txt
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
@@ -39,7 +40,7 @@ problems=[]
 NAMED_VERBS={
     'battery':(r'\b(battery|full review|deep review|thorough review)\b',['code-reviewer','silent-failure-hunter','type-design-analyzer','reuse-analyzer','placement-analyzer','comment-analyzer','modern-ts-analyzer']),
     'harden':(r'\b(harden|security review|bug hunt|adversarial)\b',['adversarial-reviewer','security-review']),
-    'trim':(r'\b(trim|de-vibe)\b',['delete-list','simplify','comment-analyzer','modern-ts-analyzer','shortcut-debt']),
+    'trim':(r'\b(trim|de-vibe)\b(?!-\d)',['delete-list','simplify','comment-analyzer','modern-ts-analyzer','shortcut-debt']),
 }
 if not prompt.rstrip().endswith('?'):
     for verb,(pattern,members) in NAMED_VERBS.items():
