@@ -9,6 +9,7 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "model": "opus",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
     "anthropic-skills:xlsx": "name-only",
@@ -73,6 +74,11 @@
             "type": "command",
             "command": "node \"/Users/praveenkumar/.claude/hooks/comment-delta-check.js\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/plan-lint.js\" post",
+            "timeout": 10
           },
           {
             "type": "command",
@@ -204,6 +210,11 @@
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/inject-plan-mode.sh PreToolUse",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/plan-lint.js\" pre",
+            "timeout": 10
           }
         ]
       },
@@ -311,16 +322,16 @@
     }
   },
   "outputStyle": "peer-engineer",
-  "effortLevel": "high",
+  "effortLevel": "medium",
   "modelSettings": {
     "claude-fable-5-1": {
       "effortLevel": "medium"
     },
-    "claude-opus-5": {
-      "effortLevel": "high"
-    },
     "claude-opus-5-5": {
       "effortLevel": "medium"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "high"
     }
   },
   "advisorModel": "claude-fable-5-1",

@@ -50,14 +50,14 @@
 
 ## Delegating
 - **Subagent:** open-ended research (3+ queries), specialized fits (Explore, implementer, checker, external-io, code-reviewer, frontend-design), 2+ independent parallel investigations. An omitted `model` inherits the session tier — dispatch a declared cheap agent rather than a bare `general-purpose`, or mechanical work burns Opus silently.
-- **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 parallel calls, short sequential work.
+- **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 parallel calls.
 - **Anti-pattern:** subagent to read one known file.
 - **Model tier by work KIND.** Spec: `~/.claude/subagent-tiers.md`; `hooks/enforce-subagent-model.sh` enforces.
   - Brain work (review, architecture, planning, debugging) → Opus or above. Sonnet or Haiku on a review/planning agent is denied; from a sub-Opus session the hook injects Opus.
   - Code carrying a design call → Opus, written directly.
   - Approved-plan steps (every name, prop shape and path already settled in the plan) and bulk mechanical sweeps → Sonnet `implementer`, one step or slice per dispatch; Opus then reviews the diff, applies the review's fixes itself, and runs the verify gate.
-  - No-judgment work (named checks, listings, censuses) → Haiku `checker`. Explore → Haiku always — its "no matches" is not proof of absence.
-  - Payload-heavy external tool work → `external-io` (Opus) or `fork`, so the payload stays out of main context.
+  - No-judgment work (test suite, `check:*`, build, listings, censuses) → Haiku `checker`, however short; only lint + tsc stay direct. Explore → Haiku always.
+  - Unbounded external tool work → `external-io` (Sonnet) or `fork`; one bounded read stays inline.
   - Fable reviews plans only — never writes or reviews code, Opus-main-thread onto `Plan`; a subagent never reaches it and returns the question to the dispatcher. Escalation is tagged `[tier-override: <why>]`.
 
 ## Config & harness
