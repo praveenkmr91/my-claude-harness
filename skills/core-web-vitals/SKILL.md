@@ -7,7 +7,7 @@ metadata:
   version: "1.0"
 ---
 
-<!-- vendored from addyosmani/web-quality-skills@95d6e25 (2026-06-14) — re-check upstream at the next curation sweep -->
+<!-- vendored from addyosmani/web-quality-skills@95d6e25 (2026-06-14) — re-check upstream at the next curation sweep; keep the local "Measure before and after" section -->
 
 # Core Web Vitals optimization
 
@@ -22,6 +22,10 @@ Targeted optimization for the three Core Web Vitals metrics that affect Google S
 | **CLS** | Visual Stability | ≤ 0.1 | 0.1 – 0.25 | > 0.25 |
 
 Google measures at the **75th percentile** — 75% of page visits must meet "Good" thresholds.
+
+## Measure before and after
+
+Record the target metric before changing anything, then re-measure with the same page, device profile and throttling. Report both numbers; a fix without a before/after pair is a guess.
 
 ---
 

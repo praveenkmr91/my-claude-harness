@@ -31,7 +31,7 @@
 - **Error states load-bearing — never absorb silently.** Every query/mutation consumer renders or propagates error state. Every catch: surface (user-visible message/retry), rethrow, or log-with-intent — never bare-swallow. Fallback value in catch = product decision, not default: state what user sees when fires.
 - **Deliberate shortcut = tagged, never silent.** Cutting a corner on purpose (naive impl, missing edge, deferred hardening) → one-line `shortcut:` comment naming limitation + upgrade path. Passes the footgun bar; untagged shortcut reads as oversight. Ledger: `/shortcut-debt`.
 - **Surgical on build tasks.** Every changed line traces to the ask; adjacent code, comments, formatting untouched. Remove only what YOUR change orphaned; pre-existing dead code → mention, never delete. Holistic sweeps only on an explicit review/simplify ask.
-- **Money never binary float.** Amounts = decimal/minor-integer types; formatting is the only sanctioned float boundary. Never optimistic-update a money-moving mutation — invalidate-and-refetch.
+- **Money never binary float.** Amounts = decimal/minor-integer types; formatting is the only float boundary. Money-moving mutation: invalidate-and-refetch, never optimistic; disable submit while pending.
 - **Renames stop at serialization boundaries.** Rename/refactor sweeps touch local identifiers only — never DTO/serialized fields, API routes, DB columns, i18n keys, env-var names, public exports. Boundary-crossing name = contract, not style.
 - **A11y is write-time, not audit-time.** Interactive = native element (`button`/`a`/`label`), never clickable `div`. Every input labelled. Focus managed on modal/menu open/close. ARIA only where semantics can't reach. Periodic audit = backstop, not mechanism.
 
