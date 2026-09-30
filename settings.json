@@ -26,7 +26,7 @@
           {
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/review-routing-once.sh",
-            "timeout": 5
+            "timeout": 10
           },
           {
             "type": "command",

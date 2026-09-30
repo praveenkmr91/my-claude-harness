@@ -175,6 +175,46 @@ test('review-routing: high-risk matches whole words, not substrings', () => {
   fs.rmSync(`/tmp/claude-review-routing-${sessionId}`, { force: true });
 });
 
+test('review-routing: PR asks trigger and scope lenses to the PR diff', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'routing-pr-'));
+  fs.mkdirSync(path.join(home, '.claude'));
+  fs.writeFileSync(path.join(home, '.claude', 'review-routing.md'), 'ROUTED');
+  const bin = path.join(home, 'bin');
+  fs.mkdirSync(bin);
+  // Only PR 123 has a diff; anything else fails like gh on a branch without a PR.
+  fs.writeFileSync(path.join(bin, 'gh'), [
+    '#!/bin/sh',
+    '[ "$3" = "123" ] || exit 1',
+    "cat <<'EOF'",
+    'diff --git a/src/useAuth.ts b/src/useAuth.ts',
+    'new file mode 100644',
+    '--- /dev/null',
+    '+++ b/src/useAuth.ts',
+    '@@ -0,0 +1,2 @@',
+    '+export const token = read() ?? null;',
+    '+export type Auth = { id: string };',
+    'EOF',
+  ].join('\n'), { mode: 0o755 });
+  const run = (prompt) => execFileSync('bash', [path.join(ROOT, 'hooks', 'review-routing-once.sh')], {
+    input: JSON.stringify({ prompt }), cwd: home, encoding: 'utf8',
+    env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
+  });
+  for (const prompt of ['check PR', 'check the PR 999', 'checking a pull request', 'https://github.com/o/r/pull/9']) {
+    assert.match(run(prompt), /ROUTED/, prompt);
+  }
+  for (const prompt of ['open a PR', 'commit and raise a PR', 'check prices']) {
+    assert.equal(run(prompt), '', prompt);
+  }
+  assert.doesNotMatch(run('check PR 999'), /review-joins/);
+  const joins = run('check PR 123');
+  assert.match(joins, /verb=harden /);
+  assert.match(joins, /high-risk=src\/useAuth\.ts /);
+  assert.match(joins, /silent-failure-hunter/);
+  assert.match(joins, /type-design-analyzer/);
+  assert.match(joins, /added=2 new-files=1 pr=123>/);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 test('correction-learn: fires on repeated corrections, silent on ordinary prompts', () => {
   const hook = path.join(ROOT, 'hooks', 'correction-learn.sh');
   const fires = (prompt) => execFileSync('bash', [hook], { input: JSON.stringify({ prompt }), encoding: 'utf8' }).includes('<correction-learn>');
