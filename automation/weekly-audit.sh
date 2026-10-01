@@ -30,6 +30,8 @@ for repo in "$@"; do
   fi
 done
 
+bash "$HOME/.claude/automation/context-canary.sh" || failed+=("context canary (log: $HOME/.claude/state/canary)")
+
 if [ ${#failed[@]} -gt 0 ]; then
   msg="Failed: ${failed[*]}"
 else
