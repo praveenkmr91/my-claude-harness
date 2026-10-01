@@ -62,7 +62,7 @@
 - **Ask before writing, moving or deleting outside the repo, or a file I placed.** Raise the concern first, then wait. A repo secret stays put, gitignored.
 
 ## Tooling gotchas
-- **zsh: quote grep globs.** Unquoted `--include=*.tsx` dies as "no matches found" before grep runs, and the empty result reads as "nothing exists". Always `--include='*.tsx'`; an empty grep is unverified until the command exited 0.
+- **zsh: quote grep globs** — `hooks/block-dangerous-git.sh` denies unquoted `--include=*`; an empty grep is unverified until the command exited 0.
 - **Lockfiles: never full-regen to clean.** Drop removed dep: surgically delete stanza (`file:` local entries have no integrity hash) or `npm install --package-lock-only` — never `rm lock && install`, re-pins every `^`/`~` to today's registry (silent toolchain drift). Lockfile diff far bigger than change = diff resolved-version set before trusting.
 - **Library APIs key on the installed version.** Resolved version from the lockfile (`package.json` only a range; `node_modules` disagreeing = stale). Every API claim cites `pkg@x.y.z` + source — none = lookup skipped. Ladder: `~/.claude/library-docs.md`.
 - **Browser verification: no routine screenshots.** `take_snapshot` (a11y tree) for structure/labels/state, `evaluate_script` geometry assertions (`getBoundingClientRect`, `elementsFromPoint`, computed z-index) for exact visuals, console for errors. Screenshot only on explicit ask or Figma-vs-build diff at UI done-check (`external-io` reports differences+severity+location).

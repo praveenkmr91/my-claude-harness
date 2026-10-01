@@ -65,6 +65,11 @@ evidence=re.compile(r'\b(pnpm|npm|yarn|bun)\s+(run\s+)?(verify|test|e2e)|vitest|
 browser_run=any(n.startswith(('mcp__chrome-devtools__','mcp__playwright__')) for n in tools) or 'external-io' in ran
 if claim and not browser_run and not any(evidence.search(c) for c in cmds):
     problems.append("DONE-CLAIM WITHOUT EVIDENCE: the first line claims "+repr(claim.group(0))+" but no test or runtime command ran this turn — static-clean (lint + tsc) is not done. Exercise the change (tests, Playwright, curl, browser) and report the output, or reword the first line as a status, not a claim.")
+web=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte)\b')
+harness=os.path.expanduser('~/.claude/')
+static_check=re.compile(r'\b(eslint|tsc|vue-tsc|lint|typecheck|type-check|verify|check:types?)\b',re.I)
+if (claim or commit_ask) and any(web.search(e) and not e.startswith(harness) for e in edits) and not any(static_check.search(c) for c in cmds):
+    problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {'claims done' if claim else 'asks to commit'}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim or commit_ask:
     verb,lenses='review','reuse-analyzer,placement-analyzer'
     cwd=inp.get('cwd')

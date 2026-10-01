@@ -16,10 +16,11 @@ test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 const BASE_VERDICTS = 'reuse-analyzer: 0 findings\nplacement-analyzer: skip — single-file change';
 
 let seq = 0;
-function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', stopHookActive = false, reviews = [], cwd, prompt = 'go' } = {}) {
+function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, prompt = 'go' } = {}) {
   const content = [...reviews, { type: 'text', text: reply }];
   if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
+  if (lint) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
   fs.writeFileSync(transcriptPath, [
     JSON.stringify({ type: 'user', message: { content: prompt } }),
@@ -52,6 +53,22 @@ test('done-claim gate', async (t) => {
     assert.equal(status, 2);
     assert.match(stderr, /asks to commit/);
     assert.equal(run('Diff is above.\nCommitted as ae56e51. Want me to push?'), 0);
+  });
+
+  await t.test('blocks a web-code claim or commit ask when no lint or type check ran', () => {
+    const claim = runFull(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'node --test tests/*.test.js', lint: false });
+    assert.equal(claim.status, 2);
+    assert.match(claim.stderr, /LINT\/TSC NOT RUN: this turn edited web code and claims done/);
+    assert.doesNotMatch(claim.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    const ask = runFull(`Diff is above.\nSay yes and I will commit.\n${BASE_VERDICTS}`, { lint: false });
+    assert.match(ask.stderr, /LINT\/TSC NOT RUN: [\s\S]*asks to commit/);
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'pnpm check:types && node --test', lint: false }), 0);
+  });
+
+  await t.test('skips the lint check for non-web and harness edits', () => {
+    const opts = { bashCommand: 'node --test tests/*.test.js', lint: false };
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { ...opts, editedFile: '/repo/scripts/release.sh' }), 0);
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { ...opts, editedFile: path.join(os.homedir(), '.claude', 'hooks', 'x.js') }), 0);
   });
 
   await t.test('names only the lenses without a verdict line or a run', () => {

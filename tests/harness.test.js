@@ -293,6 +293,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/comment-delta-check.js', /ZERO by default/, 'CLAUDE.md', /default to ZERO/],
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
     ['hooks/done-claim-gate.sh', /REVIEW NOT RUN/, 'review-routing.md', /Stop gate blocks/],
+    ['hooks/done-claim-gate.sh', /LINT\/TSC NOT RUN/, 'CLAUDE.md', /run linter \+ type checker/],
+    ['hooks/block-dangerous-git.sh', /Quote the glob/, 'CLAUDE.md', /denies unquoted/],
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
     ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
     ['hooks/bash-write-guard.js', /Use Write or Edit/, 'harness.md', /bash-write-guard\.js` blocks them/],
