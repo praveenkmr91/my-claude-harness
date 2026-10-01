@@ -65,6 +65,35 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'pnpm check:types && node --test', lint: false }), 0);
   });
 
+  await t.test('a lint word outside command position is not a lint run', () => {
+    for (const command of [
+      'grep -n eslint package.json',
+      'node ~/.claude/hooks/plan-lint.js docs/plans/x.md',
+      'git log --grep verify',
+      'npx prettier --check src',
+      `pnpm ${'-s run '.repeat(30)}build`,
+    ]) {
+      const { status, stderr } = runFull(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: `${command} && node --test`, lint: false });
+      assert.equal(status, 2, command);
+      assert.match(stderr, /LINT\/TSC NOT RUN/, command);
+    }
+  });
+
+  await t.test('lint and type-check runs in the shapes the repos use pass', () => {
+    for (const command of [
+      'cd /repo && pnpm check:lint 2>&1 | tail -100',
+      'pnpm run -s typecheck && echo ok',
+      'time pnpm exec eslint src/a.tsx',
+      'npx tsc --noEmit -p tsconfig.app.json',
+      'pnpm --filter web lint:fix',
+      'npm run ts:check',
+      'oxlint --deny-warnings src',
+      'S=/tmp/x; pnpm verify',
+    ]) {
+      assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: `${command} && node --test`, lint: false }), 0, command);
+    }
+  });
+
   await t.test('skips the lint check for non-web and harness edits', () => {
     const opts = { bashCommand: 'node --test tests/*.test.js', lint: false };
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { ...opts, editedFile: '/repo/scripts/release.sh' }), 0);
