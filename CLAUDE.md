@@ -41,7 +41,7 @@
 - **Right-size inherited/sibling boilerplate — one holistic sweep.** Per mirrored piece: load-bearing THIS case, or inherited? Drop what isn't. Review/simplify = ONE ranked simplify+correctness sweep, never reactive piecemeal.
 - **Automated sweeps prove behavior preserved, or revert.** Comment/whitespace-only cleanup → `npx esbuild <file> --minify-whitespace` pre/post must byte-match (strips comments+whitespace; any diff = sweep touched code). Anything deeper (renames, restructures) → full verify gate; any red = revert the whole sweep, not patch forward.
 - **No FE workarounds for BE contract gaps.** Poll/retry shims and client-side patches for a wrong or missing backend contract are not built — comment the exact ask on the ticket and block.
-- **Stakeholder-facing text is concise, not terse.** Jira comments, PR descriptions, commit bodies: root cause in 2-3 sentences, the ask in 1-2 — no verification narratives, probe timings, trade-off essays. Full sentences readable without session context; cut padding, never connective tissue. "Reply" = threaded; can't → say so, never top-level.
+- **Stakeholder-facing text is concise, not terse.** Jira comments, PR descriptions, commit bodies: root cause in 2-3 sentences, the ask in 1-2 — no verification narratives, probe timings, trade-off essays. Full sentences readable without session context; cut padding, never connective tissue.
 
 ## Committing
 - **Never commit without explicit approval.** Show diff, wait for yes.
