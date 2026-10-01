@@ -288,7 +288,9 @@ test.describe('rule and hook agree', () => {
     ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied outright for review\/planning agents/],
     ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'subagent-tiers.md', /\| Explore \| Haiku always/],
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'subagent-tiers.md', /sub-Opus session the hook injects opus/],
-    ['hooks/tiers-context.sh', /subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],
+    ['settings.json', /inject-once\.sh subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],
+    ['settings.json', /inject-once\.sh browser-verify\.md/, 'CLAUDE.md', /injected on the first chrome-devtools call/],
+    ['hooks/new-dep-gate.js', /dependency ladder/, 'CLAUDE.md', /installs and new `package\.json` keys are hook-asked/],
     ['hooks/enforce-subagent-model.sh', /Fable needs a confirmed Opus session/, 'subagent-tiers.md', /fails CLOSED/],
     ['hooks/comment-delta-check.js', /ZERO by default/, 'CLAUDE.md', /default to ZERO/],
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
@@ -313,7 +315,7 @@ test.describe('rule and hook agree', () => {
 test('block-dangerous-git.sh: every command family it guards has its own if-gate', () => {
   const families = [
     ['git', /git (push|commit|add)/],
-    ['gh pr', /gh pr \(create\|edit\)/],
+    ['gh', /GH_PR='\\bgh\(/],
     ['cp', /\\bcp\\b[^\n]*node_modules/],
     ['rm', /\\brm\\b[^\n]*package-lock/],
   ];

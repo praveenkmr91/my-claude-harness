@@ -13,6 +13,7 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP �
 
 ## Every write waits for a yes to that exact change
 - Draft the comment in chat and post it only after a "post" or "yes" to that draft. "Proceed", "go" or "do what you need" about other work is not approval to post.
+- A question or confirmation request @mentions whoever must answer — the reporter by default (`getJiraIssue` `fields: ["reporter"]`; its `accountId` is the mention id), plus anyone it's addressed to; the draft shown for approval already carries the tag. An untagged question goes unseen.
 - Transitions and field edits the same: name the transition or field and value, then wait.
 
 ## One comment per round
@@ -25,5 +26,7 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP �
 
 ## Format
 - Length and shape follow CLAUDE.md's stakeholder-text rule.
+- Ask a question only when its answer changes what we build or how it behaves for users (blocks the task, or alters flow / UX / correctness / data integrity). Business curiosity → drop it.
+- Name the environment of every piece of evidence ("verified on dev"). A finding from another env than the one the ticket was raised in (dev data on a UAT bug) is not a question unless reproduced there.
 - Plain comment → `contentFormat: "markdown"`.
 - @mention → `contentFormat: "adf"` with a mention node `{"type":"mention","attrs":{"id":"<accountId>","text":"@<Name>"}}`. The id comes from `lookupJiraAccountId` (`searchString`: name or email local part); never guess one.

@@ -139,7 +139,17 @@
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/tiers-context.sh",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh subagent-tiers.md",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__chrome-devtools__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh browser-verify.md",
             "timeout": 5
           }
         ]
@@ -176,7 +186,7 @@
           {
             "type": "command",
             "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
-            "if": "Bash(gh pr:*)",
+            "if": "Bash(gh:*)",
             "timeout": 5
           },
           {
@@ -200,6 +210,52 @@
           {
             "type": "command",
             "command": "node \"/Users/praveenkumar/.claude/hooks/bash-write-guard.js\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "if": "Bash(npm:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "if": "Bash(pnpm:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "if": "Bash(yarn:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "if": "Bash(bun:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "if": "Bash(flutter:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "if": "Bash(dart:*)",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
             "timeout": 5
           }
         ]
