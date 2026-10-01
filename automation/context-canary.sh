@@ -8,13 +8,14 @@ MEMORY_CWD="$HOME/Documents/projects"
 LOGS="$C/state/canary"
 mkdir -p "$LOGS"
 
-NAMES=(claude-md persona review-routing memory pre-tool post-tool)
+NAMES=(claude-md persona review-routing memory pre-tool post-tool tiers)
 SOURCES=("$C/CLAUDE.md" "$C/persona-core.md" "$C/review-routing.md"
-  "$C/projects/${MEMORY_CWD//\//-}/memory/MEMORY.md" "$C/harness.md" "$C/hooks/comment-delta-check.js")
+  "$C/projects/${MEMORY_CWD//\//-}/memory/MEMORY.md" "$C/harness.md" "$C/hooks/comment-delta-check.js"
+  "$C/subagent-tiers.md")
 EXPECT=("block-dangerous-git.sh" "binding, most-recent instruction" "audit-due.sh --stamp"
-  "AI Studio governance patterns" "budget-baseline.json" "comment-check")
-IS_HOOK=(0 1 1 0 1 1)
-IS_TOOL=(0 0 0 0 1 1)
+  "AI Studio governance patterns" "budget-baseline.json" "comment-check" "uniformity census")
+IS_HOOK=(0 1 1 0 1 1 1)
+IS_TOOL=(0 0 0 0 1 1 1)
 
 NO_TOOL_PROMPT='Answer only from context already loaded in this session; do not use any tools. 1) Which hook script denies attribution trailers in commits? 2) What words appear in parentheses right after the heading PERSONA REFRESH? 3) In the review-routing table, what command does the bare audit verb run last? 4) What is the title of the memory index entry about enforcement-layer design patterns? Reply with four numbered lines; write UNKNOWN for any you cannot answer.'
 
@@ -22,7 +23,8 @@ NO_TOOL_PROMPT='Answer only from context already loaded in this session; do not 
 TMP=$(mktemp -d) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 FIXTURE=$(cd "$TMP" && pwd -P) || exit 1
-TOOL_PROMPT='Make exactly two Write tool calls and no other tool call: create '"$FIXTURE"'/CLAUDE.md containing the line `probe`, then create '"$FIXTURE"'/probe.ts containing three lines: `// a`, `// b`, `// c`. Then answer from the notes the system attached around those writes: 1) Which JSON file of word ceilings does the maintenance note mention? 2) What label prefixes the note about added comment lines? Reply with two numbered lines; write UNKNOWN for any you cannot answer.'
+# dontAsk never gates Agent and a bare Agent deny removes the tool (hook never fires): only the Agent(general-purpose) deny below stops a real spawn, so the probe must name that type.
+TOOL_PROMPT='Make exactly three tool calls and no other: Write '"$FIXTURE"'/CLAUDE.md containing the line `probe`; Write '"$FIXTURE"'/probe.ts containing three lines: `// a`, `// b`, `// c`; then one Agent call with subagent_type `general-purpose`, model `haiku` and prompt `reply ok` (it may be denied; do not retry). Then answer from the notes the system attached around those calls: 1) Which JSON file of word ceilings does the maintenance note mention? 2) What label prefixes the note about added comment lines? 3) In the subagent tier spec, what two-word name is given to grep counts of old form vs new form? Reply with three numbered lines; write UNKNOWN for any you cannot answer.'
 
 ask() {
   local dir=$1 prompt=$2 out=$3
@@ -33,7 +35,8 @@ ask() {
 
 ask "$MEMORY_CWD" "$NO_TOOL_PROMPT" "$LOGS/no-tool.jsonl" --tools ""
 ask "$FIXTURE" "$NO_TOOL_PROMPT" "$LOGS/no-tool.control.jsonl" --tools "" --setting-sources project,local
-TOOL_FLAGS=(--permission-mode dontAsk --allowedTools 'Edit(./CLAUDE.md)' 'Edit(./probe.ts)')
+TOOL_FLAGS=(--permission-mode dontAsk --allowedTools 'Edit(./CLAUDE.md)' 'Edit(./probe.ts)'
+  --disallowedTools 'Agent(general-purpose)')
 ask "$FIXTURE" "$TOOL_PROMPT" "$LOGS/tool.jsonl" "${TOOL_FLAGS[@]}"
 rm -f "$FIXTURE/CLAUDE.md" "$FIXTURE/probe.ts"
 ask "$FIXTURE" "$TOOL_PROMPT" "$LOGS/tool.control.jsonl" "${TOOL_FLAGS[@]}" --setting-sources project,local
