@@ -41,41 +41,28 @@ test('block dangerous git hook', async (t) => {
     }
   });
 
-  await t.test('asks before a commit or PR from a repo', () => {
-    for (const command of ['git commit -m x', 'cd app && git commit --only src/ -m x', 'gh pr create --title x --body y']) {
+  await t.test('asks before a PR, whatever flags precede it', () => {
+    for (const command of ['gh pr create --title x --body y', 'gh pr create --title x --body-file /tmp/b.md', 'gh -R org/app pr create --title x', 'cd app && gh pr create --fill']) {
       const { status, stdout } = run(command);
       assert.equal(status, 0, command);
       assert.equal(decision(stdout), 'ask', command);
     }
   });
 
-  await t.test('asks when git flags precede commit or a temp path is only an argument', () => {
+  await t.test('local commits and non-PR git run silently', () => {
     for (const command of [
-      'git -C /Users/me/repo commit -m x',
-      'git -c core.editor=true commit -m x',
-      'git --no-pager commit -m x',
-      'git commit -F /private/tmp/claude-501/s/msg.txt',
-      'git commit --only a -m "see /tmp/ notes"',
-      'gh pr create --title x --body-file /tmp/b.md',
-      "git -C '/Users/me/my repo' commit -m x",
-      'git --git-dir /r/.git --work-tree /r commit -m x',
-      'gh -R org/app pr create --title x',
-      'git commit -m x\ncd /tmp/y',
-      'cd /tmp/x && ls; cd /Users/me/repo && git commit -m x',
+      'git commit -m x',
+      'git commit --only src/ -m x',
+      'git -C /Users/me/repo commit -F /private/tmp/claude-501/s/msg.txt',
+      'git status',
+      'git log --grep commit',
+      'gh pr view 12',
+      'gh -R org/app pr list',
     ]) {
-      assert.equal(decision(run(command).stdout), 'ask', command);
+      const { status, stdout } = run(command);
+      assert.equal(status, 0, command);
+      assert.equal(stdout, '', command);
     }
-  });
-
-  await t.test('lets temp-dir commits and non-commit git through silently', () => {
-    assert.equal(run('git commit -m x', '/private/tmp/claude-501/scratch/repo').stdout, '');
-    assert.equal(run('git commit -m x', '/var/folders/kq/T/tmp.abc').stdout, '');
-    assert.equal(run('cd /tmp/fixture && git commit -m x').stdout, '');
-    assert.equal(run('git -C /private/tmp/claude-501/s/repo commit -m x').stdout, '');
-    assert.equal(run('git status').stdout, '');
-    assert.equal(run('git log --grep commit').stdout, '');
-    assert.equal(run('git --no-pager log --grep commit').stdout, '');
-    assert.equal(run('gh pr view 12').stdout, '');
   });
 
   await t.test('attribution trailer is denied, not asked', () => {

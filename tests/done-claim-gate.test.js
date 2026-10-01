@@ -65,6 +65,16 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'pnpm check:types && node --test', lint: false }), 0);
   });
 
+  await t.test('an automatic commit triggers the lint and review checks like a commit ask', () => {
+    const noLint = runFull(`Committed as abc1234.\n${BASE_VERDICTS}`, { bashCommand: 'git -C /repo commit --only src/app.ts -m x', lint: false });
+    assert.equal(noLint.status, 2);
+    assert.match(noLint.stderr, /LINT\/TSC NOT RUN: this turn edited web code and ran git commit/);
+    const noLens = runFull('Committed as abc1234.', { bashCommand: 'git commit -m x' });
+    assert.match(noLens.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer: [\s\S]*ran git commit/);
+    assert.equal(run(`Committed as abc1234.\n${BASE_VERDICTS}`, { bashCommand: 'git commit -m x' }), 0);
+    assert.equal(run('Here is the history.', { bashCommand: 'git log --grep commit', lint: false }), 0);
+  });
+
   await t.test('a lint word outside command position is not a lint run', () => {
     for (const command of [
       'grep -n eslint package.json',

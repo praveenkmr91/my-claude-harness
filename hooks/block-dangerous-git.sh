@@ -25,7 +25,6 @@ done
 ARG='("[^"]*"|'\''[^'\'']*'\''|[^[:space:]]+)'
 GIT_COMMIT='\bgit([[:space:]]+(-[Cc]|--git-dir|--work-tree|--namespace|--config-env)[[:space:]]+'"$ARG"'|[[:space:]]+--?[a-zA-Z][^[:space:]]*)*[[:space:]]+commit\b'
 GH_PR='\bgh([[:space:]]+(-R|--repo)[[:space:]]+'"$ARG"'|[[:space:]]+--?[a-zA-Z][^[:space:]]*)*[[:space:]]+pr[[:space:]]+'
-TMP_DIR='["'\'']?(/private)?/(tmp|var/folders)/'
 
 GUARDED=(
   '\bcp\b[^|;&]*node_modules/::Do not cp out of node_modules. Check package.json scripts for an eject/copy command first — a hand-copied file silently goes stale on the next install.'
@@ -51,12 +50,8 @@ if echo "$COMMAND" | grep -qE "$GIT_COMMIT|${GH_PR}(create|edit)\b" \
   exit 2
 fi
 
-CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
-# Exempt on where the commit runs, never on a temp path anywhere in the command: `-F <scratchpad>/msg.txt` is the usual commit route.
-if echo "$COMMAND" | grep -qE "$GIT_COMMIT|${GH_PR}create\b" \
-  && ! echo "$CWD" | grep -qE "^$TMP_DIR" \
-  && ! { [ "$(echo "$COMMAND" | wc -l)" -eq 1 ] && echo "$COMMAND" | grep -qE "^[[:space:]]*cd[[:space:]]+${TMP_DIR}[^;&|]*&&[^;|]*$GIT_COMMIT|\bgit[[:space:]]+-C[[:space:]]+${TMP_DIR}[^[:space:]]*([[:space:]]+--?[a-zA-Z][^[:space:]]*)*[[:space:]]+commit\b"; }; then
-  jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:"Commit/PR needs your yes (CLAUDE.md: never commit without explicit approval)."}}'
+if echo "$COMMAND" | grep -qE "${GH_PR}create\b"; then
+  jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:"A PR is published to others and needs your yes (CLAUDE.md: push and PR need a yes)."}}'
 fi
 
 exit 0

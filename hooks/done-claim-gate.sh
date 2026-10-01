@@ -61,6 +61,8 @@ first=lines[0] if lines else ''
 last=lines[-1] if lines else ''
 claim=None if first.rstrip().endswith('?') else re.search(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
 commit_ask=re.search(r'\bcommit(?!ted)',last,re.I) and re.search(r'\?|\bsay\b|approv|go ahead|want me',last,re.I)
+committed=any(re.search(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b',c) for c in cmds)
+why='claims done' if claim else 'asks to commit' if commit_ask else 'ran git commit'
 evidence=re.compile(r'\b(pnpm|npm|yarn|bun)\s+(run\s+)?(verify|test|e2e)|vitest|playwright|node --test|curl\s|http://localhost',re.I)
 browser_run=any(n.startswith(('mcp__chrome-devtools__','mcp__playwright__')) for n in tools) or 'external-io' in ran
 if claim and not browser_run and not any(evidence.search(c) for c in cmds):
@@ -73,9 +75,9 @@ static_check=re.compile(r'(?:^|[;&|(]\s*)(?:time\s+)?(?:\w+=\S*\s+)*(?:'
     r'(?:pnpm|npm|yarn|bun|npx|bunx)(?:\s+(?:run|exec|-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+'
     r'[\w:.-]*(?:lint|tsc|typecheck|type-check|check:types?|ts:check|verify)[\w:.-]*'
     r'|(?:\S*/)?(?:eslint|oxlint|tsc|vue-tsc))(?:@\S+)?(?=\s|$|[;&|)])',re.I|re.M)
-if (claim or commit_ask) and any(web.search(e) and not e.startswith(harness) for e in edits) and not any(static_check.search(c) for c in cmds):
-    problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {'claims done' if claim else 'asks to commit'}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
-if claim or commit_ask:
+if (claim or commit_ask or committed) and any(web.search(e) and not e.startswith(harness) for e in edits) and not any(static_check.search(c) for c in cmds):
+    problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
+if claim or commit_ask or committed:
     verb,lenses='review','reuse-analyzer,placement-analyzer'
     cwd=inp.get('cwd')
     if cwd and os.path.isdir(cwd):
@@ -85,7 +87,7 @@ if claim or commit_ask:
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
     missing=[l for l in lenses.split(',') if l not in ran and l not in verdicts]
-    if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {'claims done' if claim else 'asks to commit'}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md).")
+    if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md).")
 if problems:
     print('\n'.join(problems),file=sys.stderr)
     sys.exit(2)
