@@ -49,6 +49,38 @@ test('block dangerous git hook', async (t) => {
     }
   });
 
+  await t.test('a dangerous git command is denied wherever it hides', () => {
+    for (const command of [
+      'git push',
+      'git commit -m x && git push origin main',
+      'git commit -m "$(git push)"',
+      'git commit -m "x" `git push`',
+      'bash -c "git push"',
+      'echo "a -m "; git push; echo ""',
+      'git commit -m x;git push',
+      'git commit -m "x\\"" ; git push ; echo "y"',
+      'git commit -m x\ngit push',
+      'git commit -m x#;git push',
+      'git reset --hard HEAD~1',
+      'git commit --no-verify -m x',
+    ]) {
+      assert.equal(run(command).status, 2, command);
+    }
+  });
+
+  await t.test('dangerous words inside a commit or PR message are prose', () => {
+    for (const command of [
+      'git commit -m "hooks: never git push from here"',
+      "git commit -m 'avoid reset --hard; use git restore .'",
+      'git commit --message="do not git push"',
+      'git commit -m "x" -m "never pass --no-verify"',
+      "git commit -q --only a.sh -m 'Line one\n\nA local commit is private and git push is denied; so'",
+      'gh pr create --title "x" --body "run git push later"',
+    ]) {
+      assert.notEqual(run(command).status, 2, command);
+    }
+  });
+
   await t.test('local commits and non-PR git run silently', () => {
     for (const command of [
       'git commit -m x',
