@@ -284,6 +284,7 @@ test('review-lens-nudge: names lenses on a code edit, once per turn and lens set
 test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
+    ['hooks/block-dangerous-git.sh', /never commit without explicit approval/, 'CLAUDE.md', /hook-asked/],
     ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'CLAUDE.md', /on a review\/planning agent is denied/],
     ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'CLAUDE.md', /Explore → Haiku always/],
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'CLAUDE.md', /sub-Opus session the hook injects Opus/],

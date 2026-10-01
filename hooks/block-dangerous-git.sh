@@ -28,6 +28,7 @@ GUARDED=(
   'git commit[[:space:]]+(--all\b|-[a-z]*a[a-z]*\b)::Do not commit with -a/--all. Use an explicit pathspec (git commit --only <paths>) so unrelated in-flight work in the tree is left untouched.'
   'git add[[:space:]]+(-[a-zA-Z]*A[a-zA-Z]*\b|--all\b|\.(/)?([[:space:]]|$))::Do not bulk-stage. git add -A/--all/. sweeps unrelated in-flight work and untracked debris into the commit — stage explicit paths.'
   '\bgit\b[^|;&]*--no-verify\b::Do not pass --no-verify. husky/lint-staged are part of the verify gate; if a hook is genuinely broken, surface it to the user instead of skipping it.'
+  '\bgrep\b[^|;&]*--(include|exclude|exclude-dir)=[^'\''"\\[:space:]]*[][*?]::Quote the glob: --include='\''*.tsx'\''. zsh expands an unquoted glob, finds no file named --include=…, and aborts with '\''no matches found'\'' before grep runs — the empty result is not evidence.'
 )
 
 for entry in "${GUARDED[@]}"; do
@@ -43,6 +44,12 @@ if echo "$COMMAND" | grep -qE 'git commit|gh pr (create|edit)' \
   && echo "$COMMAND" | grep -qiE 'co-authored-by|generated with|🤖'; then
   echo "BLOCKED: attribution trailer in a commit/PR message. The user forbids Co-Authored-By, 'Generated with', and tool footers everywhere (~/.claude/CLAUDE.md). Rewrite the message without it — do not copy trailers from existing commits in git log." >&2
   exit 2
+fi
+
+CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
+if echo "$COMMAND" | grep -qE '\bgit commit\b|\bgh pr create\b' \
+  && ! printf '%s\n%s\n' "$COMMAND" "$CWD" | grep -qE '/(private/)?tmp/|/private/var/folders/'; then
+  jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:"Commit/PR needs your yes (CLAUDE.md: never commit without explicit approval)."}}'
 fi
 
 exit 0

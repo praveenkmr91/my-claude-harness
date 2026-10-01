@@ -44,7 +44,7 @@
 - **Stakeholder-facing text is concise, not terse.** Jira comments, PR descriptions, commit bodies: root cause in 2-3 sentences, the ask in 1-2 — no verification narratives, probe timings, trade-off essays. Full sentences readable without session context; cut padding, never connective tissue.
 
 ## Committing
-- **Never commit without explicit approval.** Show diff, wait for yes.
+- **Never commit without explicit approval.** Show diff, wait for yes; `git commit` / `gh pr create` are hook-asked.
 - **Pathspec commits when tree has concurrent in-flight work.** Shared branch carrying staged/unstaged changes from other tasks → commit explicit pathspec (`git commit --only <dir>/`), unrelated work untouched. Shared wiring files (package.json, lockfile, routes) → leave to owner.
 - **No attribution trailers in commits or PRs.** Enforced by `hooks/block-dangerous-git.sh` (denies `Co-Authored-By` / "Generated with" / tool footers at PreToolUse); do not copy trailers from `git log`.
 
