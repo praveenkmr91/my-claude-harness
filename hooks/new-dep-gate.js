@@ -8,7 +8,8 @@ const SCRATCH = /^(\/tmp\/|\/private\/tmp\/|\/private\/var\/folders\/|\/var\/fol
 const TMP_DIR = String.raw`["']?(/private)?/(tmp|var/folders)/`;
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
 const LOCAL_SPEC = /^(workspace|file|link):/;
-const JS_INSTALL = /\b(npm|pnpm|yarn|bun)\s+(?:[^\s;&|]+\s+)*?(add|install|i)\s+(?:-\S+\s+)*[@A-Za-z0-9_]/;
+// The `2` of `pnpm install 2>&1` reads as a package name, and `pnpm <script> add` as an install, unless both are excluded.
+const JS_INSTALL = /\b(npm|pnpm|yarn|bun)(?:\s+(?:-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:add|install|i)\s)[^-\s;&|]\S*)?|workspace\s+\S+))*\s+(add|install|i)\s+(?:-\S+\s+)*(?!\d*[<>])[@A-Za-z0-9_]/;
 const PUB_ADD = /\b(flutter|dart)\s+pub\s+add\s+[A-Za-z0-9_]/;
 
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));

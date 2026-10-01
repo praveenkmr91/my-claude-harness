@@ -59,7 +59,8 @@ test('new dependency gate', async (t) => {
 
   await t.test('asks on third-party install commands', () => {
     for (const command of ['npm i x', 'pnpm add -D x', 'yarn add x', 'bun add x', 'npm install -g x', 'flutter pub add x', 'dart pub add x', 'pnpm --filter web add @tanstack/react-query', 'npm ci && npm i lodash',
-      'npm i lodash --workspace=apps/web', 'npm i lodash -w apps/web', 'pnpm add lodash --workspace-root', 'npm i lodash && cd /tmp/x']) {
+      'npm i lodash --workspace=apps/web', 'npm i lodash -w apps/web', 'pnpm add lodash --workspace-root', 'npm i lodash && cd /tmp/x',
+      'pnpm -C apps/web add zod', 'pnpm --dir=apps/web add zod', 'yarn workspace web add zod', 'pnpm add zod 2>&1 | tail -3']) {
       assert.equal(bash(command)?.permissionDecision, 'ask', command);
     }
   });
@@ -70,6 +71,8 @@ test('new dependency gate', async (t) => {
       'npm i && npm test', 'npm ci; npm run build', 'pnpm install > log',
       'npm test && git add src/x.ts', 'npm run install-deps', 'npm i ./pkg', 'pnpm add x --workspace',
       'cd /private/tmp/claude-501/s && npm i left-pad',
+      'pnpm install --silent 2>&1 | tail -2', 'pnpm install --offline 2>&1', 'npm i 2>/dev/null', 'pnpm icons:generate add 2>&1',
+      'pnpm icons:generate add arrow-left',
     ]) {
       assert.equal(bash(command), '', command);
     }
