@@ -136,6 +136,11 @@
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/enforce-subagent-model.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/tiers-context.sh",
+            "timeout": 5
           }
         ]
       },

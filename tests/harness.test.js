@@ -285,9 +285,10 @@ test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
     ['hooks/block-dangerous-git.sh', /never commit without explicit approval/, 'CLAUDE.md', /hook-asked/],
-    ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'CLAUDE.md', /on a review\/planning agent is denied/],
-    ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'CLAUDE.md', /Explore → Haiku always/],
-    ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'CLAUDE.md', /sub-Opus session the hook injects Opus/],
+    ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied outright for review\/planning agents/],
+    ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'subagent-tiers.md', /\| Explore \| Haiku always/],
+    ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'subagent-tiers.md', /sub-Opus session the hook injects opus/],
+    ['hooks/tiers-context.sh', /subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],
     ['hooks/enforce-subagent-model.sh', /Fable needs a confirmed Opus session/, 'subagent-tiers.md', /fails CLOSED/],
     ['hooks/comment-delta-check.js', /ZERO by default/, 'CLAUDE.md', /default to ZERO/],
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
