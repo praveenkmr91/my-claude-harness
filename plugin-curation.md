@@ -19,6 +19,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `security-guidance@claude-plugins-official` | Pattern-only since 2026-09-04: `env.ENABLE_CODE_SECURITY_REVIEW="0"` disables its Opus Stop/commit review (secret-leak bug `anthropics/claude-code#90010`). Verify after restart: `~/.claude/security/log.txt` gains no `Stop hook:` lines. Revert when #90010 closes. Narrower: `ENABLE_STOP_REVIEW=0` (keeps commit review, same leak surface); kill switch `SECURITY_GUIDANCE_DISABLE=1`. |
 | `commit-commands@claude-plugins-official` | Only `/clean_gone` earns it; `/commit` conflicts with never-commit-without-approval. Revisit if it misfires. |
 | `claude-hud@claude-hud` | Added 2026-08-24. Pure `statusLine`, zero context/network cost. Rollback = disable + write a new `statusLine`. |
+| `cc-plugin-you-should-know@builtin` | Added 2026-10-02 by a Claude Code update. Kept for its "Heads up" risk notices. |
 
 ## Tombstones (`false`, kept installed) — deliberate, do NOT "clean up"
 | Plugin | Since | Why |

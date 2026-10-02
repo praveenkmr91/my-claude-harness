@@ -1,6 +1,7 @@
 {
   "atomic-agents@claude-plugins-official": false,
   "caveman@caveman": false,
+  "cc-plugin-you-should-know@builtin": true,
   "chrome-devtools-mcp@claude-plugins-official": false,
   "claude-hud@claude-hud": true,
   "claude-md-management@claude-plugins-official": true,

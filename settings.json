@@ -348,7 +348,8 @@
     "impeccable@impeccable": true,
     "kotlin-lsp@claude-plugins-official": false,
     "claude-hud@claude-hud": true,
-    "modern-web-guidance@googlechrome": false
+    "modern-web-guidance@googlechrome": false,
+    "cc-plugin-you-should-know@builtin": true
   },
   "extraKnownMarketplaces": {
     "superpowers-dev": {
