@@ -56,8 +56,11 @@ if not prompt.rstrip().endswith('?'):
 if nudged and 'implementer' not in ran and not re.search(r'^\s*(?:[-*]\s+)?[`*]*implementer[`*]*:\s*(?:dispatching\b|skip\s*[—–-]\s*\S)','\n'.join(texts),re.M):
     problems.append("IMPLEMENTER NUDGE UNANSWERED: opus-write-nudge fired this turn and no `implementer` dispatch or verdict line followed. Write `implementer: dispatching` (and dispatch) or `implementer: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
-bash_write=re.compile(r'sed -i|write_text|\btee\b|>\s*\S+\.\w+')
-if not (any(code.search(e) for e in edits) or any(bash_write.search(c) and code.search(c) for c in cmds)):
+# A redirect counts by its target only: `node --test x.test.js > out.txt` names code but writes none.
+redirect_target=re.compile(r'(?:>>?|\btee(?:\s+-a)?)\s*([^\s;&|]+)')
+inplace_write=re.compile(r'sed -i|write_text')
+def writes_code(c): return any(code.search(t) for t in redirect_target.findall(c)) or bool(inplace_write.search(c) and code.search(c))
+if not (any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)):
     if problems:
         print('\n'.join(problems),file=sys.stderr)
         sys.exit(2)

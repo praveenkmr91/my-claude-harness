@@ -110,6 +110,19 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { ...opts, editedFile: path.join(os.homedir(), '.claude', 'hooks', 'x.js') }), 0);
   });
 
+  await t.test('a doc-only turn skips the review check even when a command redirects output next to a code name', () => {
+    const docTurn = { editedFile: '/Users/x/.claude/CLAUDE.md', lint: false };
+    assert.equal(run('Committed as abc1234.', { ...docTurn, bashCommand: 'node --test tests/*.test.js > /tmp/out.txt 2>&1 && git commit --only CLAUDE.md -m x' }), 0);
+  });
+
+  await t.test('a Bash write into a code file still triggers the review check', () => {
+    for (const command of ['cat > src/app.ts <<EOF', 'echo x >> src/app.ts', 'echo x | tee -a src/app.ts', "sed -i '' 's/a/b/' src/app.ts"]) {
+      const { status, stderr } = runFull('Committed as abc1234.', { editedFile: null, lint: false, bashCommand: `${command} && git commit -m x` });
+      assert.equal(status, 2, command);
+      assert.match(stderr, /REVIEW NOT RUN/, command);
+    }
+  });
+
   await t.test('names only the lenses without a verdict line or a run', () => {
     const ask = 'Diff is above.\nSay yes and I will commit.';
     const { status, stderr } = runFull(`reuse-analyzer: 0 findings\n${ask}`);
