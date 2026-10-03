@@ -130,6 +130,17 @@ test.describe('subagent tier hook', () => {
     );
   });
 
+  test('Plan + model opus, sonnet session -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'Plan', model: 'opus', transcriptPath: transcripts.sonnet })), 'inherit');
+  });
+
+  test('code-reviewer + model opus, haiku session -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'opus', transcriptPath: transcripts.haiku })),
+      'inherit',
+    );
+  });
+
   test('Plan + model haiku, opus session -> deny', () => {
     assert.equal(
       verdict(payload({ subagentType: 'Plan', model: 'haiku', transcriptPath: transcripts.opus })),

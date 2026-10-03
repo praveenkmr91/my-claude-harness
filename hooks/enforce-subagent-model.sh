@@ -111,6 +111,9 @@ esac
 
 child_rank=$(rank "$child_model")
 
+# Naming opus for a brain agent is the dispatch the omitted-model path already places.
+[ "$is_brain_agent" = true ] && [ "$child_rank" -eq 3 ] && exit 0
+
 if [ "$child_rank" -gt "$session_rank" ]; then
   jq -n --arg reason "Subagent model \"$child_model\" is above the session tier ($session_model). Omit model to inherit the session tier, or pick a lower one. If escalation is genuinely warranted, justify it in the prompt with a line \"[tier-override: <why>]\" and re-dispatch." \
     '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":$reason}}'
