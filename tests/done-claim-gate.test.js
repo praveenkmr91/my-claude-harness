@@ -234,6 +234,17 @@ test('done-claim gate', async (t) => {
     assert.equal(runNudged('implementer: skip — design edits, nearly done.\nNotes updated.').status, 0);
   });
 
+  await t.test('reads verdicts from last_assistant_message when the transcript lags', () => {
+    const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+    fs.writeFileSync(transcriptPath, [
+      { type: 'user', message: { content: 'go' } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/repo/src/app.ts' } }, { type: 'tool_use', name: 'Bash', input: { command: 'pnpm lint && node --test && git commit -m x' } }] } },
+    ].map((e) => JSON.stringify(e)).join('\n'));
+    const payload = (extra) => JSON.stringify({ transcript_path: transcriptPath, ...extra });
+    assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({}), encoding: 'utf8' }).status, 2);
+    assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({ last_assistant_message: `Done: edits landed.\n${BASE_VERDICTS}` }), encoding: 'utf8' }).status, 0);
+  });
+
   await t.test('skips the retry after a block', () => {
     assert.equal(run('Done.', { stopHookActive: true }), 0);
   });

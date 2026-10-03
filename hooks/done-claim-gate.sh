@@ -38,6 +38,9 @@ for line in open(path):
             if b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command',''))
             elif b.get('name') in ('Write','Edit','NotebookEdit'): edits.append(b.get('input',{}).get('file_path',''))
             else: ran.add(lens_ran(b)); tools.append(b.get('name',''))
+# Stop can fire before the final reply is flushed to the transcript, which drops its verdict lines.
+final=inp.get('last_assistant_message')
+if isinstance(final,str) and final.strip() and (not texts or texts[-1].strip()!=final.strip()): texts.append(final)
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. Triggers omit the aliases `simplify` and `break it` on purpose: they collide with build asks.
 NAMED_VERBS={
