@@ -16,7 +16,7 @@ def lens_ran(b):
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
-texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=''
+texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=''; nudged=False
 for line in open(path):
     try: r=json.loads(line)
     except: continue
@@ -26,7 +26,10 @@ for line in open(path):
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta'):
-            texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=txt
+            texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=txt; nudged=False
+    elif t=='attachment':
+        a=r.get('attachment') or {}
+        if a.get('type')=='hook_blocking_error' and 'This Opus thread has now written' in str(a.get('blockingError','')): nudged=True
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
             if not isinstance(b,dict): continue
@@ -47,6 +50,8 @@ if not prompt.rstrip().endswith('?'):
         if not re.search(pattern,prompt,re.I): continue
         missing=[m for m in members if m not in ran]
         if missing: problems.append(f"NAMED VERB NOT RUN: the prompt asks for `{verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or say which you are not running and why.")
+if nudged and 'implementer' not in ran and not re.search(r'^\s*(?:[-*]\s+)?[`*]*implementer[`*]*:\s*(?:dispatching\b|skip\s*[—–-]\s*\S)','\n'.join(texts),re.M):
+    problems.append("IMPLEMENTER NUDGE UNANSWERED: opus-write-nudge fired this turn and no `implementer` dispatch or verdict line followed. Write `implementer: dispatching` (and dispatch) or `implementer: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 bash_write=re.compile(r'sed -i|write_text|\btee\b|>\s*\S+\.\w+')
 if not (any(code.search(e) for e in edits) or any(bash_write.search(c) and code.search(c) for c in cmds)):

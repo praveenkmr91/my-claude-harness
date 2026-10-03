@@ -217,6 +217,23 @@ test('done-claim gate', async (t) => {
     assert.equal(run('It runs seven agents.', { editedFile: null, prompt: 'what does the battery run?' }), 0);
   });
 
+  await t.test('an implementer nudge needs a dispatch or verdict line in the same turn', () => {
+    const runNudged = (reply) => {
+      const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+      fs.writeFileSync(transcriptPath, [
+        { type: 'user', message: { content: 'go' } },
+        { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/repo/notes.md' } }] } },
+        { type: 'attachment', attachment: { type: 'hook_blocking_error', blockingError: 'This Opus thread has now written 6 files itself.' } },
+        { type: 'assistant', message: { content: [{ type: 'text', text: reply }] } },
+      ].map((e) => JSON.stringify(e)).join('\n'));
+      return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+    };
+    const silent = runNudged('Notes updated.');
+    assert.equal(silent.status, 2);
+    assert.match(silent.stderr, /IMPLEMENTER NUDGE UNANSWERED/);
+    assert.equal(runNudged('implementer: skip — design edits, nearly done.\nNotes updated.').status, 0);
+  });
+
   await t.test('skips the retry after a block', () => {
     assert.equal(run('Done.', { stopHookActive: true }), 0);
   });
