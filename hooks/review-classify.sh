@@ -20,8 +20,24 @@ if [ -n "$PR_DIFF" ]; then
   FILES=$(sed -nE 's#^diff --git a/.* b/(.*)$#\1#p' <<<"$PR_DIFF" | sort -u)
 else
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
-  COMMITTED=""; [ -n "$SINCE" ] && COMMITTED=$(git log --name-only --pretty=format: --since="$SINCE" 2>/dev/null)
-  FILES=$( { printf '%s\n' "$EDITED" "$COMMITTED"; git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sed '/^$/d' | sort -u)
+  TOP=$(git rev-parse --show-toplevel)
+  # The dirty tree often carries another task's in-flight work; it is scope only when this session edited nothing here.
+  SCOPED=$(printf '%s\n' "$EDITED" | sed -n "s#^$TOP/##p" | sort -u)
+  if [ -n "$SCOPED" ]; then
+    FILES=$SCOPED
+  else
+    COMMITTED=""; [ -n "$SINCE" ] && COMMITTED=$(git log --name-only --pretty=format: --since="$SINCE" 2>/dev/null)
+    FILES=$( { printf '%s\n' "$COMMITTED"; git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sed '/^$/d' | sort -u)
+  fi
+fi
+# Pathspecs for the git reads below. An empty pathspec means the whole tree, so a scoped run with no
+# code files must skip the content read rather than pass an empty list.
+SCOPE=(); SCOPE_CODE=(); NO_CODE=no
+if [ -n "$SCOPED" ]; then
+  cd "$TOP" || exit 0
+  while IFS= read -r f; do SCOPE+=("$f"); done <<<"$SCOPED"
+  while IFS= read -r f; do [ -n "$f" ] && SCOPE_CODE+=("$f"); done < <(grep -E '\.(ts|tsx|js|jsx|mjs|cjs|vue)$' <<<"$SCOPED" | grep -vE '\.(test|spec)\.|__tests__/|^tests/')
+  [ ${#SCOPE_CODE[@]} -eq 0 ] && NO_CODE=yes
 fi
 [ -n "$FILES" ] || exit 0
 REACT=no; grep -qE '\.(tsx|jsx)$|/use-[a-z0-9-]+\.ts$' <<<"$FILES" && REACT=yes
@@ -36,8 +52,8 @@ if [ -n "$PR_DIFF" ]; then
   ADDED=$(grep -E '^\+' <<<"$PR_DIFF" | grep -vcE '^\+\+\+ (b/|/dev/null)')
   NEWFILES=$(grep -c '^new file mode' <<<"$PR_DIFF")
 else
-  ADDED=$( { [ -n "$SINCE" ] && git log --numstat --pretty=format: --since="$SINCE" 2>/dev/null; git diff --numstat HEAD 2>/dev/null; git ls-files --others --exclude-standard -z 2>/dev/null | xargs -0 wc -l 2>/dev/null | awk '$2!="total"{print $1"\t0\t"$2}'; } | awk '$1~/^[0-9]+$/{a+=$1} END{print a+0}')
-  NEWFILES=$( { [ -n "$SINCE" ] && git log --diff-filter=A --name-only --pretty=format: --since="$SINCE" 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sed '/^$/d' | sort -u | wc -l | tr -d ' ')
+  ADDED=$( { [ -n "$SINCE" ] && git log --numstat --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff --numstat HEAD -- "${SCOPE[@]}" 2>/dev/null; git ls-files --others --exclude-standard -z -- "${SCOPE[@]}" 2>/dev/null | xargs -0 wc -l 2>/dev/null | awk '$2!="total"{print $1"\t0\t"$2}'; } | awk '$1~/^[0-9]+$/{a+=$1} END{print a+0}')
+  NEWFILES=$( { [ -n "$SINCE" ] && git log --diff-filter=A --name-only --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git ls-files --others --exclude-standard -- "${SCOPE[@]}" 2>/dev/null; } | sed '/^$/d' | sort -u | wc -l | tr -d ' ')
 fi
 VERB=review; LENSES=reuse-analyzer,placement-analyzer
 [ "$REACT" = yes ] && LENSES="$LENSES,react-best-practices"
@@ -50,7 +66,10 @@ lens() { case ",$LENSES," in *",$1,"*) ;; *) LENSES="$LENSES,$1";; esac; }
 CODE=('*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.vue' ':!*.test.*' ':!*.spec.*' ':!**/__tests__/**' ':!tests/**')
 if [ -n "$PR_DIFF" ]; then
   ADDED_TEXT=$(awk '/^diff --git /{f=$NF; sub(/^b\//,"",f); keep = f ~ /\.(ts|tsx|js|jsx|mjs|cjs|vue)$/ && f !~ /\.(test|spec)\.|__tests__\/|^tests\//; next} keep && /^\+/ && !/^\+\+\+ /{print substr($0,2)}' <<<"$PR_DIFF")
+elif [ "$NO_CODE" = yes ]; then
+  ADDED_TEXT=""
 else
+  [ ${#SCOPE_CODE[@]} -gt 0 ] && CODE=("${SCOPE_CODE[@]}")
   ADDED_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${CODE[@]}" 2>/dev/null; git diff HEAD -- "${CODE[@]}" 2>/dev/null; } | grep -E '^\+' | grep -vE '^\+\+\+' | cut -c2-; git ls-files --others --exclude-standard -z -- "${CODE[@]}" 2>/dev/null | xargs -0 cat 2>/dev/null)
 fi
 has() { grep -qE "$1" <<<"$ADDED_TEXT"; }
