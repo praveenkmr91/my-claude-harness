@@ -24,7 +24,9 @@ Hook joins (scope = files the task edited or committed; dirty tree as fallback):
 - PR ask ("check PR", "review PR 12", a PR URL; joins show `pr=`) → the `code-review` skill on that PR, lenses scored from its diff. `--comment` only on explicit ask; the battery (`pr-review-toolkit:review-pr`) only on full / deep.
 - Auto: code edits nudge the lens list mid-turn; the Stop gate blocks a code turn's done-claim or commit ask until every named lens has its line.
 
-Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Trivial change → lint + tsc. Explore locates code, never judges it.
+Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Explore locates code, never judges it.
+
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small → + affected specs + lens hand pass. Big (plan-driven or bulk) → two review rounds over fresh diffs + battery, trim, harden once.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
