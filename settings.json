@@ -9,7 +9,6 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "model": "opus",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
     "anthropic-skills:xlsx": "name-only",
@@ -439,5 +438,6 @@
       "**Org-specific CLIs**: Hydrogen repos' project scripts — npm run eject:hydrogen, npm run upload:resourceset (where present); Hydrogen dev servers pin a fixed port per repo and must not auto-fallback",
       "routine under a repo's src/, custom/, and scripts/ prefixes for lint/build/eject workflows"
     ]
-  }
+  },
+  "model": "opus"
 }
