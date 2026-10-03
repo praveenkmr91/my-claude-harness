@@ -45,7 +45,7 @@
 
 ## Committing
 - **Commit locally at verified checkpoints, unasked.** After the verify gate passes, pathspec only (below); the Stop gate checks lint and lenses on any committing turn. Push and PR need a yes: `git push` is hook-denied, `gh pr create` hook-asked.
-- **Pathspec commits when tree has concurrent in-flight work.** Shared branch carrying staged/unstaged changes from other tasks → commit explicit pathspec (`git commit --only <dir>/`), unrelated work untouched. Shared wiring files (package.json, lockfile, routes) → leave to owner.
+- **Pathspec commits when tree has concurrent in-flight work.** Shared branch carrying staged/unstaged changes from other tasks → commit explicit pathspec (`git commit --only <dir>/`), unrelated work untouched. A pathspec commits whole files: `git diff <file>` shows a hunk that isn't yours → commit a blob of HEAD plus only your hunks via temp-index plumbing. Shared wiring files (package.json, lockfile, routes) → leave to owner.
 - **No attribution trailers in commits or PRs.** Enforced by `hooks/block-dangerous-git.sh` (denies `Co-Authored-By` / "Generated with" / tool footers at PreToolUse); do not copy trailers from `git log`.
 
 ## Delegating
