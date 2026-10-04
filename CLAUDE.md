@@ -52,7 +52,7 @@
 - **Subagent:** open-ended research (3+ queries), specialized fits (Explore, implementer, checker, external-io, code-reviewer, frontend-design), 2+ independent parallel investigations. An omitted `model` inherits the session tier — dispatch a declared cheap agent rather than a bare `general-purpose`, or mechanical work burns Opus silently.
 - **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 parallel calls.
 - **Anti-pattern:** subagent to read one known file.
-- **Model tier by work KIND.** Brain work and code carrying a design call → Opus+; approved-plan steps and bulk sweeps → Sonnet `implementer`; no-judgment → Haiku `checker` (lint + tsc stay direct); unbounded external → `external-io`, one bounded read inline; Fable reviews plans only; the harness advisor never on simple tasks, only multi-step, 2+ approaches, architectural, or stuck. Spec `~/.claude/subagent-tiers.md`, injected on the first Agent call; `hooks/enforce-subagent-model.sh` enforces.
+- **Model tier by work KIND.** Brain work and code carrying a design call → Opus+; approved-plan steps and bulk sweeps → Sonnet `implementer`; no-judgment → Haiku `checker` (lint + tsc stay direct); unbounded external → `external-io`, one bounded read inline; Fable reviews plans only; the harness advisor only when stuck or before an irreversible / architectural commitment — never routine multi-step or done-checks. Spec `~/.claude/subagent-tiers.md`, injected on the first Agent call; `hooks/enforce-subagent-model.sh` enforces.
 
 ## Config & harness
 - **Editing `~/.claude` (rule docs, hooks, settings)? `~/.claude/harness.md` owns the maintenance rules** — `hooks/harness-context.sh` injects it on first contact with `~/.claude` each session.
