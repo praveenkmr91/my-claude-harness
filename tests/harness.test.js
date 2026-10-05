@@ -234,6 +234,7 @@ test('correction-learn: fires on repeated corrections, silent on ordinary prompt
     'as i said, now we have liberty/ freedom/ power to decide on architecture.',
     'meeting ended. lets find answers on our own instead of rushing to asking stupid questions',
     '<task-notification>i told you</task-notification>',
+    '<agent-message from="a1">\n[Subagent hand-back] The report follows:\n  "i didnt approve plans. why are u implementing already?"\n</agent-message>',
   ]) assert.ok(!fires(p), p);
 });
 

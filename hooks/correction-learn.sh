@@ -3,7 +3,7 @@
 # Phrases measured against 2489 real prompts (19/20 hits were corrections); `again`, bare `why do u` and `no,` were noise — re-measure before widening.
 IN=$(cat)
 P=$(jq -r '.prompt // ""' <<<"$IN")
-case "$P" in *'<task-notification>'*|*'[SYSTEM NOTIFICATION'*) exit 0;; esac
+case "$P" in *'<task-notification>'*|*'[SYSTEM NOTIFICATION'*|*'[Subagent hand-back]'*) exit 0;; esac
 REPEATED='\btold (you|u)\b|\bmany times\b|\bi (already )?said\b|\bwhy (do|did) (u|you) keep\b|\bkeep missing\b|\bwrong with (u|you)\b|\bi (didn.?t|did not|never) (approve|ask)|\b(u|you)\W+(\w+\W+)?stupid\b|\bstupid\W*$'
 # "as i said" is a reiteration, not a correction — strip it before matching "i said".
 WITHOUT_REITERATION=$(sed -E 's/[Aa][Ss] [Ii] ([Aa]lready )?[Ss]aid//g' <<<"$P")
