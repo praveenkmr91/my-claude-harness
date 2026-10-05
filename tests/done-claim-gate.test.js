@@ -139,6 +139,22 @@ test('done-claim gate', async (t) => {
     assert.equal(run(ask, { reviews: reads }), 2);
   });
 
+  await t.test('a lens verdict is accepted in bold, backtick and bullet label forms and with no findings', () => {
+    const ask = 'Diff is above.\nSay yes and I will commit.';
+    for (const verdicts of [
+      '- **reuse-analyzer:** no findings. The path filter extends the existing hook.\n`placement-analyzer`: 0 findings',
+      'reuse-analyzer: no findings\n* **placement-analyzer**: skipped. Single-file change.',
+      '`reuse-analyzer:` 2 findings\nplacement-analyzer: skip: nothing moved',
+    ]) {
+      assert.equal(run(`${verdicts}\n${ask}`), 0, verdicts);
+    }
+  });
+
+  await t.test('a lens name followed by prose is not a verdict', () => {
+    const ask = 'Diff is above.\nSay yes and I will commit.';
+    assert.equal(run(`reuse-analyzer: looks fine\nplacement-analyzer: skipped\n${ask}`), 2);
+  });
+
   await t.test('verdict lines do not mask the first-line claim or the last-line commit ask', () => {
     const { status, stderr } = runFull(`${BASE_VERDICTS}\nDone: the edits landed.`);
     assert.equal(status, 2);
@@ -245,6 +261,17 @@ test('done-claim gate', async (t) => {
     assert.equal(silent.status, 2);
     assert.match(silent.stderr, /IMPLEMENTER NUDGE UNANSWERED/);
     assert.equal(runNudged('implementer: skip — design edits, nearly done.\nNotes updated.').status, 0);
+    for (const line of [
+      "- **implementer:** skipped. The remaining edits are a few small, interlinked harness changes.",
+      "implementer: skipped. This is a single small hook that I'm testing directly.",
+      '**implementer**: skip — reason',
+      '`implementer`: dispatching',
+    ]) {
+      assert.equal(runNudged(`${line}\nNotes updated.`).status, 0, line);
+    }
+    for (const line of ['implementer: skipped', 'implementer: skip —', 'implementer:']) {
+      assert.equal(runNudged(`${line}\nNotes updated.`).status, 2, line);
+    }
   });
 
   await t.test('reads verdicts from last_assistant_message when the transcript lags', () => {

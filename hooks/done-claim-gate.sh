@@ -10,7 +10,10 @@ inp=json.loads(sys.argv[1])
 if inp.get('stop_hook_active'): sys.exit(0)
 path=inp.get('transcript_path')
 if not path: sys.exit(0)
-verdict=re.compile(r'^\s*(?:[-*]\s+)?[`*]*([a-z][a-z-]+)[`*]*:\s*(?:\d+ findings?\b.*|skip\s*[—–-]\s*\S.*)$')
+label_open=r'^\s*(?:[-*]\s+)?[`*]*'
+label_close=r'[`*]*:[`*]*[ \t]*'
+skip_reason=r'skip(?:ped)?[ \t]*[—–.:,-][ \t]*\S'
+verdict=re.compile(label_open+r'([a-z][a-z-]+)'+label_close+r'(?:(?:\d+|no) findings?\b|'+skip_reason+r').*$')
 def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
@@ -53,7 +56,7 @@ if not prompt.rstrip().endswith('?'):
         if not re.search(pattern,prompt,re.I): continue
         missing=[m for m in members if m not in ran]
         if missing: problems.append(f"NAMED VERB NOT RUN: the prompt asks for `{verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or say which you are not running and why.")
-if nudged and 'implementer' not in ran and not re.search(r'^\s*(?:[-*]\s+)?[`*]*implementer[`*]*:\s*(?:dispatching\b|skip\s*[—–-]\s*\S)','\n'.join(texts),re.M):
+if nudged and 'implementer' not in ran and not re.search(label_open+r'implementer'+label_close+r'(?:dispatching\b|'+skip_reason+r')','\n'.join(texts),re.M):
     problems.append("IMPLEMENTER NUDGE UNANSWERED: opus-write-nudge fired this turn and no `implementer` dispatch or verdict line followed. Write `implementer: dispatching` (and dispatch) or `implementer: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 # A redirect counts by its target only: `node --test x.test.js > out.txt` names code but writes none.
