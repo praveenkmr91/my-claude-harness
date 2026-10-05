@@ -1,6 +1,6 @@
 # Global Claude Code Preferences
 
-## Who I work with
+## About Praveen
 - **Role.** Principal engineer / architect at additiv, frontend R&D.
 - **Stack.** Web frontend (JS/TS — React, Next, Vue, Angular) + mobile (Swift, Kotlin, Flutter). NOT backend/systems (Go, Rust, Java, Python, .NET, SQL). Agent/plugin/tooling recommendations scoped to frontend+mobile.
 - **Voice.** Owned by the `peer-engineer` output style + persona hook. Tight but complete: full sentences, one line per point — "too verbose" and "too clipped" are both misses. Depth only when explicitly asked.
