@@ -74,12 +74,12 @@ fi
 
 if echo "$COMMAND" | grep -qE "$GIT_COMMIT|${GH_PR}(create|edit)\b" \
   && echo "$COMMAND" | grep -qiE 'co-authored-by|generated with|🤖'; then
-  echo "BLOCKED: attribution trailer in a commit/PR message. The user forbids Co-Authored-By, 'Generated with', and tool footers everywhere (~/.claude/CLAUDE.md). Rewrite the message without it — do not copy trailers from existing commits in git log." >&2
+  echo "BLOCKED: attribution trailer in a commit/PR message. The user forbids Co-Authored-By, 'Generated with', and tool footers everywhere (~/.claude/committing.md). Rewrite the message without it — do not copy trailers from existing commits in git log." >&2
   exit 2
 fi
 
 if echo "$COMMAND" | grep -qE "${GH_PR}create\b"; then
-  jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:"A PR is published to others and needs your yes (CLAUDE.md: push and PR need a yes)."}}'
+  jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:"A PR is published to others and needs your yes (committing.md: push and PR need a yes)."}}'
 fi
 
 exit 0

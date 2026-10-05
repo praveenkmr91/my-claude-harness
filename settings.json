@@ -170,7 +170,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh code-craft.md '[.](tsx?|jsx?|mjs|cjs|vue|svelte|css|scss|swift|kts?|dart)$'",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh code-craft.md '[.](tsx?|jsx?|mjs|cjs|mts|cts|sh|vue|svelte|css|scss|swift|kts?|dart)$'",
             "timeout": 5
           }
         ]
@@ -180,8 +180,8 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git:*)",
             "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh committing.md",
+            "if": "Bash(git:*)",
             "timeout": 5
           }
         ]
@@ -428,7 +428,7 @@
       "effortLevel": "medium"
     },
     "claude-opus-5-5": {
-      "effortLevel": "medium"
+      "effortLevel": "high"
     },
     "claude-sonnet-5-5": {
       "effortLevel": "high"

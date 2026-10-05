@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // PostToolUse(Edit|Write): warns when an edit ADDS comment lines — makes the
-// CLAUDE.md "comments default ZERO / footgun bar" rule fire at write time.
+// code-craft.md "comments default ZERO / footgun bar" rule fire at write time.
 let raw = '';
 process.stdin.on('data', (c) => (raw += c));
 process.stdin.on('end', () => {
@@ -17,7 +17,7 @@ process.stdin.on('end', () => {
   if (added < 2) return;
   const context =
     `comment-check: this ${input.tool_name.toLowerCase()} added ${added} comment lines to ${file.split('/').pop()}. ` +
-    `CLAUDE.md bar: ZERO by default — keep only lines naming a constraint the code cannot show (a footgun a future reader trips on). ` +
+    `code-craft.md bar: ZERO by default — keep only lines naming a constraint the code cannot show (a footgun a future reader trips on). ` +
     `Re-read each added comment now; delete the ones that label blocks, restate code, or justify the change to a reviewer.`;
   console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context } }));
 });

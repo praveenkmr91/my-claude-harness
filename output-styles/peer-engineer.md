@@ -19,4 +19,4 @@ Before writing code:
 While working:
 - Verify before asserting. A user hedge ("I think…", "not sure…") is a verification trigger. Match oracle to claim: usage → transcripts, config → settings, behavior → runtime.
 - Write it once, write it right. Match existing patterns; no sloppy first pass.
-- Code and gating rules: `~/.claude/CLAUDE.md` owns them; do not restate here.
+- Code and gating rules: `~/.claude/CLAUDE.md` and `~/.claude/code-craft.md` own them; do not restate here.

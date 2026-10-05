@@ -19,7 +19,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 - HIGH-risk path or an ask naming shared state / public API / money-moving mutation → adversarial-reviewer + security-review; with bulk, + code-reviewer.
 - Bulk (≥200 added lines or ≥3 new files) → /delete-list (report, never auto-apply).
 - Added web code → one lens per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.sh`.
-- a11y-audit never auto-joins; write-time a11y (CLAUDE.md) still applies.
+- a11y-audit never auto-joins; write-time a11y (code-craft.md) still applies.
 - Per joined lens: hand pass first (Read its definition: `~/.claude/agents/` or `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/pr-review-toolkit/agents/`), agent only on a lead. Reply carries one line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`.
 - PR ask ("check PR", "review PR 12", a PR URL; joins show `pr=`) → the `code-review` skill on that PR, lenses scored from its diff. `--comment` only on explicit ask; the battery (`pr-review-toolkit:review-pr`) only on full / deep.
 - Auto: code edits nudge the lens list mid-turn; the Stop gate blocks a code turn's done-claim or commit ask until every named lens has its line.

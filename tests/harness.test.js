@@ -293,7 +293,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'subagent-tiers.md', /sub-Opus session the hook injects opus/],
     ['settings.json', /inject-once\.sh subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],
     ['settings.json', /inject-once\.sh browser-verify\.md/, 'CLAUDE.md', /injected on the first chrome-devtools call/],
-    ['settings.json', /inject-once\.sh code-craft\.md '\[\.\]\(tsx\?/, 'CLAUDE.md', /code-craft\.md`\*\*.*injected on the first Read, Write or Edit of a source file/],
+    ['settings.json', /inject-once\.sh code-craft\.md '\[\.\]\(tsx\?[^']*\|sh\|[^']*dart\)[$]'/, 'CLAUDE.md', /code-craft\.md`\*\*.*injected on the first Read, Write or Edit of a source file/],
     ['settings.json', /"if": "Bash\(git:\*\)",[^}]*inject-once\.sh committing\.md"|inject-once\.sh committing\.md",[^}]*"if": "Bash\(git:\*\)"/, 'CLAUDE.md', /committing\.md`\*\*, injected on the first git command/],
     ['hooks/new-dep-gate.js', /dependency ladder/, 'CLAUDE.md', /installs and new `package\.json` keys are hook-asked/],
     ['hooks/enforce-subagent-model.sh', /Fable needs a confirmed Opus session/, 'subagent-tiers.md', /fails CLOSED/],
@@ -315,6 +315,17 @@ test.describe('rule and hook agree', () => {
       assert.match(read(doc), docPattern, `${doc} no longer states the rule the hook enforces`);
     });
   }
+});
+
+test('reset-context-flags.sh: every hook flag is reset on compaction or is a nudge counter', () => {
+  const reset = read('hooks/reset-context-flags.sh');
+  const counters = ['claude-opus-write-', 'claude-review-lenses'];
+  const prefixes = new Set();
+  for (const script of HOOK_SCRIPTS) {
+    for (const m of read(`hooks/${script}`).matchAll(/\/tmp\/(claude-[a-z-]+?)-\$/g)) prefixes.add(m[1]);
+  }
+  const unreset = [...prefixes].filter((p) => !reset.includes(`/tmp/${p}-`) && !counters.some((c) => p.startsWith(c)));
+  assert.deepEqual(unreset, [], 'a new context-injection flag must be cleared in reset-context-flags.sh');
 });
 
 test('block-dangerous-git.sh: every command family it guards has its own if-gate', () => {
