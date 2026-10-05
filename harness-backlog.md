@@ -1,6 +1,6 @@
 # Harness backlog
 
-Measured harness friction, parked. One entry per item: the evidence, why it is not fixed yet, the fix, and what makes it worth doing. An entry leaves this file in the commit that fixes it. Evidence comes from the 2026-10-05 transcript census (81 sessions in the OCBC RoboInvest project, 2026-09-13 to 2026-10-05); re-run a census before acting on a count older than a month.
+Measured harness friction, parked. One entry per item: the evidence, why it is not fixed yet, the fix, and what makes it worth doing. An entry leaves this file in the commit that fixes it. Evidence comes from the 2026-10-05 transcript census (81 sessions in the OCBC RoboInvest project, 2026-09-13 to 2026-10-05); re-run a census before acting on a count older than a month. The full report, raw rows and re-run scripts are archived in `state/census/2026-10-05.tar.gz` (untracked; read with `tar -xzOf ~/.claude/state/census/2026-10-05.tar.gz census/report.md`, re-run `census/extract.js` then `census/report.js`).
 
 ## Open
 
