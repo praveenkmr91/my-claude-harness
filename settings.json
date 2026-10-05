@@ -428,7 +428,7 @@
       "effortLevel": "medium"
     },
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
     "claude-sonnet-5-5": {
       "effortLevel": "high"
@@ -441,6 +441,10 @@
   "agentPushNotifEnabled": false,
   "skipAutoPermissionPrompt": true,
   "autoMode": {
+    "allow": [
+      "$defaults",
+      "Maintaining the user's own Claude Code harness under ~/.claude is routine work the user directs: editing CLAUDE.md, rule docs, hooks, agents, skills, tests, automation scripts and settings.json hook wiring, running `node --test ~/.claude/tests/*.test.js`, and committing those files to the ~/.claude git repo. This allowance does not cover disabling or loosening a hook's deny/ask decision, a permission rule, or this autoMode block itself unless the user asked for that change in this session."
+    ],
     "soft_deny": [
       "$defaults",
       "In @additiv-hydrogen repos, `npx eslint --fix <file>` on touched files is routine; whole-src lint (`npm run lint`), `npm run eject:hydrogen`, and `npm run upload:resourceset` change many files or a shared backend — confirm scope/target before running"
