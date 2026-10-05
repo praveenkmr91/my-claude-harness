@@ -27,6 +27,10 @@ const WRITE_CALL_ARG = [
 ];
 const PY_STRING_ASSIGN = /\b(\w+)\s*=\s*(?:(?:pathlib\.)?Path\(\s*)?(['"])([^'"\n]+)\2/g;
 const PY_ALIAS_ASSIGN = /\b(\w+)\s*=\s*(?:pathlib\.)?Path\(\s*(\w+)\s*\)/g;
+const SCRIPT_START = /\b(?:python3?|node)(?:\s+--?[\w=-]+)*\s+-[ce]\s+(['"])/g;
+const SCRIPT_END = { "'": /[^']*'/y, '"': /(?:[^"\\]|\\[\s\S])*"/y };
+const POSITIONAL = /[ \t]+((?:'[^']*'|"[^"]*"|[^\s'"|;&<>()])+)/y;
+const ARGV_REF = /^(?:process|sys)\.argv\[(\d+)\]$/;
 const PATH_TOKEN = /[\w.~$\/-]+\.[A-Za-z]+\b/g;
 const SED_I = /^\s*(?:\w+=\S*\s+)*sed\s(?:\S+\s)*?(?:-[A-Za-z]*i\S*|--in-place\S*)(?=\s|$)/;
 const PERL_I = /^\s*(?:\w+=\S*\s+)*perl\s(?:\S+\s)*?-[A-Za-z]*i\S*(?=\s|$)/;
@@ -82,6 +86,32 @@ function resolvePyArg(arg, pyVars, aliases) {
   return pyVars[name];
 }
 
+function scriptPositionals(command, writeIndex) {
+  for (const start of command.matchAll(SCRIPT_START)) {
+    const bodyStart = start.index + start[0].length;
+    const closing = SCRIPT_END[start[1]];
+    closing.lastIndex = bodyStart;
+    const body = closing.exec(command);
+    if (!body) continue;
+    const bodyEnd = bodyStart + body[0].length;
+    if (writeIndex < bodyStart || writeIndex >= bodyEnd) continue;
+    const positionals = [];
+    POSITIONAL.lastIndex = bodyEnd;
+    for (let m = POSITIONAL.exec(command); m; m = POSITIONAL.exec(command)) positionals.push(m[1].replace(/['"]/g, ''));
+    return positionals;
+  }
+  return [];
+}
+
+function resolveArgvArg(arg, writeIndex, command, vars) {
+  const ref = arg.match(ARGV_REF);
+  if (!ref) return undefined;
+  const positional = scriptPositionals(command, writeIndex)[Number(ref[1]) - 1];
+  if (positional === undefined) return undefined;
+  const value = expand(positional, vars);
+  return /[$`]/.test(value) ? undefined : value;
+}
+
 function interpreterTargets(command, vars, sessionCwd) {
   const invocation = command.search(INTERPRETER);
   if (invocation === -1 || !INTERPRETER_WRITE.test(command)) return [];
@@ -92,8 +122,10 @@ function interpreterTargets(command, vars, sessionCwd) {
   for (const m of command.matchAll(PY_STRING_ASSIGN)) pyVars[m[1]] = m[3];
   for (const m of command.matchAll(PY_ALIAS_ASSIGN)) aliases[m[1]] = m[2];
 
-  const args = WRITE_CALL_ARG.flatMap((re) => [...command.matchAll(re)].map((m) => m[1]));
-  const resolved = args.map((arg) => resolvePyArg(arg, pyVars, aliases));
+  const args = WRITE_CALL_ARG.flatMap((re) => [...command.matchAll(re)].map((m) => ({ arg: m[1], index: m.index })));
+  const resolved = args.map(
+    ({ arg, index }) => resolvePyArg(arg, pyVars, aliases) ?? resolveArgvArg(arg, index, command, vars),
+  );
   // An unresolved destination (loop variable, function parameter) can't be proven scratch. The sweep
   // skips dotfiles: in code, `.test(` and `~/.claude` read as dotfile paths.
   const swept = (command.match(PATH_TOKEN) || []).filter((t) => SOURCE_EXT.test(t));

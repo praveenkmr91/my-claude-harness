@@ -71,6 +71,13 @@ test('opus write nudge', async (t) => {
     for (let i = 0; i < 6; i++) assert.equal(run({ sessionId, file: '/tmp/same.ts' }).code, 0);
   });
 
+  await t.test('non-source writes are not counted — six .md files stay silent, then six .ts files fire', () => {
+    const sessionId = newSession();
+    for (let i = 0; i < 6; i++) assert.equal(run({ sessionId, file: `/tmp/doc${i}.md` }).code, 0);
+    assert.equal(writeN(5, { sessionId }).code, 0);
+    assert.equal(run({ sessionId, file: '/tmp/f5.ts' }).code, 2);
+  });
+
   await t.test('silent between the 6th and 15th file', () => {
     const sessionId = newSession();
     assert.equal(writeN(6, { sessionId }).code, 2);

@@ -328,6 +328,24 @@ test('reset-context-flags.sh: every hook flag is reset on compaction or is a nud
   assert.deepEqual(unreset, [], 'a new context-injection flag must be cleared in reset-context-flags.sh');
 });
 
+test('context-canary: every expected answer appears in its source file', () => {
+  const script = read('automation/context-canary.sh');
+  const defs = [/^C=.*$/m, /^MEMORY_CWD=.*$/m, /^SOURCES=\([\s\S]*?\)$/m, /^EXPECT=\([\s\S]*?\)$/m]
+    .map((pattern) => script.match(pattern)[0])
+    .join('\n');
+  const pairs = execFileSync('bash', ['-c', `${defs}; for i in "\${!SOURCES[@]}"; do printf '%s\\t%s\\n' "\${SOURCES[$i]}" "\${EXPECT[$i]}"; done`], { encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split('\t'));
+  const failures = [];
+  for (const [source, expected] of pairs) {
+    if (!fs.existsSync(source)) failures.push(`${source} does not exist`);
+    else if (!fs.readFileSync(source, 'utf8').includes(expected)) failures.push(`${source} lacks "${expected}"`);
+  }
+  assert.ok(pairs.length > 0, 'no SOURCES/EXPECT pairs resolved from context-canary.sh');
+  assert.deepEqual(failures, [], 'update the canary question in automation/context-canary.sh when moving the text');
+});
+
 test('block-dangerous-git.sh: every command family it guards has its own if-gate', () => {
   const families = [
     ['git', /git (push|commit|add)/],

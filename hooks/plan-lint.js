@@ -22,6 +22,8 @@ const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
 const INDENTED = /^\s{2,}\S/;
 const VERIFY_LINE = /^\s*→ verify/;
 const STEP = /^(\d+\. \*\*|#{3,4} \d+\.)/;
+const STEPS_HEADING = /^## Steps\b/i;
+const PLAIN_STEP = /^\d+\. /;
 const TOP_LEVEL_BULLET = /^- /;
 
 const PARAGRAPH_LIMIT = 200;
@@ -107,12 +109,30 @@ function longParagraphs(lines) {
   return findings;
 }
 
+function stepFlags(lines) {
+  const flags = lines.map((line) => STEP.test(line));
+
+  lines.forEach((heading, start) => {
+    if (!STEPS_HEADING.test(heading)) return;
+
+    const nextSection = lines.findIndex((line, index) => index > start && SECTION_HEADING.test(line));
+    const end = nextSection === -1 ? lines.length : nextSection;
+    if (flags.slice(start, end).some(Boolean)) return;
+
+    for (let index = start + 1; index < end; index++) flags[index] = PLAIN_STEP.test(lines[index]);
+  });
+
+  return flags;
+}
+
 function unverifiedSteps(lines) {
+  const isStep = stepFlags(lines);
+
   return lines.flatMap((line, index) => {
-    if (!STEP.test(line)) return [];
+    if (!isStep[index]) return [];
 
     const stepEnd = lines.findIndex(
-      (candidate, next) => next > index && (STEP.test(candidate) || SECTION_HEADING.test(candidate)),
+      (candidate, next) => next > index && (isStep[next] || SECTION_HEADING.test(candidate)),
     );
     const step = lines.slice(index, stepEnd === -1 ? undefined : stepEnd);
 

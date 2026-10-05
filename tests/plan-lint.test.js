@@ -215,6 +215,25 @@ test('check P3', async (t) => {
     const text = ['### 1. Foo', '', '→ verify: `pnpm test`', '', '### 2. Bar', '', '→ verify: `pnpm lint`', '', '## Gate'].join('\n');
     assert.deepEqual(rulesOf(text), []);
   });
+
+  await t.test('fails a plain numbered step under Steps that has no verify line', () => {
+    const text = ['## Steps', '', '1. Create the file. → verify: `ls`', '2. Wire it up.'].join('\n');
+    assert.deepEqual(check(text).findings, ['4 P3 2. Wire it up.']);
+  });
+
+  await t.test('passes plain numbered steps under Steps that each carry a verify line', () => {
+    const text = ['## Steps', '', '1. Create the file.', '   → verify: `ls`', '', '2. Wire it up.', '   → verify: `pnpm test`'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('ignores a plain numbered list outside Steps', () => {
+    assert.deepEqual(rulesOf(['## Verification', '', '1. Run the check.', '2. Read the output.'].join('\n')), []);
+  });
+
+  await t.test('keeps a nested plain list inside a ### step from becoming a step', () => {
+    const text = ['## Steps', '', '### 1. Foo', '', '1. first', '2. second', '', '→ verify: `pnpm test`'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
 });
 
 test('check P4', async (t) => {

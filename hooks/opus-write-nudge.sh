@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse on Write|Edit. Advisory arm of ~/.claude/subagent-tiers.md: fires on the 6th distinct file
+# PostToolUse on Write|Edit. Advisory arm of ~/.claude/subagent-tiers.md: fires on the 6th distinct source file
 # written by an Opus-or-above main thread, and again on the 15th unless implementer was dispatched; subagents are skipped.
 IN=$(cat)
 
@@ -8,6 +8,7 @@ SID=$(jq -r '.session_id // empty' <<<"$IN")
 F=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
 T=$(jq -r '.transcript_path // empty' <<<"$IN")
 [ -n "$SID" ] && [ -n "$F" ] && [ -r "$T" ] || exit 0
+grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)$' <<<"$F" || exit 0
 
 # Same oracle as enforce-subagent-model.sh: the live model, not settings.json.
 MODEL=$(tail -c 200000 "$T" 2>/dev/null \

@@ -34,12 +34,18 @@ test('bash write guard', async (t) => {
     ['python shutil copy into the repo', "python3 -c \"import shutil; shutil.copy('/tmp/x.ts', 'src/x.ts')\""],
     ['dotfile append', "printf 'dist/\\n' >> .gitignore"],
     ['relative write after cd into the repo', `cd ${SCRATCH} && cd /Users/me/repo && echo x > src/a.ts`],
+    ['node argv destination resolved to a repo file', ['node -e \'require("fs").writeFileSync(process.argv[1], "x")\' src/app.ts', 'src/app.ts']],
+    ['python argv destination resolved to a home path', ['python3 -c \'import sys; open(sys.argv[1], "w").write("x")\' $HOME/repo/a.json', 'repo/a.json']],
+    ['node argv index out of range with a guarded path in the command', ['node -e \'require("fs").writeFileSync(process.argv[3], "x")\' a src/x.ts', 'src/x.ts']],
+    ['node argv destination from an unexpanded variable', ['node -e \'require("fs").writeFileSync(process.argv[1], "x")\' $UNSET/a.json', 'a.json']],
   ];
-  for (const [name, command] of blocked) {
+  for (const [name, entry] of blocked) {
+    const [command, listed] = [entry].flat();
     await t.test(`blocks ${name}`, () => {
       const res = run(command);
       assert.equal(res.code, 2);
       assert.match(res.stderr, /Use Write or Edit/);
+      if (listed) assert.ok(res.stderr.includes(listed), res.stderr);
     });
   }
 
@@ -84,6 +90,12 @@ test('bash write guard', async (t) => {
     ['running a script file', 'node scripts/generate-translation-keys.mjs --check'],
     ['restore a scratch backup', 'cp src/init.ts /tmp/init.bak; sed -i "" "/x/d" src/init.ts; pnpm test; cp /tmp/init.bak src/init.ts'],
     ['read-only node script mentioning dot paths', "cd ~/.claude/projects; node -e 'const re=/x/; if (re.test(s)) out.write(s)'"],
+    [
+      'node argv destination in scratch while the command mentions other files',
+      `S=/private/tmp/claude-501/x/scratchpad && grep -v foo CLAUDE.md > $S/CLAUDE.md && node -e 'const fs=require("fs"); const head=require("child_process").execSync("git show HEAD:settings.json",{encoding:"utf8"}); fs.writeFileSync(process.argv[1], head.replace("a","b"))' $S/settings.json && jq empty $S/settings.json`,
+    ],
+    ['python argv destination in /tmp', 'python3 -c \'import sys; open(sys.argv[1], "w").write("x")\' /tmp/x.json'],
+    ['node argv index out of range, sweep fallback finds no guarded path (exit 0)', 'node -e \'require("fs").writeFileSync(process.argv[3], "x")\' a'],
   ];
   for (const [name, command] of allowed) {
     await t.test(`allows ${name}`, () => assert.equal(run(...[command].flat()).code, 0));
