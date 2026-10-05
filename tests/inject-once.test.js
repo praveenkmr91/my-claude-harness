@@ -62,6 +62,18 @@ test('inject-once hook', async (t) => {
     assert.equal(run('code-craft.md', read('/repo/src/other.ts'), sourceOnly), '');
   });
 
+  await t.test('compaction resets the flag so the doc injects again, nudge counters kept', () => {
+    const sid = newSession();
+    const counter = `/tmp/claude-opus-write-files-${sid}`;
+    fs.writeFileSync(counter, '3');
+    run('subagent-tiers.md', call(sid, 'agent-a'));
+    const reset = spawnSync('bash', [path.resolve(__dirname, '..', 'hooks', 'reset-context-flags.sh')], { input: JSON.stringify({ session_id: sid }), encoding: 'utf8' });
+    assert.equal(reset.status, 0);
+    assert.match(context(run('subagent-tiers.md', call(sid, 'agent-a'))), /subagent-tiers\.md — injected once/);
+    assert.ok(fs.existsSync(counter));
+    fs.rmSync(counter);
+  });
+
   await t.test('missing session id is silent', () => {
     assert.equal(run('subagent-tiers.md', { tool_name: 'Agent', tool_input: {} }), '');
   });

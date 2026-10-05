@@ -20,6 +20,17 @@
     "anthropic-skills:import-memory": "off"
   },
   "hooks": {
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/reset-context-flags.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
