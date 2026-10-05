@@ -117,4 +117,11 @@ test('block dangerous git hook', async (t) => {
       assert.match(stderr, /Do not commit with -a/);
     }
   });
+
+  await t.test('bulk staging is denied with the explicit-path alternative', () => {
+    const { status, stderr } = run('git add -A');
+    assert.equal(status, 2);
+    assert.match(stderr, /Do not bulk-stage/);
+    assert.match(stderr, /git commit --only/);
+  });
 });

@@ -36,6 +36,7 @@ const SED_I = /^\s*(?:\w+=\S*\s+)*sed\s(?:\S+\s)*?(?:-[A-Za-z]*i\S*|--in-place\S
 const PERL_I = /^\s*(?:\w+=\S*\s+)*perl\s(?:\S+\s)*?-[A-Za-z]*i\S*(?=\s|$)/;
 const GIT_MV = /^\s*(?:\w+=\S*\s+)*git\s+mv\s/;
 const REPO_PLANS = /(^|\/)plans\/[^/]+\.md$/;
+const MEMORY = /\/\.claude\/projects\/[^/]+\/memory\//;
 
 function shellVars(command) {
   const vars = { HOME: process.env.HOME, TMPDIR: process.env.TMPDIR };
@@ -54,7 +55,8 @@ function cwdAt(index, command, vars, sessionCwd) {
 
 function isGuarded(target, cwd) {
   const inScratch = SCRATCH.test(target) || (!target.startsWith('/') && SCRATCH.test(`${cwd}/`));
-  return (SOURCE_EXT.test(target) || DOTFILE.test(target)) && !inScratch;
+  const inMemory = MEMORY.test(target.startsWith('/') ? target : `${cwd}/${target}`);
+  return (SOURCE_EXT.test(target) || DOTFILE.test(target)) && !inScratch && !inMemory;
 }
 
 function shellTargets(command, vars, sessionCwd) {
