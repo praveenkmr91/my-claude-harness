@@ -22,6 +22,8 @@ const RULE_DOCS = [
   'plan-mode.md',
   'plugin-curation.md',
   'harness.md',
+  'code-craft.md',
+  'committing.md',
 ];
 
 const HOOK_SCRIPTS = fs.readdirSync(path.join(ROOT, 'hooks')).filter((f) => /\.(sh|js)$/.test(f));
@@ -283,18 +285,20 @@ test('review-lens-nudge: names lenses on a code edit, once per turn and lens set
 
 test.describe('rule and hook agree', () => {
   const pairs = [
-    ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'CLAUDE.md', /Co-Authored-By/],
-    ['hooks/block-dangerous-git.sh', /push and PR need a yes/, 'CLAUDE.md', /`gh pr create` hook-asked/],
-    ['hooks/done-claim-gate.sh', /ran git commit/, 'CLAUDE.md', /Stop gate checks lint and lenses on any committing turn/],
+    ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'committing.md', /Co-Authored-By/],
+    ['hooks/block-dangerous-git.sh', /push and PR need a yes/, 'committing.md', /`gh pr create` hook-asked/],
+    ['hooks/done-claim-gate.sh', /ran git commit/, 'committing.md', /Stop gate checks lint and lenses on any committing turn/],
     ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied outright for review\/planning agents/],
     ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'subagent-tiers.md', /\| Explore \| Haiku always/],
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'subagent-tiers.md', /sub-Opus session the hook injects opus/],
     ['settings.json', /inject-once\.sh subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],
     ['settings.json', /inject-once\.sh browser-verify\.md/, 'CLAUDE.md', /injected on the first chrome-devtools call/],
+    ['settings.json', /inject-once\.sh code-craft\.md '\[\.\]\(tsx\?/, 'CLAUDE.md', /code-craft\.md`\*\*, injected on the first Read, Write or Edit of a source file/],
+    ['settings.json', /"if": "Bash\(git:\*\)",\s*"command": "bash [^"]*inject-once\.sh committing\.md"/, 'CLAUDE.md', /committing\.md`\*\*, injected on the first git command/],
     ['hooks/new-dep-gate.js', /dependency ladder/, 'CLAUDE.md', /installs and new `package\.json` keys are hook-asked/],
     ['hooks/enforce-subagent-model.sh', /Fable needs a confirmed Opus session/, 'subagent-tiers.md', /fails CLOSED/],
-    ['hooks/comment-delta-check.js', /ZERO by default/, 'CLAUDE.md', /default to ZERO/],
-    ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'CLAUDE.md', /Surgical on build tasks/],
+    ['hooks/comment-delta-check.js', /ZERO by default/, 'code-craft.md', /default to ZERO/],
+    ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'code-craft.md', /Surgical on build tasks/],
     ['hooks/done-claim-gate.sh', /REVIEW NOT RUN/, 'review-routing.md', /Stop gate blocks/],
     ['hooks/done-claim-gate.sh', /LINT\/TSC NOT RUN/, 'CLAUDE.md', /run linter \+ type checker/],
     ['hooks/block-dangerous-git.sh', /Quote the glob/, 'CLAUDE.md', /denies unquoted/],

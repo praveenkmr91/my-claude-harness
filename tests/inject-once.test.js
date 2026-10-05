@@ -16,9 +16,10 @@ test.after(() => {
   for (const flag of flags) fs.rmSync(flag, { force: true });
 });
 
-function run(doc, payload) {
+function run(doc, payload, pathPattern) {
   if (payload.session_id) flags.push(`/tmp/claude-inject-${doc}-${payload.session_id}-${payload.agent_id || 'main'}`);
-  const res = spawnSync('bash', [HOOK_PATH, doc], { input: JSON.stringify(payload), encoding: 'utf8' });
+  const args = pathPattern ? [HOOK_PATH, doc, pathPattern] : [HOOK_PATH, doc];
+  const res = spawnSync('bash', args, { input: JSON.stringify(payload), encoding: 'utf8' });
   assert.equal(res.status, 0);
   return res.stdout;
 }
@@ -50,6 +51,15 @@ test('inject-once hook', async (t) => {
     const sid = newSession();
     run('subagent-tiers.md', call(sid));
     assert.match(context(run('browser-verify.md', call(sid))), /browser-verify\.md/);
+  });
+
+  await t.test('a path pattern skips non-matching files without spending the flag', () => {
+    const sid = newSession();
+    const read = (file) => ({ session_id: sid, tool_name: 'Read', tool_input: { file_path: file } });
+    const sourceOnly = '[.](tsx?|jsx?)$';
+    assert.equal(run('code-craft.md', read('/repo/docs/plan.md'), sourceOnly), '');
+    assert.match(context(run('code-craft.md', read('/repo/src/app.tsx'), sourceOnly)), /code-craft\.md — injected once/);
+    assert.equal(run('code-craft.md', read('/repo/src/other.ts'), sourceOnly), '');
   });
 
   await t.test('missing session id is silent', () => {

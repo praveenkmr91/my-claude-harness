@@ -17,7 +17,7 @@ EXPECT=("block-dangerous-git.sh" "binding, most-recent instruction" "audit-due.s
 IS_HOOK=(0 1 1 0 1 1 1)
 IS_TOOL=(0 0 0 0 1 1 1)
 
-NO_TOOL_PROMPT='Answer only from context already loaded in this session; do not use any tools. 1) Which hook script denies attribution trailers in commits? 2) What words appear in parentheses right after the heading PERSONA REFRESH? 3) In the review-routing table, what command does the bare audit verb run last? 4) What is the title of the memory index entry about enforcement-layer design patterns? Reply with four numbered lines; write UNKNOWN for any you cannot answer.'
+NO_TOOL_PROMPT='Answer only from context already loaded in this session; do not use any tools. 1) Which hook script denies unquoted grep globs? 2) What words appear in parentheses right after the heading PERSONA REFRESH? 3) In the review-routing table, what command does the bare audit verb run last? 4) What is the title of the memory index entry about enforcement-layer design patterns? Reply with four numbered lines; write UNKNOWN for any you cannot answer.'
 
 # Outside $HOME: walking up from any cwd under it reaches ~/.claude/CLAUDE.md as a project file, which --setting-sources cannot turn off.
 TMP=$(mktemp -d) || exit 1

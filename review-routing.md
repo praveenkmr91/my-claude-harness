@@ -1,13 +1,13 @@
 <review-routing>
 - Six verbs are the only entry points; everything else is a lens a verb pulls in.
 - Default ask is **review**; the hook's `<review-joins>` line picks verb + lenses — load exactly those.
-- A named verb overrides the hook's `verb=`; its `lenses=` still ride along.
+- A named verb overrides the hook's `verb=`, the heavier of two (battery > harden > review); its `lenses=` still ride along.
 - Announce the pass in one line, then do it — main thread, session tier, unless the verb says otherwise.
 
 | Verb | Members | Runs as |
 |---|---|---|
 | **review** — also "code review", "check this", "look over", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand | Main thread; every finding verified at source; never the battery |
-| **battery** — also "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read it only on this verb) | Agents; leads confirmed at source before relaying. "Necessary"/"which" → propose members + reasons, await yes |
+| **battery** — also "batteries", "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read it only on this verb) | Agents; leads confirmed at source before relaying. "Which" → propose members, await yes; "relevant" → pick from the diff, name skips |
 | **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer + security-review skills (main thread) | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |

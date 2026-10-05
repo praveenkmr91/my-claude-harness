@@ -20,20 +20,7 @@
 - **Reused code keys on identity — verify which value wins; swapping → fork ALL seams.** Look-alike hook/component often binds identity (route id, cache key, workflow name, DI token) at init from a fixed const — override silently ignored, failure surfaces far from the reuse point.
 
 ## Code craft — write like a human, not vibe-coded
-- **Comments = footguns only — default to ZERO.** Write none first; add one only when you can name the specific wrong edit/assumption it prevents (bar = a future reader trips without it, NOT "was non-obvious to me while writing"). State the trap, not the history: no essays, no labels on obvious blocks, no justifying absent code, no explaining library internals, no restating the code, no repeating the same why across sibling files. Land the right density on the FIRST pass.
-- **No premature abstraction.** Inline until 3+ real repetitions — config array + `.map` over 2 items = vibe-coded.
-- **No speculative generality.** Every param/option/prop/type-param needs a caller that passes it today. "Might need it" = delete it; add when the second caller exists. Exception — shared UI-component library: its contract is the design spec plus the generic surface popular libs expose (`className`, rest props, `ref`, optional slots); caller count never adds, keeps or removes a prop there.
-- **Guard real states, not impossible ones.** Optional-chain/null-check only where the type or contract says nullable; no try/catch around non-throwing code. Over-defense hides the actual contract and reads machine-generated.
-- **Name by intent.** `clearErrorOnChange`, not `handleChange`.
-- **Readable over terse. Fewer lines ≠ better.** Keep named single-use intermediates (`const isValid = await trigger()`) — say what value means, read top-to-bottom. Never fold into nested expression to save line.
-- **Name qualifiers: strip on files, keep on shadowing symbols.** Filename disambiguated by path — don't repeat qualifier location implies (`review-step.tsx` inside `custom/…`, never `custom-review-step.tsx`). Exported symbol travels to import site path-stripped → KEEP qualifier when shadows base export same name (`CustomModifyInvestment` next to base `ModifyInvestment`).
-- **Swapping hand-rolled code for wrapper: keep its guards.** Wrapper often *throws* where local code degraded gracefully (date-fns `format` on Invalid Date; ICU `currency()` on bad code). Replacing hand-rolled formatting/parsing/math → carry over null-guard / try-catch / fallback. "Modernizing" must not silently drop error handling.
-- **Error states load-bearing — never absorb silently.** Every query/mutation consumer renders or propagates error state. Every catch: surface (user-visible message/retry), rethrow, or log-with-intent — never bare-swallow. Fallback value in catch = product decision, not default: state what user sees when fires.
-- **Deliberate shortcut = tagged, never silent.** Cutting a corner on purpose (naive impl, missing edge, deferred hardening) → one-line `shortcut:` comment naming limitation + upgrade path. Passes the footgun bar; untagged shortcut reads as oversight. Ledger: `/shortcut-debt`.
-- **Surgical on build tasks.** Every changed line traces to the ask; adjacent code, comments, formatting untouched. An ask that names a mechanism (prop, flag, option) delivers that mechanism, never the behavior hard-coded. Remove only what YOUR change orphaned; pre-existing dead code → mention, never delete. Unasked cleanup edits only on an explicit review/simplify ask; look wide, change narrow.
-- **Money never binary float.** Amounts = decimal/minor-integer types; formatting is the only float boundary. Money-moving mutation: invalidate-and-refetch, never optimistic; disable submit while pending.
-- **Renames stop at serialization boundaries.** Rename/refactor sweeps touch local identifiers only — never DTO/serialized fields, API routes, DB columns, i18n keys, env-var names, public exports. Boundary-crossing name = contract, not style.
-- **A11y is write-time, not audit-time.** Interactive = native element (`button`/`a`/`label`), never clickable `div`. Every input labelled. Focus managed on modal/menu open/close. ARIA only where semantics can't reach. Periodic audit = backstop, not mechanism.
+- **Rules live in `~/.claude/code-craft.md`**, injected on the first Read, Write or Edit of a source file in each thread.
 
 ## Before claiming done
 - **After every code change:** run linter + type checker before declaring done. Static-clean (lint+tsc) ≠ "done" — exercise change at runtime before claiming works. The ticket's worked example IS the acceptance test: replay it end-to-end at runtime before claiming fixed; if it can't pass under the chosen design, that's a design finding to raise before shipping.
@@ -44,15 +31,14 @@
 - **Stakeholder-facing text is concise, not terse.** Jira comments, PR descriptions, commit bodies: root cause in 2-3 sentences, the ask in 1-2 — no verification narratives, probe timings, trade-off essays. Full sentences readable without session context; cut padding, never connective tissue.
 
 ## Committing
-- **Commit locally at verified checkpoints, unasked.** After the verify gate passes, pathspec only (below); the Stop gate checks lint and lenses on any committing turn. Push and PR need a yes: `git push` is hook-denied, `gh pr create` hook-asked.
-- **Pathspec commits when tree has concurrent in-flight work.** Shared branch carrying staged/unstaged changes from other tasks → commit explicit pathspec (`git commit --only <dir>/`), unrelated work untouched. A pathspec commits whole files: `git diff <file>` shows a hunk that isn't yours → commit a blob of HEAD plus only your hunks via temp-index plumbing. Shared wiring files (package.json, lockfile, routes) → leave to owner.
-- **No attribution trailers in commits or PRs.** Enforced by `hooks/block-dangerous-git.sh` (denies `Co-Authored-By` / "Generated with" / tool footers at PreToolUse); do not copy trailers from `git log`.
+- **Rules live in `~/.claude/committing.md`**, injected on the first git command in each thread.
 
 ## Delegating
 - **Subagent:** open-ended research (3+ queries), specialized fits (Explore, implementer, checker, external-io, code-reviewer, frontend-design), 2+ independent parallel investigations. An omitted `model` inherits the session tier — dispatch a declared cheap agent rather than a bare `general-purpose`, or mechanical work burns Opus silently.
 - **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 parallel calls.
 - **Anti-pattern:** subagent to read one known file.
 - **Model tier by work KIND.** Brain work and code carrying a design call → Opus+; approved-plan steps and bulk sweeps → Sonnet `implementer`; no-judgment → Haiku `checker` (lint + tsc stay direct); unbounded external → `external-io`, one bounded read inline; Fable reviews plans only; the harness advisor only when stuck or before an irreversible / architectural commitment — never routine multi-step or done-checks. Spec `~/.claude/subagent-tiers.md`, injected on the first Agent call; `hooks/enforce-subagent-model.sh` enforces.
+- **Never stop in-flight work on inferred intent.** A running agent or task stops only on an explicit "stop" / "kill" / "cancel". A request about what comes next (fresh session, new plan, handoff) never authorises it — list what's running and ask "stop or let it finish?". TaskStop discards the agent's work.
 
 ## Config & harness
 - **Editing `~/.claude` (rule docs, hooks, settings)? `~/.claude/harness.md` owns the maintenance rules** — `hooks/harness-context.sh` injects it on first contact with `~/.claude` each session.
