@@ -32,7 +32,7 @@ Each behavioural plan step maps to one test target; that step's `→ verify:` is
 - Real layout, scrolling, drag-and-drop, clipboard, iframes → Playwright, not JSDOM.
 
 ## Network mocks
-Mock at the network layer with the repo's existing tool, payloads per the CLAUDE.md "No fabricated data" rule.
+Mock at the network layer with the repo's existing tool, payloads per the `~/.claude/code-craft.md` "No fabricated data" rule.
 
 ## Done means
 Every new behaviour has a test that was seen failing, then seen passing, in this session. No coverage target — a test that never failed proves nothing.
