@@ -45,5 +45,5 @@
 ## Tooling gotchas
 - **zsh: quote grep globs** — `hooks/block-dangerous-git.sh` denies unquoted `--include=*`; an empty grep is unverified until the command exited 0.
 - **Lockfiles: never full-regen to clean.** Drop removed dep: surgically delete stanza (`file:` local entries have no integrity hash) or `npm install --package-lock-only` — never `rm lock && install`, re-pins every `^`/`~` to today's registry (silent toolchain drift). Lockfile diff far bigger than change = diff resolved-version set before trusting.
-- **Library APIs key on the installed version.** Resolved version from the lockfile (`package.json` only a range; `node_modules` disagreeing = stale). Every API claim cites `pkg@x.y.z` + source — none = lookup skipped. Ladder: `~/.claude/library-docs.md`.
+- **Library APIs key on the installed version.** Every API claim cites `pkg@x.y.z` + source — none = lookup skipped. Ladder: `~/.claude/library-docs.md`.
 - **Browser verification** — `~/.claude/browser-verify.md`, injected on the first chrome-devtools call.
