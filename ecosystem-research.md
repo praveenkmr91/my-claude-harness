@@ -2,6 +2,9 @@
 
 Frozen history of plugin/skill/hook ecosystem sweeps, moved verbatim out of `plugin-curation.md` on 2026-09-23. Not authoritative for current state — `plugin-curation.md` and `settings.json` are. Grep here before evaluating any plugin/skill/hook candidate — standing SKIP verdicts live here. New sweeps go on top (newest first); the resulting enable/disable decision goes in `plugin-curation.md`.
 
+## 2026-10-07 (single candidate, source read in marketplace cache)
+- **SKIP:** `claude-code-setup@claude-plugins-official` v1.0.0. It is one read-only skill (`claude-automation-recommender`, 1.5k words plus 4.5k of references) that suggests MCP servers, skills, hooks and subagents for a repo, and the existing harness already covers all of it. The lockfile-edit block conflicts with the surgical-stanza lockfile rule, and per-edit `tsc` is the lint-on-edit shape removed on 2026-09-23. The Notification hooks aren't needed because cmux handles alerts. Prettier-on-edit was already a SKIP on 2026-09-04.
+
 ## 2026-09-23 (startup-context trim — transcript oracle, ~540 sessions/30d)
 - **modern-web-guidance@googlechrome DISABLED** (marketplace kept for re-enable). ~29 days always-on, ~0 real invocations: transcript hits for `modern-web-guidance@latest search` are this file quoting itself. Its "MANDATORY execute FIRST" description cost ~1k tokens every session and was never obeyed. Dependency-ladder rule in CLAUDE.md + context7 cover the same ground. Re-enable via `/plugin` if a native-platform-heavy task shows it'd have helped.
 - **claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls** → optional hygiene only: unused connectors surface as deferred auth-stub names, so disconnecting saves near-zero context (not settable from `~/.claude`). Figma (451), Claude Docs (378), Atlassian (374) kept.
