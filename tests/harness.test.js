@@ -262,6 +262,28 @@ test('audit-due: first startup starts the clock silently, nudges after 30 days, 
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+test('audit-due: lands the newest weekly report once, on startup or resume', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'audit-'));
+  const repo = path.join(home, 'repo');
+  fs.mkdirSync(repo);
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const hook = path.join(ROOT, 'hooks', 'audit-due.sh');
+  const env = { ...process.env, HOME: home };
+  const start = (source) => execFileSync('bash', [hook], { input: JSON.stringify({ source, cwd: repo }), encoding: 'utf8', env });
+  const reports = path.join(home, '.claude', 'state', 'audits', 'repo');
+  fs.mkdirSync(reports, { recursive: true });
+  const landed = path.join(repo, 'docs', 'audits', 'audit.md');
+  fs.writeFileSync(path.join(reports, '2026-10-05.md'), 'old');
+  fs.utimesSync(path.join(reports, '2026-10-05.md'), new Date(Date.now() - 86400 * 1000), new Date(Date.now() - 86400 * 1000));
+  fs.writeFileSync(path.join(reports, '2026-10-12.md'), 'new');
+  assert.equal(start('clear'), '');
+  assert.equal(fs.existsSync(landed), false);
+  assert.match(JSON.parse(start('resume')).systemMessage, /Weekly audit 2026-10-12 landed/);
+  assert.equal(fs.readFileSync(landed, 'utf8'), 'new');
+  assert.doesNotMatch(start('startup'), /landed/);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 test('review-lens-nudge: names lenses on a code edit, once per turn and lens set', () => {
   const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'lens-'));
   const repo = path.join(home, 'repo');

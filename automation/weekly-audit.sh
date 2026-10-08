@@ -17,14 +17,14 @@ reports=() failed=()
 for repo in "$@"; do
   name=$(basename "$repo")
   dir="$HOME/.claude/state/audits/$name"
-  out="$repo/docs/audits"
-  mkdir -p "$dir" "$out"
+  mkdir -p "$dir"
   if (cd "$repo" && claude -p "$PROMPT" --output-format json --effort medium --permission-mode dontAsk \
         --no-session-persistence --max-budget-usd 10 --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}") \
         > "$dir/$day.json" 2> "$dir/$day.err" \
      && jq -e '.is_error == false' "$dir/$day.json" > /dev/null; then
-    { printf '_Generated %s_\n\n' "$day"; jq -r '.result' "$dir/$day.json"; } > "$out/audit.md"
-    reports+=("$out/audit.md")
+    # Never into the repo directly: hooks/audit-due.sh lands it (why there).
+    { printf '_Generated %s_\n\n' "$day"; jq -r '.result' "$dir/$day.json"; } > "$dir/$day.md" \
+      && reports+=("$name") || failed+=("$name (report write: $dir/$day.md)")
   else
     failed+=("$name (log: $dir/$day.err)")
   fi
@@ -35,7 +35,7 @@ bash "$HOME/.claude/automation/context-canary.sh" || failed+=("context canary (l
 if [ ${#failed[@]} -gt 0 ]; then
   msg="Failed: ${failed[*]}"
 else
-  msg="Reports: ${reports[*]}"
+  msg="Reports ready for ${reports[*]}; they land in docs/audits/audit.md at the next session there."
 fi
 osascript -e "display notification \"$msg\" with title \"Weekly audit\""
 [ ${#failed[@]} -eq 0 ]
