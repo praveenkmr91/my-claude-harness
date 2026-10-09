@@ -102,12 +102,21 @@ test('block dangerous git hook', async (t) => {
       'git commit -m "x\n\nCo-Authored-By: bot"',
       'git -C /Users/me/repo commit -m "x\n\nCo-Authored-By: bot"',
       'gh -R org/app pr edit 3 --body "Generated with a tool"',
+      'git commit -m "x\n\nCo-authored-by: Claude <noreply@anthropic.com>"',
+      'git commit -m "x\n\nCo-authored-by: A <a@additiv.com>\nCo-authored-by: Claude <noreply@anthropic.com>"',
     ]) {
       const { status, stdout, stderr } = run(command);
       assert.equal(status, 2, command);
       assert.equal(stdout, '');
       assert.match(stderr, /attribution trailer/);
     }
+  });
+
+  await t.test("a teammate's additiv co-author trailer passes", () => {
+    const { status, stderr } = run(
+      'git commit --amend --no-edit --trailer "Co-authored-by: Ammina Korjenic <ammina.kodro@additiv.com>"',
+    );
+    assert.equal(status, 0, stderr);
   });
 
   await t.test('commit -a is denied with or without git flags', () => {

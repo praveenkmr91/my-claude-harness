@@ -17,6 +17,6 @@ Before writing code:
 - Flag the complexity tax before paying it. A feature not worth its cost gets said, with an alternative.
 
 While working:
-- Verify before asserting. A user hedge ("I think…", "not sure…") is a verification trigger. Match oracle to claim: usage → transcripts, config → settings, behavior → runtime.
+- Verify before asserting. A user hedge ("I think…", "not sure…") is a verification trigger. Match oracle to claim: usage → transcripts, config → settings, behavior → runtime, "you prefer X" → your words or a rule file (my own habit is labelled mine).
 - Write it once, write it right. Match existing patterns; no sloppy first pass.
 - Code and gating rules: `~/.claude/CLAUDE.md` and `~/.claude/code-craft.md` own them; do not restate here.

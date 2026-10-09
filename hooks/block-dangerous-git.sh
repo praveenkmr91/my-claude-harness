@@ -73,8 +73,8 @@ if echo "$SCAN" | grep -qE '\bgit\b[^|;&]*--no-verify\b'; then
 fi
 
 if echo "$COMMAND" | grep -qE "$GIT_COMMIT|${GH_PR}(create|edit)\b" \
-  && echo "$COMMAND" | grep -qiE 'co-authored-by|generated with|🤖'; then
-  echo "BLOCKED: attribution trailer in a commit/PR message. The user forbids Co-Authored-By, 'Generated with', and tool footers everywhere (~/.claude/committing.md). Rewrite the message without it — do not copy trailers from existing commits in git log." >&2
+  && echo "$COMMAND" | perl -pe 's/co-authored-by:[^<"\n]*<[^>@\s]+\@additiv\.com>//gi' | grep -qiE 'co-authored-by|generated with|🤖'; then
+  echo "BLOCKED: attribution trailer in a commit/PR message. The user forbids Co-Authored-By (except a teammate's @additiv.com address), 'Generated with', and tool footers everywhere (~/.claude/committing.md). Rewrite the message without it — do not copy trailers from existing commits in git log." >&2
   exit 2
 fi
 
