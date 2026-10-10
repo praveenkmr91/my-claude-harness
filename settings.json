@@ -473,7 +473,8 @@
   "autoMode": {
     "allow": [
       "$defaults",
-      "Maintaining the user's own Claude Code harness under ~/.claude is routine work the user directs: editing CLAUDE.md, rule docs, hooks, agents, skills, tests, automation scripts and settings.json hook wiring, running `node --test ~/.claude/tests/*.test.js`, and committing those files to the ~/.claude git repo. This allowance does not cover disabling or loosening a hook's deny/ask decision, a permission rule, or this autoMode block itself unless the user asked for that change in this session."
+      "Maintaining the user's own Claude Code harness under ~/.claude is routine work the user directs: editing CLAUDE.md, rule docs, hooks, agents, skills, tests, automation scripts and settings.json hook wiring, running `node --test ~/.claude/tests/*.test.js`, and committing those files to the ~/.claude git repo. This allowance does not cover disabling or loosening a hook's deny/ask decision, a permission rule, or this autoMode block itself unless the user asked for that change in this session.",
+      "`git rm` / `git rm -r` on tracked paths inside a trusted repo, without `-f`/`--force` — git refuses files with local modifications, so every deletion is recoverable from HEAD. `-f`, `--force`, or `--cached` combined with a later `rm` are not covered."
     ],
     "soft_deny": [
       "$defaults",
