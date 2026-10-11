@@ -458,7 +458,7 @@
       "effortLevel": "medium"
     },
     "claude-opus-5-5": {
-      "effortLevel": "medium"
+      "effortLevel": "high"
     },
     "claude-sonnet-5-5": {
       "effortLevel": "high"
@@ -475,7 +475,8 @@
       "$defaults",
       "Maintaining the user's own Claude Code harness under ~/.claude is routine work the user directs: editing CLAUDE.md, rule docs, hooks, agents, skills, tests, automation scripts and settings.json hook wiring, running `node --test ~/.claude/tests/*.test.js`, and committing those files to the ~/.claude git repo. This allowance does not cover disabling or loosening a hook's deny/ask decision, a permission rule, or this autoMode block itself unless the user asked for that change in this session.",
       "`git rm` / `git rm -r` on tracked paths inside a trusted repo, without `-f`/`--force` — git refuses files with local modifications, so every deletion is recoverable from HEAD. `-f`, `--force`, or `--cached` combined with a later `rm` are not covered.",
-      "Local `git commit` inside a trusted repo, including a preceding `git add <paths> &&` and pathspec forms (`git commit -- <paths>`, `--only`), even right after an unrelated action in the same session was denied — a new commit is recoverable via reflog and pushing stays separately gated. `--amend` on an already-pushed commit, `--no-verify`, and anything chained after the commit (e.g. `&& rm`, `&& git push`) are not covered."
+      "Local `git commit` inside a trusted repo, including a preceding `git add <paths> &&` and pathspec forms (`git commit -- <paths>`, `--only`), even right after an unrelated action in the same session was denied — a new commit is recoverable via reflog and pushing stays separately gated. `--amend` on an already-pushed commit, `--no-verify`, and anything chained after the commit (e.g. `&& rm`, `&& git push`) are not covered.",
+      "Runtime verification against the user's local dev app is a false-positive for Credential Exploration and PII Data Handling: in a browser tab on http://localhost:<port> (a Hydrogen dev server logged in with the user's test account), a chrome-devtools evaluate_script may list sessionStorage/localStorage key names to find that app's own OIDC access token, read it inside the same script, and use it only for read-only GET requests to the app's own trusted backends (*.additiv.dev, additiv-apim-* *.azure-api.net) — the token's intended provider. Dev/test-tenant response bodies (test employees) may be returned summarized. Relaying such an already-approved check to a subagent via SendMessage is not Auto-Mode Bypass. Not covered: returning, printing or persisting the token value; non-GET requests; any other origin or service; tokens from other apps or credential stores."
     ],
     "soft_deny": [
       "$defaults",
