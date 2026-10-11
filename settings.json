@@ -35,7 +35,12 @@
       "mcp__chrome-devtools__performance_start_trace",
       "mcp__chrome-devtools__performance_stop_trace",
       "mcp__chrome-devtools__performance_analyze_insight",
-      "mcp__chrome-devtools__take_heapsnapshot"
+      "mcp__chrome-devtools__take_heapsnapshot",
+      "Bash(node --test:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)"
     ],
     "defaultMode": "auto"
   },
@@ -458,7 +463,7 @@
       "effortLevel": "medium"
     },
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
     "claude-sonnet-5-5": {
       "effortLevel": "high"
@@ -476,7 +481,11 @@
       "Maintaining the user's own Claude Code harness under ~/.claude is routine work the user directs: editing CLAUDE.md, rule docs, hooks, agents, skills, tests, automation scripts and settings.json hook wiring, running `node --test ~/.claude/tests/*.test.js`, and committing those files to the ~/.claude git repo. This allowance does not cover disabling or loosening a hook's deny/ask decision, a permission rule, or this autoMode block itself unless the user asked for that change in this session.",
       "`git rm` / `git rm -r` on tracked paths inside a trusted repo, without `-f`/`--force` — git refuses files with local modifications, so every deletion is recoverable from HEAD. `-f`, `--force`, or `--cached` combined with a later `rm` are not covered.",
       "Local `git commit` inside a trusted repo, including a preceding `git add <paths> &&` and pathspec forms (`git commit -- <paths>`, `--only`), even right after an unrelated action in the same session was denied — a new commit is recoverable via reflog and pushing stays separately gated. `--amend` on an already-pushed commit, `--no-verify`, and anything chained after the commit (e.g. `&& rm`, `&& git push`) are not covered.",
-      "Runtime verification against the user's local dev app is a false-positive for Credential Exploration and PII Data Handling: in a browser tab on http://localhost:<port> (a Hydrogen dev server logged in with the user's test account), a chrome-devtools evaluate_script may list sessionStorage/localStorage key names to find that app's own OIDC access token, read it inside the same script, and use it only for read-only GET requests to the app's own trusted backends (*.additiv.dev, additiv-apim-* *.azure-api.net) — the token's intended provider. Dev/test-tenant response bodies (test employees) may be returned summarized. Relaying such an already-approved check to a subagent via SendMessage is not Auto-Mode Bypass. Not covered: returning, printing or persisting the token value; non-GET requests; any other origin or service; tokens from other apps or credential stores."
+      "Runtime verification against the user's local dev app is a false-positive for Credential Exploration and PII Data Handling: in a browser tab on http://localhost:<port> (a Hydrogen dev server logged in with the user's test account), a chrome-devtools evaluate_script may list sessionStorage/localStorage key names to find that app's own OIDC access token, read it inside the same script, and use it only for read-only GET requests to the app's own trusted backends (*.additiv.dev, additiv-apim-* *.azure-api.net) — the token's intended provider. Dev/test-tenant response bodies (test employees) may be returned summarized. Relaying such an already-approved check to a subagent via SendMessage is not Auto-Mode Bypass. Not covered: returning, printing or persisting the token value; non-GET requests; any other origin or service; tokens from other apps or credential stores.",
+      "Read-only inspection is never Self-Modification or Interfere With Workloads, including under ~/.claude: `git status/diff/log/show`, `jq`, `cat`, `head`, `grep`, `ps`, `lsof`, and `node --test ~/.claude/tests/*.test.js`. Covers only commands that write nothing; a chained write or kill is judged on its own.",
+      "In-place edits (`sed -i`, `perl -pi`) to git-tracked files inside a trusted repo are not Irreversible Local Destruction — the prior content is recoverable from git. Untracked or .gitignored files, and paths outside a trusted repo, are not covered.",
+      "Stopping a localhost dev server (vite, rsbuild, node) that this session started — `kill <pid>` on a PID the session itself launched or found listening on that repo's own dev port — is not Interfere With Workloads. `kill -9` on other processes, `killall`, `pkill` by pattern, and processes the session did not start are not covered.",
+      "`git worktree remove` (without `--force`) on a worktree Claude created under the session scratchpad or a repo's `.claude/worktrees/` — git refuses a dirty worktree and the branch survives. `--force`, `git worktree prune` of others' worktrees, and branch deletion are not covered."
     ],
     "soft_deny": [
       "$defaults",
@@ -485,28 +494,22 @@
     "environment": [
       "### Org-wide",
       "**Organization**: additiv (GitHub org additiv-implementations; user is a principal frontend engineer there)",
-      "**Cloud provider(s)**: None configured",
       "**Repository visibility**: all work repos are private under github.com/additiv-implementations",
       "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured — CI workflows reference secrets by name only (GitHub Actions secrets); values never appear in the repo or in chat",
       "**Default / protected branches**: varies per repo (develop in idn-shared repos, main elsewhere); no rulesets or protected branches configured",
-      "**CI/CD deploy targets**: None configured",
-      "**Network posture**: None configured",
       "**Source control**: repos under github.com/additiv-implementations and their origin remotes only",
       "**Trusted internal domains**: *.additiv.dev (app environments), *.azure-api.net additiv APIM gateways (additiv-apim-*), node-registry.bit.cloud, npm.pkg.github.com",
-      "**Trusted cloud buckets**: None configured",
       "**Key internal services**: DFS/WMS backends behind the additiv APIM gateways; per-environment app hosts under *.additiv.dev",
       "**Internal package registry**: node-registry.bit.cloud; npm.pkg.github.com",
       "**Sensitive data locations & audiences**: .env, .env.local, .env.production, and other .gitignored env files; release.*.js client secrets; Authorization Bearer tokens present in axios error objects (never log raw errors — status/message only); share only with audiences cleared at the [named+specifics] bar",
-      "**Data retention / declassification**: None configured",
       "**Sensitive remote targets**: any namespace, host, or container whose name carries prod or production as a whole word or name segment",
       "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries prod or production as a whole word or name segment",
       "### User-specific",
       "**Primary use of Claude Code**: software development — frontend R&D on ~33 @additiv-hydrogen web apps (React/Vite) plus mobile",
       "**Trusted repos**: everything under /Users/praveenkumar/Documents/projects (private additiv-implementations clones and the Hydrogen source monorepo) — confidential material is fine there; secrets and personal/entrusted sensitive data are never cleared into a repo regardless of visibility",
-      "**Org-specific CLIs**: Hydrogen repos' project scripts — npm run eject:hydrogen, npm run upload:resourceset (where present); Hydrogen dev servers pin a fixed port per repo and must not auto-fallback",
-      "routine under a repo's src/, custom/, and scripts/ prefixes for lint/build/eject workflows"
+      "**Org-specific CLIs**: Hydrogen repos' project scripts — npm run eject:hydrogen, npm run upload:resourceset (where present); Hydrogen dev servers pin a fixed port per repo and must not auto-fallback"
     ]
   }
 }
