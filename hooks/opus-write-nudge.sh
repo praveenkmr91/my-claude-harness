@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Write|Edit hook, advisory arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
-#   pre  (PreToolUse): once per session, blocks the next source write after a typed prompt pairs implement/execute
-#        (incl. -s/-ed) with a plans/*.md path, unless implementer was dispatched; the tier call comes before file one, not file six.
+#   pre  (PreToolUse): after a typed prompt pairs implement/execute (incl. -s/-ed) with a plans/*.md path, blocks every
+#        source write until implementer was dispatched or this turn states `implementer: skip — open call: <item>`.
+#        No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
 #   post (PostToolUse, default): fires on the 6th distinct source file written, and again on the 15th unless
 #        implementer was dispatched.
 IN=$(cat)
@@ -26,9 +27,21 @@ dispatched() {
 }
 VERDICT='State the call in your next reply as `implementer: dispatching` or `implementer: skip — <reason>`.'
 
+# Assistant text since the last typed prompt names an open plan call; a generic reason does not match.
+skipped() {
+  jq -rR 'fromjson? |
+    if .type? == "user" and (.isMeta | not) then
+      (.message.content | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end)
+      | select(length > 0 and ((test("^\\s*<") | not) or test("^\\s*<pasted_content")))
+      | "U"
+    elif .type? == "assistant" then
+      .message.content[]? | select(.type? == "text") | "A " + (.text | gsub("\n"; " "))
+    else empty end' "$T" 2>/dev/null \
+    | awk '$0 == "U" { buf = ""; next } { buf = buf "\n" $0 } END { print buf }' \
+    | grep -qE 'implementer: skip[[:space:]]*(—|–|-)+[[:space:]]*open call:[[:space:]]*[^[:space:]]'
+}
+
 if [ "$MODE" = pre ]; then
-  FLAG="/tmp/claude-opus-write-nudge-$SID-plan"
-  [ -e "$FLAG" ] && exit 0
   # Typed prompts only: tool_result blocks, isMeta records and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths too.
   # No \b in the raw prefilter: JSONL stores a newline as `\n`, so "\nImplement" has no word boundary.
   PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' \
@@ -38,9 +51,9 @@ if [ "$MODE" = pre ]; then
         | gsub("\n"; " ")' 2>/dev/null \
     | grep -iE '\b(implement|execute)(s|ed)?\b' | grep -oE '[^[:space:]`"]*plans/[^[:space:]`"]+\.md' | head -1)
   [ -n "$PLAN" ] || exit 0
-  touch "$FLAG"
   [ -n "$(dispatched)" ] && exit 0
-  printf 'This session executes an approved plan (%s). Per "Model tier by work KIND" (~/.claude/CLAUDE.md), its settled steps go to `implementer`, one step per dispatch; this thread writes source only for a step whose design call the plan leaves open. This write is blocked once; a retry passes.\n%s\n' "$PLAN" "$VERDICT" >&2
+  skipped && exit 0
+  printf 'This session executes an approved plan (%s). Per "Model tier by work KIND" (~/.claude/CLAUDE.md), its settled steps go to `implementer`, one step per dispatch. Source writes on this thread stay blocked until `implementer` is dispatched, or this turn states `implementer: skip — open call: <the item the plan leaves open>`. Size and already-loaded context are not open calls; a plain retry stays blocked.\n' "$PLAN" >&2
   exit 2
 fi
 

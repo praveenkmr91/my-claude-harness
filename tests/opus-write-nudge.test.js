@@ -45,6 +45,9 @@ for (const [name, entries] of Object.entries({
   planInBashStdout: [userLine('<bash-stdout>Implement Chunk 2 of docs/plans/x.md</bash-stdout>'), OPUS_LINE],
   planDispatched: [planAskLine, { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { subagent_type: 'implementer' } }] } }, OPUS_LINE],
   planSonnet: [planAskLine, { type: 'assistant', message: { model: 'claude-sonnet-5' } }],
+  planSkipGeneric: [planAskLine, { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'implementer: skip — step 1 is small and already in context.' }] } }],
+  planSkipOpenCall: [planAskLine, { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'implementer: skip — open call: how a failed upload is tracked' }] } }],
+  planSkipPriorTurn: [planAskLine, { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'implementer: skip — open call: how a failed upload is tracked' }] } }, userLine('now do step 2'), OPUS_LINE],
 })) {
   transcripts[name] = path.join(tmpDir, `${name}.jsonl`);
   fs.writeFileSync(transcripts[name], entries.map((e) => JSON.stringify(e)).join('\n'));
@@ -154,13 +157,25 @@ test('opus write nudge — pre arm', async (t) => {
     const { code, stderr } = pre({ sessionId: newSession(), transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx' });
     assert.equal(code, 2);
     assert.match(stderr, /executes an approved plan \(docs\/plans\/dplk-173-employer-withdrawal\.md\)/);
-    assert.match(stderr, /implementer: skip — <reason>/);
+    assert.match(stderr, /implementer: skip — open call:/);
   });
 
-  await t.test('blocks once per session — the retry passes', () => {
+  await t.test('a plain retry stays blocked', () => {
     const sessionId = newSession();
     assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx' }).code, 2);
-    assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/b.tsx' }).code, 0);
+    assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/b.tsx' }).code, 2);
+  });
+
+  await t.test('a skip with a generic reason stays blocked', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planSkipGeneric, file: '/tmp/a.tsx' }).code, 2);
+  });
+
+  await t.test('a skip naming an open call passes', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planSkipOpenCall, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('a skip from an earlier turn does not carry over', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planSkipPriorTurn, file: '/tmp/a.tsx' }).code, 2);
   });
 
   await t.test('reads the plan path from text blocks', () => {
@@ -207,7 +222,7 @@ test('opus write nudge — pre arm', async (t) => {
     assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planSonnet, file: '/tmp/a.tsx' }).code, 0);
   });
 
-  await t.test('a doc write does not consume the flag — the next source write still blocks', () => {
+  await t.test('a doc write is not gated — the next source write still blocks', () => {
     const sessionId = newSession();
     assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/plan.md' }).code, 0);
     assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/a.ts' }).code, 2);
