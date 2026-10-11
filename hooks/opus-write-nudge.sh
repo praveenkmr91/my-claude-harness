@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# PostToolUse on Write|Edit. Advisory arm of ~/.claude/subagent-tiers.md: fires on the 6th distinct source file
-# written by an Opus-or-above main thread, and again on the 15th unless implementer was dispatched; subagents are skipped.
+# Write|Edit hook, advisory arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
+#   pre  (PreToolUse): blocks the first source write once per session when a typed prompt asks to implement a plan
+#        file and implementer was never dispatched, so the tier call happens before file one, not file six.
+#   post (PostToolUse, default): fires on the 6th distinct source file written, and again on the 15th unless
+#        implementer was dispatched.
 IN=$(cat)
+MODE=${1:-post}
 
 [ -n "$(jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
 SID=$(jq -r '.session_id // empty' <<<"$IN")
@@ -15,6 +19,30 @@ MODEL=$(tail -c 200000 "$T" 2>/dev/null \
   | jq -rR 'fromjson? | select(.type? == "assistant") | .message.model // empty' 2>/dev/null | tail -1)
 case "$MODEL" in *opus*|*fable*) ;; *) exit 0 ;; esac
 
+# Parsed, not grepped: harness sessions quote "subagent_type":"implementer" in Bash output.
+dispatched() {
+  jq -rR 'fromjson? | select(.type? == "assistant") | .message.content[]?
+    | select(.type? == "tool_use" and .input.subagent_type? == "implementer") | .id' "$T" 2>/dev/null | head -1
+}
+VERDICT='State the call in your next reply as `implementer: dispatching` or `implementer: skip — <reason>`.'
+
+if [ "$MODE" = pre ]; then
+  FLAG="/tmp/claude-opus-write-nudge-$SID-plan"
+  [ -e "$FLAG" ] && exit 0
+  # Typed prompts only (pasted blocks included): tool output and isMeta peer hand-backs quote plan paths too.
+  # No \b in the raw prefilter: JSONL stores a newline as `\n`, so "\nImplement" has no word boundary.
+  PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' \
+    | jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not)) | .message.content
+        | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
+        | gsub("\n"; " ")' 2>/dev/null \
+    | grep -iE '\b(implement|execute)' | grep -oE '[^[:space:]`"]*plans/[^[:space:]`"]+\.md' | head -1)
+  [ -n "$PLAN" ] || exit 0
+  touch "$FLAG"
+  [ -n "$(dispatched)" ] && exit 0
+  printf 'This session executes an approved plan (%s). Per "Model tier by work KIND" (~/.claude/CLAUDE.md), its settled steps go to `implementer`, one step per dispatch; this thread writes source only for a step whose design call the plan leaves open. This write is blocked once; a retry passes.\n%s\n' "$PLAN" "$VERDICT" >&2
+  exit 2
+fi
+
 SEEN="/tmp/claude-opus-write-files-$SID"
 grep -qxF "$F" "$SEEN" 2>/dev/null || printf '%s\n' "$F" >>"$SEEN"
 N=$(wc -l <"$SEEN" | tr -d ' ')
@@ -23,12 +51,8 @@ FLAG="/tmp/claude-opus-write-nudge-$SID-$STAGE"
 [ -e "$FLAG" ] && exit 0
 touch "$FLAG"
 
-VERDICT='State the call in your next reply as `implementer: dispatching` or `implementer: skip — <reason>`.'
 if [ "$STAGE" = 15 ]; then
-  # Parsed, not grepped: harness sessions quote "subagent_type":"implementer" in Bash output.
-  DISPATCHED=$(jq -rR 'fromjson? | select(.type? == "assistant") | .message.content[]?
-    | select(.type? == "tool_use" and .input.subagent_type? == "implementer") | .id' "$T" 2>/dev/null | head -1)
-  [ -n "$DISPATCHED" ] && exit 0
+  [ -n "$(dispatched)" ] && exit 0
   printf 'This Opus thread has now written 15 files itself with no `implementer` dispatch this session. Re-check the remainder against "Model tier by work KIND" (~/.claude/CLAUDE.md): approved-plan steps or a bulk mechanical remainder go to `implementer`, one step per dispatch.\n%s\n' "$VERDICT" >&2
 else
   printf 'This Opus thread has now written 6 files itself. Per "Model tier by work KIND" (~/.claude/CLAUDE.md), direct writes are fine, but remaining approved-plan steps (names, props and paths settled) or a bulk mechanical remainder are cheaper dispatched to `implementer`, one step per dispatch.\n%s\n' "$VERDICT" >&2

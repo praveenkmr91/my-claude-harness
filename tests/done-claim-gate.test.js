@@ -274,6 +274,35 @@ test('done-claim gate', async (t) => {
     }
   });
 
+  await t.test('a pre-arm plan nudge arrives as an errored tool_result and needs the same answer', () => {
+    const runNudged = (reply) => {
+      const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+      fs.writeFileSync(transcriptPath, [
+        { type: 'user', message: { content: 'go' } },
+        { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/repo/notes.md' } }] } },
+        { type: 'user', message: { content: [{ type: 'tool_result', is_error: true, content: 'PreToolUse:Write hook error: [bash …opus-write-nudge.sh pre]: This session executes an approved plan (docs/plans/x.md). …' }] } },
+        { type: 'assistant', message: { content: [{ type: 'text', text: reply }] } },
+      ].map((e) => JSON.stringify(e)).join('\n'));
+      return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+    };
+    const silent = runNudged('Notes updated.');
+    assert.equal(silent.status, 2);
+    assert.match(silent.stderr, /IMPLEMENTER NUDGE UNANSWERED/);
+    assert.equal(runNudged('implementer: dispatching\nNotes updated.').status, 0);
+  });
+
+  await t.test('a tool_result quoting the plan nudge without is_error is not a nudge', () => {
+    const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+    fs.writeFileSync(transcriptPath, [
+      { type: 'user', message: { content: 'go' } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/repo/notes.md' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', content: 'diff output quoting: This session executes an approved plan (docs/plans/x.md).' }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Notes updated.' }] } },
+    ].map((e) => JSON.stringify(e)).join('\n'));
+    const { status, stderr } = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+    assert.equal(status, 0, stderr);
+  });
+
   await t.test('reads verdicts from last_assistant_message when the transcript lags', () => {
     const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
     fs.writeFileSync(transcriptPath, [

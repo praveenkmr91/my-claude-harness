@@ -357,6 +357,11 @@
             "type": "command",
             "command": "node \"/Users/praveenkumar/.claude/hooks/plan-lint.js\" pre",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/opus-write-nudge.sh pre",
+            "timeout": 5
           }
         ]
       },

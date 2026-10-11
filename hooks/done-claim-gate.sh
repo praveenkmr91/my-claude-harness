@@ -30,6 +30,8 @@ for line in open(path):
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta'):
             texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=txt; nudged=False
+        # A PreToolUse block lands as an errored tool_result, not a hook_blocking_error attachment.
+        if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'executes an approved plan' in str(b.get('content','')) for b in c or []): nudged=True
     elif t=='attachment':
         a=r.get('attachment') or {}
         if a.get('type')=='hook_blocking_error' and 'This Opus thread has now written' in str(a.get('blockingError','')): nudged=True

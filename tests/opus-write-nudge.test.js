@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -27,27 +28,45 @@ fs.writeFileSync(transcripts.quoted, [
   { type: 'assistant', message: { model: 'claude-opus-5' } },
 ].map((e) => JSON.stringify(e)).join('\n'));
 
+const OPUS_LINE = { type: 'assistant', message: { model: 'claude-opus-5' } };
+const planAskLine = { type: 'user', message: { content: '\n\n<pasted_content id="1">\nImplement Chunk 2 of docs/plans/dplk-173-employer-withdrawal.md (DPLK-173).\n</pasted_content id="1">' } };
+const userLine = (content) => ({ type: 'user', message: { content } });
+for (const [name, entries] of Object.entries({
+  planAsk: [planAskLine, OPUS_LINE],
+  planAskBlocks: [userLine([{ type: 'text', text: 'Please implement step 3 of ~/.claude/plans/foo-bar.md' }]), OPUS_LINE],
+  planNoVerb: [userLine('review docs/plans/x.md and tell me what you think'), OPUS_LINE],
+  planVerbNoPath: [userLine('implement the dark mode toggle'), OPUS_LINE],
+  planInToolResult: [userLine([{ type: 'tool_result', content: 'Implement Chunk 2 of docs/plans/x.md' }]), OPUS_LINE],
+  planInMeta: [{ type: 'user', isMeta: true, message: { content: 'Implement Chunk 2 of docs/plans/x.md' } }, OPUS_LINE],
+  planDispatched: [planAskLine, { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { subagent_type: 'implementer' } }] } }, OPUS_LINE],
+  planSonnet: [planAskLine, { type: 'assistant', message: { model: 'claude-sonnet-5' } }],
+})) {
+  transcripts[name] = path.join(tmpDir, `${name}.jsonl`);
+  fs.writeFileSync(transcripts[name], entries.map((e) => JSON.stringify(e)).join('\n'));
+}
+
 let seq = 0;
-const newSession = () => `nudge-test-${process.pid}-${seq++}`;
+const RUN = crypto.randomBytes(4).toString('hex');
+const newSession = () => `nudge-test-${process.pid}-${RUN}-${seq++}`;
 
 test.after(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  for (const f of fs.readdirSync(os.tmpdir())) {
+  for (const f of fs.readdirSync('/tmp')) {
     if (f.startsWith(`claude-opus-write-nudge-nudge-test-${process.pid}`) ||
         f.startsWith(`claude-opus-write-files-nudge-test-${process.pid}`)) {
-      fs.rmSync(path.join(os.tmpdir(), f), { force: true });
+      fs.rmSync(path.join('/tmp', f), { force: true });
     }
   }
 });
 
-function run({ file, tier = 'opus', sessionId, agentId, transcriptPath }) {
+function run({ file, tier = 'opus', sessionId, agentId, transcriptPath, mode }) {
   const payload = {
     session_id: sessionId,
     agent_id: agentId,
     transcript_path: transcriptPath === undefined ? transcripts[tier] : transcriptPath,
     tool_input: { file_path: file },
   };
-  const res = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
+  const res = spawnSync('bash', [HOOK_PATH, ...(mode ? [mode] : [])], { input: JSON.stringify(payload), encoding: 'utf8' });
   return { code: res.status, stderr: res.stderr };
 }
 
@@ -120,5 +139,66 @@ test('opus write nudge', async (t) => {
 
   await t.test('fails open with no session id', () => {
     assert.equal(run({ file: '/tmp/f.ts' }).code, 0);
+  });
+});
+
+test('opus write nudge — pre arm', async (t) => {
+  const pre = (opts) => run({ mode: 'pre', ...opts });
+
+  await t.test('blocks the first source write when a typed prompt asks to implement a plan', () => {
+    const { code, stderr } = pre({ sessionId: newSession(), transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx' });
+    assert.equal(code, 2);
+    assert.match(stderr, /executes an approved plan \(docs\/plans\/dplk-173-employer-withdrawal\.md\)/);
+    assert.match(stderr, /implementer: skip — <reason>/);
+  });
+
+  await t.test('blocks once per session — the retry passes', () => {
+    const sessionId = newSession();
+    assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx' }).code, 2);
+    assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/b.tsx' }).code, 0);
+  });
+
+  await t.test('reads the plan path from text blocks', () => {
+    const { code, stderr } = pre({ sessionId: newSession(), transcriptPath: transcripts.planAskBlocks, file: '/tmp/a.tsx' });
+    assert.equal(code, 2);
+    assert.ok(stderr.includes('~/.claude/plans/foo-bar.md'), stderr);
+  });
+
+  await t.test('a plan path without an implement or execute verb is silent', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planNoVerb, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('a verb without a plan path is silent', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planVerbNoPath, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('a plan ask quoted in tool output is not a typed prompt', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInToolResult, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('a plan ask in an isMeta record is not a typed prompt', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInMeta, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('silent once implementer was dispatched', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planDispatched, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('silent below opus', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planSonnet, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('a doc write does not consume the flag — the next source write still blocks', () => {
+    const sessionId = newSession();
+    assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/plan.md' }).code, 0);
+    assert.equal(pre({ sessionId, transcriptPath: transcripts.planAsk, file: '/tmp/a.ts' }).code, 2);
+  });
+
+  await t.test('silent for a subagent', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx', agentId: 'agent-1' }).code, 0);
+  });
+
+  await t.test('does not run in post mode', () => {
+    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx' }).code, 0);
   });
 });
