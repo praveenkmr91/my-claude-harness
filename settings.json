@@ -40,7 +40,18 @@
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
+      "Bash(ps:*)",
+      "Bash(lsof:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Edit(~/.claude/*.md)",
+      "Edit(~/.claude/plans/**)",
+      "Edit(~/.claude/tests/**)"
     ],
     "defaultMode": "auto"
   },
