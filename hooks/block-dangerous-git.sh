@@ -55,8 +55,14 @@ GUARDED=(
   '\brm\b[^|;&]*(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?)::Do not delete a lockfile to clean it. Regenerating re-pins every ^/~ range to today registry (silent toolchain drift). Remove the single stanza by hand, or run npm install --package-lock-only.'
   "$GIT_COMMIT"'[[:space:]]+(--all\b|-[a-z]*a[a-z]*\b)::Do not commit with -a/--all. Use an explicit pathspec (git commit --only <paths>) so unrelated in-flight work in the tree is left untouched.'
   'git add[[:space:]]+(-[a-zA-Z]*A[a-zA-Z]*\b|--all\b|\.(/)?([[:space:]]|$))::Do not bulk-stage. git add -A/--all/. sweeps unrelated in-flight work and untracked debris into the commit. Run git status --short, then stage only your files: git add -- <path> <path>, or commit them directly with git commit --only -m "<msg>" -- <path> <path>. Never retry with -u, :/ or a directory that holds others'\'' changes.'
-  '\bgrep\b[^|;&]*--(include|exclude|exclude-dir)=[^'\''"\\[:space:]]*[][*?]::Quote the glob: --include='\''*.tsx'\''. zsh expands an unquoted glob, finds no file named --include=…, and aborts with '\''no matches found'\'' before grep runs — the empty result is not evidence.'
 )
+
+# zsh aborts an unquoted --include=*.tsx with "no matches found" before grep runs, so quote it rather than block.
+GLOB_FLAG='--(include|exclude|exclude-dir)=([^'\''"\\[:space:]]*[][*?][^'\''"[:space:]]*)'
+QUOTED=$COMMAND
+if printf '%s' "$COMMAND" | grep -qE '\bgrep\b[^|;&]*'"$GLOB_FLAG"; then
+  QUOTED=$(printf '%s' "$COMMAND" | sed -E "s/$GLOB_FLAG/--\\1='\\2'/g")
+fi
 
 for entry in "${GUARDED[@]}"; do
   pattern="${entry%%::*}"
@@ -78,8 +84,15 @@ if echo "$COMMAND" | grep -qE "$GIT_COMMIT|${GH_PR}(create|edit)\b" \
   exit 2
 fi
 
+DECISION='{}'
 if echo "$COMMAND" | grep -qE "${GH_PR}create\b"; then
-  jq -n '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:"A PR is published to others and needs your yes (committing.md: push and PR need a yes)."}}'
+  DECISION='{"permissionDecision":"ask","permissionDecisionReason":"A PR is published to others and needs your yes (committing.md: push and PR need a yes)."}'
+fi
+
+# No permissionDecision with the rewrite: the quoted command still goes through permission rules and the classifier.
+if [ "$QUOTED" != "$COMMAND" ] || [ "$DECISION" != '{}' ]; then
+  echo "$INPUT" | jq --arg cmd "$QUOTED" --argjson decision "$DECISION" '{hookSpecificOutput: ({hookEventName: "PreToolUse"} + $decision
+    + (if .tool_input.command == $cmd then {} else {updatedInput: (.tool_input + {command: $cmd})} end))}'
 fi
 
 exit 0

@@ -15,17 +15,30 @@ function run(command, cwd = '/Users/me/repo') {
 const decision = (stdout) => stdout && JSON.parse(stdout).hookSpecificOutput.permissionDecision;
 
 test('block dangerous git hook', async (t) => {
-  await t.test('denies an unquoted grep glob', () => {
-    for (const command of [
-      'grep -rn foo --include=*.tsx .',
-      'cd src && grep -r x --include=*.ts .',
-      'grep -rn foo --exclude=*.min.js --exclude-dir=node_modules .',
-      'grep -rn foo --include=src/*.ts .',
+  await t.test('quotes an unquoted grep glob without deciding permission', () => {
+    for (const [command, quoted] of [
+      ['grep -rn foo --include=*.tsx .', "grep -rn foo --include='*.tsx' ."],
+      ['cd src && grep -r x --include=*.ts .', "cd src && grep -r x --include='*.ts' ."],
+      ['grep -rn foo --exclude=*.min.js --exclude-dir=node_modules .', "grep -rn foo --exclude='*.min.js' --exclude-dir=node_modules ."],
+      ['grep -rn foo --include=src/*.ts .', "grep -rn foo --include='src/*.ts' ."],
+      ['grep -rn foo --include=*.ts --include=*.tsx src | head', "grep -rn foo --include='*.ts' --include='*.tsx' src | head"],
     ]) {
-      const { status, stderr } = run(command);
-      assert.equal(status, 2, command);
-      assert.match(stderr, /Quote the glob/);
+      const { status, stdout } = run(command);
+      assert.equal(status, 0, command);
+      const output = JSON.parse(stdout).hookSpecificOutput;
+      assert.equal(output.updatedInput.command, quoted);
+      assert.equal(output.permissionDecision, undefined, command);
     }
+  });
+
+  await t.test('a quoted glob keeps the rest of tool_input and still asks before a PR', () => {
+    const res = spawnSync('bash', [HOOK_PATH], {
+      input: JSON.stringify({ tool_input: { command: 'grep -r x --include=*.md . && gh pr create --fill', description: 'd', timeout: 5 } }),
+      encoding: 'utf8',
+    });
+    const output = JSON.parse(res.stdout).hookSpecificOutput;
+    assert.deepEqual(output.updatedInput, { command: "grep -r x --include='*.md' . && gh pr create --fill", description: 'd', timeout: 5 });
+    assert.equal(output.permissionDecision, 'ask');
   });
 
   await t.test('passes quoted, escaped, brace and glob-free forms', () => {
