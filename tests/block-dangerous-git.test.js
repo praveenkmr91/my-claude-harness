@@ -76,8 +76,37 @@ test('block dangerous git hook', async (t) => {
       'git commit -m x#;git push',
       'git reset --hard HEAD~1',
       'git commit --no-verify -m x',
+      'git -C /tmp/x push',
+      'git -c user.name=x push origin main',
+      'git --git-dir=.git push',
+      '/usr/bin/git push',
+      'FOO=1 git push',
+      'sudo -u me git push',
+      'xargs -I {} git push',
+      'cd repo && git -C . push --force',
+      'sh -c "git -C x push"',
+      'eval git push',
+      'bash <<EOF\ngit push\nEOF',
+      'git clean -xfd',
+      'git branch -D feature',
+      'git checkout -- .',
+      'git -C repo restore .',
+      'echo "unbalanced; git push',
     ]) {
       assert.equal(run(command).status, 2, command);
+    }
+  });
+
+  await t.test('dangerous words in quoted data, heredoc bodies and search patterns pass', () => {
+    for (const command of [
+      `jq -cn '{tool_input:{command:"git -C /tmp/x push --force origin main"}}'`,
+      'echo "git push is denied here"',
+      'grep -n "push --force" README.md',
+      'git log --grep "reset --hard"',
+      "cat <<'EOF' > /tmp/msg.txt\nnever git push; don't reset --hard\nEOF",
+      'git push-docs-check',
+    ]) {
+      assert.notEqual(run(command).status, 2, command);
     }
   });
 
