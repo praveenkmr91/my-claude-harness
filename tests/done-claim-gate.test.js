@@ -223,6 +223,15 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery', reviews: battery.map((m) => agent(`pr-review-toolkit:${m}`)) }), 0);
   });
 
+  await t.test('a named-verb member declared `not run — <reason>` counts as handled; undeclared members stay missing', () => {
+    const opts = { editedFile: null, prompt: 'harden the auth hook' };
+    assert.equal(run('security-review: not run — ran last turn on the same diff\nadversarial-reviewer: not run — same', opts), 0);
+    const { status, stderr } = runFull('security-review: not run — ran last turn on the same diff', opts);
+    assert.equal(status, 2);
+    assert.match(stderr, /no Skill\/Agent call ran for adversarial-reviewer\./);
+    assert.match(stderr, /`<member>: not run — <reason>`/);
+  });
+
   await t.test('a ticket key is not the trim verb', () => {
     assert.equal(run('Fix is below.', { editedFile: null, prompt: 'ticket: https://x.atlassian.net/browse/TRIM-48' }), 0);
     assert.equal(run('Findings below.', { editedFile: null, prompt: 'trim the diff' }), 2);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Write|Edit hook, advisory arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
-#   pre  (PreToolUse): blocks the first source write once per session when a typed prompt asks to implement a plan
-#        file and implementer was never dispatched, so the tier call happens before file one, not file six.
+#   pre  (PreToolUse): once per session, blocks the next source write after a typed prompt pairs implement/execute
+#        (incl. -s/-ed) with a plans/*.md path, unless implementer was dispatched; the tier call comes before file one, not file six.
 #   post (PostToolUse, default): fires on the 6th distinct source file written, and again on the 15th unless
 #        implementer was dispatched.
 IN=$(cat)
@@ -29,13 +29,14 @@ VERDICT='State the call in your next reply as `implementer: dispatching` or `imp
 if [ "$MODE" = pre ]; then
   FLAG="/tmp/claude-opus-write-nudge-$SID-plan"
   [ -e "$FLAG" ] && exit 0
-  # Typed prompts only (pasted blocks included): tool output and isMeta peer hand-backs quote plan paths too.
+  # Typed prompts only: tool_result blocks, isMeta records and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths too.
   # No \b in the raw prefilter: JSONL stores a newline as `\n`, so "\nImplement" has no word boundary.
   PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' \
     | jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not)) | .message.content
         | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
+        | select((test("^\\s*<") | not) or test("^\\s*<pasted_content"))
         | gsub("\n"; " ")' 2>/dev/null \
-    | grep -iE '\b(implement|execute)' | grep -oE '[^[:space:]`"]*plans/[^[:space:]`"]+\.md' | head -1)
+    | grep -iE '\b(implement|execute)(s|ed)?\b' | grep -oE '[^[:space:]`"]*plans/[^[:space:]`"]+\.md' | head -1)
   [ -n "$PLAN" ] || exit 0
   touch "$FLAG"
   [ -n "$(dispatched)" ] && exit 0

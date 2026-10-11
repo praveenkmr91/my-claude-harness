@@ -56,8 +56,8 @@ NAMED_VERBS={
 if not prompt.rstrip().endswith('?'):
     for verb,(pattern,members) in NAMED_VERBS.items():
         if not re.search(pattern,prompt,re.I): continue
-        missing=[m for m in members if m not in ran]
-        if missing: problems.append(f"NAMED VERB NOT RUN: the prompt asks for `{verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or say which you are not running and why.")
+        missing=[m for m in members if m not in ran and not re.search(label_open+re.escape(m)+label_close+r'not run[ \t]*[—–:-][ \t]*\S','\n'.join(texts),re.M)]
+        if missing: problems.append(f"NAMED VERB NOT RUN: the prompt asks for `{verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or write `<member>: not run — <reason>` for each one you are not running.")
 if nudged and 'implementer' not in ran and not re.search(label_open+r'implementer'+label_close+r'(?:dispatching\b|'+skip_reason+r')','\n'.join(texts),re.M):
     problems.append("IMPLEMENTER NUDGE UNANSWERED: opus-write-nudge fired this turn and no `implementer` dispatch or verdict line followed. Write `implementer: dispatching` (and dispatch) or `implementer: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')

@@ -38,6 +38,11 @@ for (const [name, entries] of Object.entries({
   planVerbNoPath: [userLine('implement the dark mode toggle'), OPUS_LINE],
   planInToolResult: [userLine([{ type: 'tool_result', content: 'Implement Chunk 2 of docs/plans/x.md' }]), OPUS_LINE],
   planInMeta: [{ type: 'user', isMeta: true, message: { content: 'Implement Chunk 2 of docs/plans/x.md' } }, OPUS_LINE],
+  planNounImplementer: [userLine('what did the implementer change? see docs/plans/x.md'), OPUS_LINE],
+  planNounImplementation: [userLine('review the implementation notes in docs/plans/x.md'), OPUS_LINE],
+  planExecute: [userLine('Execute step 2 of docs/plans/x.md'), OPUS_LINE],
+  planInTaskNotification: [userLine('<task-notification>\nImplement Chunk 2 of docs/plans/x.md</task-notification>'), OPUS_LINE],
+  planInBashStdout: [userLine('<bash-stdout>Implement Chunk 2 of docs/plans/x.md</bash-stdout>'), OPUS_LINE],
   planDispatched: [planAskLine, { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { subagent_type: 'implementer' } }] } }, OPUS_LINE],
   planSonnet: [planAskLine, { type: 'assistant', message: { model: 'claude-sonnet-5' } }],
 })) {
@@ -178,6 +183,20 @@ test('opus write nudge — pre arm', async (t) => {
 
   await t.test('a plan ask in an isMeta record is not a typed prompt', () => {
     assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInMeta, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('implementer or implementation as a noun is not the verb', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planNounImplementer, file: '/tmp/a.tsx' }).code, 0);
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planNounImplementation, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('execute alone is the verb', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planExecute, file: '/tmp/a.tsx' }).code, 2);
+  });
+
+  await t.test('a plan ask inside a harness wrapper record is not a typed prompt', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInTaskNotification, file: '/tmp/a.tsx' }).code, 0);
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInBashStdout, file: '/tmp/a.tsx' }).code, 0);
   });
 
   await t.test('silent once implementer was dispatched', () => {
