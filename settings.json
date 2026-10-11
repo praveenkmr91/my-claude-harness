@@ -50,9 +50,7 @@
       "Bash(npx tsc:*)",
       "Bash(npx eslint:*)",
       "Bash(jq:*)",
-      "Edit(~/.claude/*.md)",
-      "Edit(~/.claude/plans/**)",
-      "Edit(~/.claude/tests/**)"
+      "Edit(~/.claude/plans/**)"
     ],
     "defaultMode": "auto"
   },
