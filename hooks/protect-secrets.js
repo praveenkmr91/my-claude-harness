@@ -105,7 +105,8 @@ const SENSITIVE_FILES = [
 // Bash patterns that expose or exfiltrate secrets
 const BASH_PATTERNS = [
   // CRITICAL
-  { level: 'critical', id: 'grep-env',           regex: /\b(grep|rg|egrep|fgrep|ag|awk|gawk|jq|yq)\b(?:"[^"\n]*"|'[^'\n]*'|[^|;&\n])*(?:^|[\s/'"=*])\.env\b/i, reason: 'Reading .env via text tools exposes secrets' },
+  // Each word piece starts with a different character (upstream 7639201) — merging piece kinds brings back exponential backtracking.
+  { level: 'critical', id: 'grep-env',           regex: /\b(grep|rg|egrep|fgrep|ag|awk|gawk|jq|yq)\b(?:[ \t]+(?:'[^'\n]*'|"(?:[^"\\\n]|\\.)*"|\\.|[^\s|;&"'\\])+)*[ \t]+(?:'[^'\n]*'|"(?:[^"\\\n]|\\.)*"|\\.|[^\s|;&"'\\])*?(?:'[^'\n]*|"[^"\n]*)?(?<=[\s/'"=*])\.env\b/i, reason: 'Reading .env via text tools exposes secrets' },
   { level: 'critical', id: 'cat-env',            regex: /\b(cat|less|head|tail|more|bat|view)\s+[^|;]*\.env\b/i,           reason: 'Reading .env file exposes secrets' },
   { level: 'critical', id: 'cat-ssh-key',        regex: /\b(cat|less|head|tail|more|bat)\s+[^|;]*(id_rsa|id_ed25519|id_ecdsa|id_dsa|\.pem|\.key)\b/i, reason: 'Reading private key' },
   { level: 'critical', id: 'cat-aws-creds',      regex: /\b(cat|less|head|tail|more)\s+[^|;]*\.aws\/credentials/i,         reason: 'Reading AWS credentials' },
