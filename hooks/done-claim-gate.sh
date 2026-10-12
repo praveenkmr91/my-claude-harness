@@ -19,7 +19,8 @@ def lens_ran(b):
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
-texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=''; nudged=False
+def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
+texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; prompt=''; nudged=False
 for line in open(path):
     try: r=json.loads(line)
     except: continue
@@ -29,7 +30,10 @@ for line in open(path):
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta'):
-            texts=[]; cmds=[]; edits=[]; ran=set(); tools=[]; prompt=txt; nudged=False
+            texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; prompt=txt; nudged=False
+        if not isinstance(c,str):
+            for b in c or []:
+                if isinstance(b,dict) and b.get('type')=='tool_result': results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
         # A PreToolUse block lands as an errored tool_result, not a hook_blocking_error attachment.
         if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'executes an approved plan' in str(b.get('content','')) for b in c or []): nudged=True
     elif t=='attachment':
@@ -40,7 +44,7 @@ for line in open(path):
             if not isinstance(b,dict): continue
             if b.get('type')=='text': texts.append(b['text'])
             if b.get('type')!='tool_use': continue
-            if b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command',''))
+            if b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command','')); cmd_ids.append(b.get('id'))
             elif b.get('name') in ('Write','Edit','NotebookEdit'): edits.append(b.get('input',{}).get('file_path',''))
             else: ran.add(lens_ran(b)); tools.append(b.get('name',''))
 # Stop can fire before the final reply is flushed to the transcript, which drops its verdict lines.
@@ -81,8 +85,14 @@ committed=any(re.search(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+co
 why='claims done' if claim else 'asks to commit' if commit_ask else 'ran git commit'
 evidence=re.compile(r'\b(pnpm|npm|yarn|bun)\s+(run\s+)?(verify|test|e2e)|vitest|playwright|node --test|curl\s|http://localhost',re.I)
 browser_run=any(n.startswith(('mcp__chrome-devtools__','mcp__playwright__')) for n in tools) or 'external-io' in ran
-if claim and not browser_run and not any(evidence.search(c) for c in cmds):
+# A pipe into grep/tail exits 0 over a red suite, so the runner's own fail markers count as much as the exit code.
+fail_marker=re.compile(r'ℹ fail [1-9]|^# fail [1-9]|^not ok \d|^\s*(?:×\s*)?FAIL\s|\b[1-9]\d* failed\b',re.M)
+def failed(res): return bool(res) and ((res[0] and res[1].startswith('Exit code')) or bool(fail_marker.search(res[1])))
+evidence_ids=[i for i,c in zip(cmd_ids,cmds) if evidence.search(c)]
+if claim and not browser_run and not evidence_ids:
     problems.append("DONE-CLAIM WITHOUT EVIDENCE: the first line claims "+repr(claim.group(0))+" but no test or runtime command ran this turn — static-clean (lint + tsc) is not done. Exercise the change (tests, Playwright, curl, browser) and report the output, or reword the first line as a status, not a claim.")
+elif claim and evidence_ids and failed(results.get(evidence_ids[-1])):
+    problems.append("DONE-CLAIM OVER A FAILED RUN: the first line claims "+repr(claim.group(0))+" but the last test or runtime command this turn failed (non-zero exit or a runner fail marker in its output). Fix the failures and rerun until green, or reword the first line as a status that names what is still red.")
 web=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte)\b')
 harness=os.path.expanduser('~/.claude/')
 # Command position only: a bare word match passes on `grep eslint package.json` or `git log --grep verify`.

@@ -31,6 +31,24 @@ function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = t
 }
 const run = (reply, opts) => runFull(reply, opts).status;
 
+function runWithResults(reply, runs) {
+  const lines = [
+    { type: 'user', message: { content: 'go' } },
+    { type: 'assistant', message: { content: [
+      { type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } },
+      { type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: '/repo/src/app.ts' } },
+    ] } },
+  ];
+  runs.forEach(({ command, isError = false, output }, i) => {
+    lines.push({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `run${i}`, name: 'Bash', input: { command } }] } });
+    lines.push({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `run${i}`, is_error: isError, content: output }] } });
+  });
+  lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: `${reply}\n${BASE_VERDICTS}` }] } });
+  const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+  fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+}
+
 test('done-claim gate', async (t) => {
   await t.test('blocks a claim with no test or runtime command this turn', () => {
     assert.equal(run('Done: the edits landed.'), 2);
@@ -39,6 +57,27 @@ test('done-claim gate', async (t) => {
 
   await t.test('allows a claim backed by a test run and every named lens', () => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'node --test tests/*.test.js' }), 0);
+  });
+
+  await t.test('blocks a claim when the last test run failed, by exit code or by fail marker', () => {
+    for (const run of [
+      { command: 'node --test tests/*.test.js', isError: true, output: 'Exit code 1\nℹ pass 3\nℹ fail 1' },
+      { command: 'node --test tests/*.test.js 2>&1 | tail -3', output: 'ℹ pass 338\nℹ fail 1' },
+      { command: 'pnpm vitest run | tail', output: ' FAIL  src/app.spec.ts > renders\n Tests  1 failed | 4 passed' },
+      { command: 'npx playwright test | tail -2', output: '  2 failed\n  5 passed (12s)' },
+    ]) {
+      const { status, stderr } = runWithResults('Done: the edits landed.', [run]);
+      assert.equal(status, 2, run.command);
+      assert.match(stderr, /DONE-CLAIM OVER A FAILED RUN/, run.command);
+    }
+  });
+
+  await t.test('allows a claim whose last test run is green, even after a red one', () => {
+    const red = { command: 'node --test tests/*.test.js', isError: true, output: 'Exit code 1\nℹ fail 2' };
+    const green = { command: 'node --test tests/*.test.js | grep -E "ℹ (pass|fail)"', output: 'ℹ pass 340\nℹ fail 0' };
+    assert.equal(runWithResults('Done: the edits landed.', [red, green]).status, 0);
+    assert.equal(runWithResults('Done: the edits landed.', [green]).status, 0);
+    assert.equal(runWithResults('Done: the edits landed.', [{ command: 'pnpm test', output: [{ type: 'text', text: 'Tests  0 failed | 9 passed' }] }]).status, 0);
   });
 
   await t.test('blocks a tested claim when no review pass ran', () => {
