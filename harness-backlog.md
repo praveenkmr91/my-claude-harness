@@ -9,6 +9,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Evidence:** 27 user corrections in 19 sessions — "wait, i didnt approve plans. why are u implementing already?" (`41a910d0`, 2026-09-29), "yes. dont commit yet" (`0672921d`, 2026-10-02). The largest single correction theme.
 - **Why parked:** a mechanical gate needs a reliable approval signal; "yes" answering a question, "go" on part of a plan, and "commit locally unasked" (committing.md) all blur it. Needs a design pass.
 - **Fix:** a PreToolUse gate on Write|Edit of source files that blocks while a plan file written this session has no explicit approval prompt ("approve", "proceed", "go" on that plan) after its last write; reconcile with the commit-unasked rule.
+- **Signal candidates (2026-10-11):** one reserved approval phrase the gate keys on, so a "yes" to some other question never unlocks it (the shape of RIPER-5's explicit execute mode and Launch Codes' one-time confirm code, both on claudemod.com), vs native `ExitPlanMode` approval. Pick one in the design pass.
 - **Worth doing when:** next time this correction recurs, or before the next multi-step plan.
 
 ### Stop-gate block chains run long (2026-10-05)
@@ -31,3 +32,10 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** loosening the fallback risks letting a real source write through; one sighting is not enough to pick the rule.
 - **Fix:** resolve simple same-script assignments (`const out = process.argv[2]`, `out = sys.argv[1]`) the way `PY_STRING_ASSIGN` resolves literals.
 - **Worth doing when:** it blocks a legitimate command twice more.
+
+### Secrets hook matches words inside quoted text (2026-10-12)
+
+- **Evidence:** the `env-dump` rule (`hooks/protect-secrets.js:115`) matches `\bprintenv\b` anywhere in the raw command, so a commit whose message only mentioned the word was denied on 2026-10-11 (session `9ef16fc6`). Same false-positive class `651d0f3` fixed in `block-dangerous-git.sh`.
+- **Why parked:** one sighting, and rewording the message is a cheap way around it; tokenizing every rule in the hook is a larger change than the friction.
+- **Fix:** match command words only, not quoted arguments — reuse the `shlex` segment scan from `block-dangerous-git.sh`, or anchor the rule to command position (`(?:^|[;&|]\s*)printenv\b`).
+- **Worth doing when:** it denies a legitimate command twice more.
