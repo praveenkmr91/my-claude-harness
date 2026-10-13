@@ -17,6 +17,7 @@ Read two sibling test files before writing one: runner, file location, query sty
 3. **GREEN.** Minimal code to pass. Rerun the same target and see the previously failing test pass.
 4. **Refactor** while green; rerun after each change.
 5. Next behaviour.
+6. Same rule over many inputs (parsers, validators, formatters, money rounding) → one `test.each` table, a row per case, the failing row added first. Never a copy-pasted `it` per input.
 
 ## Plan handoff
 Each behavioural plan step maps to one test target; that step's `→ verify:` is the test command. Choosing which behaviours to guarantee and writing the RED tests stays on the main thread — `implementer` only receives "make these green".
