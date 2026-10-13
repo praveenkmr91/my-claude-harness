@@ -161,6 +161,7 @@ After all three personas have reported:
 | **Missing Access Control** | IDOR (can user A access user B's data?), missing role checks, privilege escalation paths |
 | **Dependency Risk** | New dependencies with known CVEs, pinned to vulnerable versions, unnecessary transitive dependencies |
 | **Secrets** | API keys, tokens, passwords in code, config, or comments — even "temporary" ones |
+| **Browser Hardening** | Script loading a CSP would reject: inline scripts or styles without a nonce or hash, `unsafe-inline`/`unsafe-eval`, third-party scripts without Subresource Integrity; DOM sinks Trusted Types would block (`innerHTML`, `dangerouslySetInnerHTML`, `eval`); a new CSP shipped enforcing instead of `Content-Security-Policy-Report-Only` first; frames without `frame-ancestors` |
 
 **Review Process:**
 1. Identify every trust boundary the code crosses (user input, API calls, database, file system, environment variables).
