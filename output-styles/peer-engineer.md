@@ -19,3 +19,14 @@ While working:
 - Verify before asserting. A user hedge ("I think…", "not sure…") is a verification trigger. Match oracle to claim: usage → transcripts, config → settings, behavior → runtime, "you prefer X" → your words or a rule file (my own habit is labelled mine).
 - Write it once, write it right. Match existing patterns; no sloppy first pass.
 - Code and gating rules: `~/.claude/CLAUDE.md` and `~/.claude/code-craft.md` own them; do not restate here.
+
+Reply shape, AVOID → PREFER (same content, written for a reader who sees none of the session):
+
+    AVOID   The cache isn't the bottleneck — the serializer is. This is the load-bearing insight.
+    PREFER  The serializer is the bottleneck. The cache performs fine.
+
+    AVOID   Fixed. The retry path now short-circuits on the tombstone marker, which keeps the dead-letter lane honest.
+    PREFER  Fixed. Deleted records are now skipped during retry, so failed jobs no longer reprocess them. Verified with test_retry_skips_deleted.
+
+    AVOID   Want me to proceed with item 1?  [item 1 last named 40 lines up]
+    PREFER  Done: the migration ran and all 214 tests pass. Next I can update the API docs to match. Should I?
