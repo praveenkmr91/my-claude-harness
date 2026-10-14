@@ -10,6 +10,18 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** closing it means teaching the Bash guard the session model, and `sed -i` on source is also a legitimate Opus path; needs one rule for both hooks, not a second guard.
 - **Fix:** in `bash-write-guard.js`, read the live model the same way the nudge does and deny `sed -i` / `perl -pi` on source extensions from a Fable session with the same message.
 
+### Workers write source through interpreter scripts, unseen by write-time hooks (2026-10-14)
+
+- **Evidence:** four `implementer` hand-backs today said "I made the edits with a Python script, because the session was in auto mode and told me to use Bash for changes." `bash-write-guard.js` denies heredocs and inline interpreters, but a script file run from the scratchpad has no visible target, so comment-check, plan-lint and the Fable write-block never fired.
+- **Why parked:** the agent definition now forbids it (`agents/implementer.md`), which fixes the common case; a mechanical guard needs a target-blind signal. `external-io` and `general-purpose` carry the same Bash-plus-Write shape.
+- **Fix:** a PostToolUse Bash hook for workers that diffs the tree before and after an interpreter invocation (`python|node|bun … <file>`) and flags source files that changed, pointing at the Edit tool; or deny running a script that lives under the scratchpad against a repo cwd.
+
+### Fable write-block catches scratchpad probe files (2026-10-14)
+
+- **Evidence:** writing a throwaway `vitest.nosetup.config.ts` into the session scratchpad was denied as a source write; an `implementer` had to create a measurement probe.
+- **Why parked:** the extension gate in `opus-write-nudge.sh` has no notion of where a file lives; exempting a path needs the scratchpad root, which only the session knows (`CLAUDE_SCRATCHPAD`-style env or the `/private/tmp/claude-<uid>/` prefix).
+- **Fix:** in the `pre` arm, exit 0 when `file_path` starts with the session scratchpad prefix; a probe is not shipped code.
+
 ### Building or committing before the user approved (2026-10-05)
 
 - **Evidence:** 27 user corrections in 19 sessions — "wait, i didnt approve plans. why are u implementing already?" (`41a910d0`, 2026-09-29), "yes. dont commit yet" (`0672921d`, 2026-10-02). The largest single correction theme.
