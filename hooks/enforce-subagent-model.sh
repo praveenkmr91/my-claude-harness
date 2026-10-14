@@ -31,6 +31,55 @@ inject() {
   exit 0
 }
 
+rank() {
+  case "$1" in
+    *fable*)  echo 4 ;;
+    *opus*)   echo 3 ;;
+    *sonnet*) echo 2 ;;
+    *haiku*)  echo 1 ;;
+    *)        echo 0 ;;
+  esac
+}
+
+session_model=""
+fable_asked=false
+if [ -n "$transcript" ] && [ -r "$transcript" ]; then
+  # -R + fromjson?: tolerate the partial first line a byte-offset tail can produce.
+  tail_slice=$(tail -c 200000 "$transcript" 2>/dev/null)
+  session_model=$(echo "$tail_slice" \
+    | jq -rR 'fromjson? | select(.type? == "assistant") | .message.model // empty' 2>/dev/null \
+    | tail -1)
+  # Fable reviews code only on the user's say-so: the last typed turn contains a reserved
+  # bigram — "fable review", "fable battery", "fable consult", "fable opinion", or
+  # "consult fable" / "opinion fable" (any case) — or it approves a reply BEFORE it that
+  # carries the proposal phrase "Fable review?" / "Fable battery?". Anything looser
+  # misfired on 2026-10-14: a heads-up saying "Fable-review gate" and a "yes" to an
+  # unrelated question each opened the gate. The current turn's own text comes after that
+  # turn, so the dispatcher cannot self-attest. tool_result turns are also type=user, so
+  # only text content counts. Whole file, not the tail slice: a few big tool results push
+  # the last typed turn past 200 KB. ~0.35 s on a 27 MB transcript.
+  # Same typed-turn filter as opus-write-nudge.sh: isMeta turns and "<…>"-leading text are
+  # hook injections stored as user turns, not something Praveen typed.
+  turns=$(jq -cR -n '[inputs | fromjson? | select(.type? == "user" or .type? == "assistant")
+        | select(.type == "assistant" or (.isMeta | not))
+        | {type, text: ((.message.content // "")
+            | if type == "string" then . else (map(select(.type? == "text") | .text) | join(" ")) end)}
+        | select(.text | length > 0)
+        | select(.type == "assistant" or (.text | test("^\\s*<") | not) or (.text | test("^\\s*<pasted_content")))]' "$transcript" 2>/dev/null)
+  last_user_text=$(echo "$turns" | jq -r 'map(select(.type == "user")) | last | .text // empty' 2>/dev/null)
+  proposal_text=$(echo "$turns" | jq -r '(map(.type == "user") | rindex(true)) as $i
+        | if $i == null then empty else .[:$i] | map(select(.type == "assistant")) | last | .text // empty end' 2>/dev/null)
+  if printf '%s' "$last_user_text" | grep -Eiq 'fable (review|battery|consult|opinion)|(consult|opinion) fable'; then
+    fable_asked=true
+  fi
+  if [ "$fable_asked" != true ] && [ -n "$proposal_text" ] \
+      && printf '%s' "$proposal_text" | grep -Eq '[Ff]able (review|battery)\?' \
+      && printf '%s' "$last_user_text" | grep -Eiq '^[[:space:]]*(y|yes|yep|yeah|ok|okay|sure|go|go ahead|do it|apply|approved|proceed)\b'; then
+    fable_asked=true
+  fi
+fi
+session_rank=$(rank "$session_model")
+
 # Unconditional, and deliberately above the [tier-override:] escape: a worker carrying an
 # inherited override tag must not inherit the right to escalate with it.
 if [ -n "$agent_id" ]; then
@@ -56,28 +105,11 @@ if [ "$override" != "true" ]; then
   # any future agent whose name merely contains "plan".
   case "$child_model" in
     *fable*)
-      [ "$subagent_type" = "Plan" ] || deny "Fable is reserved for reviewing a PLAN (~/.claude/subagent-tiers.md); \"$subagent_type\" is not the planning agent. Code review is Opus work and code writing is never Fable's. Dispatch the consult as Plan, or add \"[tier-override: <why>]\" to the prompt." ;;
+      if [ "$subagent_type" != "Plan" ] && ! { [ "$is_brain_agent" = true ] && [ "$fable_asked" = true ]; }; then
+        deny "Fable is reserved for reviewing a PLAN, or for code review the user asked for by name in their last message (~/.claude/subagent-tiers.md); \"$subagent_type\" is neither. Code writing is never Fable's. Dispatch the consult as Plan, ask the user for a Fable review, or add \"[tier-override: <why>]\" to the prompt."
+      fi ;;
   esac
 fi
-
-rank() {
-  case "$1" in
-    *fable*)  echo 4 ;;
-    *opus*)   echo 3 ;;
-    *sonnet*) echo 2 ;;
-    *haiku*)  echo 1 ;;
-    *)        echo 0 ;;
-  esac
-}
-
-session_model=""
-if [ -n "$transcript" ] && [ -r "$transcript" ]; then
-  # -R + fromjson?: tolerate the partial first line a byte-offset tail can produce.
-  session_model=$(tail -c 200000 "$transcript" 2>/dev/null \
-    | jq -rR 'fromjson? | select(.type? == "assistant") | .message.model // empty' 2>/dev/null \
-    | tail -1)
-fi
-session_rank=$(rank "$session_model")
 
 # Model omitted: the hook places the dispatch rather than letting it inherit silently,
 # because inheritance is where the tier policy leaked — an unqualified mechanical dispatch
@@ -87,6 +119,10 @@ session_rank=$(rank "$session_model")
 if [ -z "$child_model" ]; then
   [ "$subagent_type" = "Explore" ] && inject "haiku"
   if [ "$is_brain_agent" = true ] && [ "$session_rank" -ge 1 ] && [ "$session_rank" -le 2 ]; then
+    inject "opus"
+  fi
+  # A Fable session does not hand its review agents Fable by inheritance; that takes the ask.
+  if [ "$is_brain_agent" = true ] && [ "$session_rank" -eq 4 ] && [ "$fable_asked" != true ]; then
     inject "opus"
   fi
   exit 0
@@ -99,7 +135,7 @@ fi
 # unknown session tier, unlike that cap.
 case "$child_model" in
   *fable*)
-    [ "$session_rank" -eq 3 ] && exit 0
+    [ "$session_rank" -ge 3 ] && exit 0
     if [ "$session_rank" -eq 0 ]; then
       deny "Fable needs a confirmed Opus session and this session's model could not be read from the transcript (~/.claude/subagent-tiers.md). Re-dispatch from an Opus session, or add \"[tier-override: <why>]\" to the prompt."
     fi

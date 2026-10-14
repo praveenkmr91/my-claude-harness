@@ -15,10 +15,41 @@ const transcripts = {
   opus: path.join(tmpDir, 'opus.jsonl'),
   sonnet: path.join(tmpDir, 'sonnet.jsonl'),
   haiku: path.join(tmpDir, 'haiku.jsonl'),
+  fable: path.join(tmpDir, 'fable.jsonl'),
+  fableAsked: path.join(tmpDir, 'fable-asked.jsonl'),
+  fableAskedThenToolResult: path.join(tmpDir, 'fable-asked-tool-result.jsonl'),
 };
+const fableTurn = JSON.stringify({ type: 'assistant', message: { model: 'claude-fable-5-1' } });
+const askTurn = JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'run a fable battery on this diff' }] } });
+const toolResultTurn = JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } });
 fs.writeFileSync(transcripts.opus, JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-5' } }));
 fs.writeFileSync(transcripts.sonnet, JSON.stringify({ type: 'assistant', message: { model: 'claude-sonnet-5' } }));
 fs.writeFileSync(transcripts.haiku, JSON.stringify({ type: 'assistant', message: { model: 'claude-haiku-4-5-20251001' } }));
+fs.writeFileSync(transcripts.fable, [JSON.stringify({ type: 'user', message: { content: 'review this' } }), fableTurn].join('\n'));
+fs.writeFileSync(transcripts.fableAsked, [askTurn, fableTurn].join('\n'));
+fs.writeFileSync(transcripts.fableAskedThenToolResult, [askTurn, fableTurn, toolResultTurn, fableTurn].join('\n'));
+const proposalTurn = JSON.stringify({ type: 'assistant', message: { model: 'claude-fable-5-1', content: [{ type: 'text', text: 'HIGH risk and bulk, eight lenses on the separate pool. Fable battery?' }] } });
+const mentionTurn = JSON.stringify({ type: 'assistant', message: { model: 'claude-fable-5-1', content: [{ type: 'text', text: 'The Fable pool is separate, so nothing changes here. Commit?' }] } });
+const yesTurn = JSON.stringify({ type: 'user', message: { content: 'yes' } });
+const noTurn = JSON.stringify({ type: 'user', message: { content: 'no, opus is fine' } });
+const selfAttestTurn = JSON.stringify({ type: 'assistant', message: { model: 'claude-fable-5-1', content: [{ type: 'text', text: 'Dispatching the battery on Fable.' }] } });
+transcripts.fableProposalApproved = path.join(tmpDir, 'fable-proposal-approved.jsonl');
+transcripts.fableProposalDeclined = path.join(tmpDir, 'fable-proposal-declined.jsonl');
+transcripts.fableSelfAttested = path.join(tmpDir, 'fable-self-attested.jsonl');
+const userMentionTurn = JSON.stringify({ type: 'user', message: { content: 'Heads up: the new Fable-review gate opens on any yes after a reply that mentions Fable.' } });
+transcripts.fableUserMention = path.join(tmpDir, 'fable-user-mention.jsonl');
+fs.writeFileSync(transcripts.fableUserMention, [userMentionTurn, fableTurn].join('\n'));
+const consultTurn = JSON.stringify({ type: 'user', message: { content: '/consult fable on the Label design' } });
+transcripts.fableConsultAsk = path.join(tmpDir, 'fable-consult-ask.jsonl');
+fs.writeFileSync(transcripts.fableConsultAsk, [consultTurn, fableTurn].join('\n'));
+transcripts.fableMentionThenYes = path.join(tmpDir, 'fable-mention-then-yes.jsonl');
+fs.writeFileSync(transcripts.fableMentionThenYes, [mentionTurn, yesTurn, fableTurn].join('\n'));
+fs.writeFileSync(transcripts.fableProposalApproved, [proposalTurn, yesTurn, fableTurn].join('\n'));
+fs.writeFileSync(transcripts.fableProposalDeclined, [proposalTurn, noTurn, fableTurn].join('\n'));
+fs.writeFileSync(transcripts.fableSelfAttested, [fableTurn, yesTurn, selfAttestTurn].join('\n'));
+const injectedTurn = JSON.stringify({ type: 'user', isMeta: true, message: { content: [{ type: 'text', text: '<system-reminder>lint passed</system-reminder>' }] } });
+transcripts.fableApprovedThenInjection = path.join(tmpDir, 'fable-approved-then-injection.jsonl');
+fs.writeFileSync(transcripts.fableApprovedThenInjection, [proposalTurn, yesTurn, fableTurn, injectedTurn, fableTurn].join('\n'));
 const UNREADABLE_TRANSCRIPT = '/nonexistent-transcript-path';
 
 test.after(() => {
@@ -65,6 +96,109 @@ test.describe('subagent tier hook', () => {
 
   test('Explore, no model, opus session -> inject:haiku', () => {
     assert.equal(verdict(payload({ subagentType: 'Explore', transcriptPath: transcripts.opus })), 'inject:haiku');
+  });
+
+  test('code-reviewer, no model, fable session, no ask -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fable })),
+      'inject:opus',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, user asked for Fable -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableAsked })),
+      'inherit',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, ask followed by tool_result turn -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableAskedThenToolResult })),
+      'inherit',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, user approved a Fable proposal -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableProposalApproved })),
+      'inherit',
+    );
+  });
+
+  test('Plan + model fable, fable session, user typed "consult fable" -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'Plan', model: 'fable', transcriptPath: transcripts.fableConsultAsk })), 'inherit');
+  });
+
+  test('general-purpose + model fable, fable session, user typed "consult fable" -> deny (it can write)', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'general-purpose', model: 'fable', transcriptPath: transcripts.fableConsultAsk })),
+      'deny',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, user turn only mentions Fable -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableUserMention })),
+      'inject:opus',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, "yes" after a reply that only mentions Fable -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableMentionThenYes })),
+      'inject:opus',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, user declined the Fable proposal -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableProposalDeclined })),
+      'inject:opus',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, approval followed by a hook-injected user turn -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableApprovedThenInjection })),
+      'inherit',
+    );
+  });
+
+  test('code-reviewer, no model, fable session, "yes" to no proposal and Fable named only in the current turn -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.fableSelfAttested })),
+      'inject:opus',
+    );
+  });
+
+  test('implementer, no model, fable session, user asked for Fable -> inherit (hook places no writer)', () => {
+    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.fableAsked })), 'inherit');
+  });
+
+  test('code-reviewer + model fable, opus session, user asked for Fable -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.fableAsked })),
+      'inherit',
+    );
+  });
+
+  test('code-reviewer + model fable, fable session, no ask -> deny', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.fable })),
+      'deny',
+    );
+  });
+
+  test('implementer + model fable, fable session, user asked for Fable -> deny', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'implementer', model: 'fable', transcriptPath: transcripts.fableAsked })),
+      'deny',
+    );
+  });
+
+  test('Plan + model fable, fable session -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'Plan', model: 'fable', transcriptPath: transcripts.fable })), 'inherit');
   });
 
   test('Plan + model fable, unreadable transcript -> deny', () => {
