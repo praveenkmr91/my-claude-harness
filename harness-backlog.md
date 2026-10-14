@@ -4,6 +4,12 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Fable write-block is blind to shell writes (2026-10-14)
+
+- **Evidence:** `opus-write-nudge.sh pre` blocks Write|Edit of source files from a Fable session, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so a Fable main thread can still edit source from Bash.
+- **Why parked:** closing it means teaching the Bash guard the session model, and `sed -i` on source is also a legitimate Opus path; needs one rule for both hooks, not a second guard.
+- **Fix:** in `bash-write-guard.js`, read the live model the same way the nudge does and deny `sed -i` / `perl -pi` on source extensions from a Fable session with the same message.
+
 ### Building or committing before the user approved (2026-10-05)
 
 - **Evidence:** 27 user corrections in 19 sessions — "wait, i didnt approve plans. why are u implementing already?" (`41a910d0`, 2026-09-29), "yes. dont commit yet" (`0672921d`, 2026-10-02). The largest single correction theme.

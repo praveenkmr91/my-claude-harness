@@ -153,6 +153,30 @@ test('opus write nudge', async (t) => {
 test('opus write nudge — pre arm', async (t) => {
   const pre = (opts) => run({ mode: 'pre', ...opts });
 
+  await t.test('fable session blocks every source write, no plan ask needed', () => {
+    const { code, stderr } = pre({ sessionId: newSession(), tier: 'fable', file: '/tmp/a.tsx' });
+    assert.equal(code, 2);
+    assert.match(stderr, /Fable never writes code/);
+  });
+
+  await t.test('fable session stays blocked after implementer was dispatched', () => {
+    const fableDispatched = path.join(tmpDir, 'fable-dispatched.jsonl');
+    fs.writeFileSync(fableDispatched, [
+      { type: 'assistant', message: { model: 'claude-fable-5-1', content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { subagent_type: 'implementer' } }] } },
+      { type: 'assistant', message: { model: 'claude-fable-5-1' } },
+    ].map((e) => JSON.stringify(e)).join('\n'));
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: fableDispatched, file: '/tmp/a.tsx' }).code, 2);
+  });
+
+  await t.test('fable session still writes docs and config directly', () => {
+    assert.equal(pre({ sessionId: newSession(), tier: 'fable', file: '/tmp/notes.md' }).code, 0);
+    assert.equal(pre({ sessionId: newSession(), tier: 'fable', file: '/tmp/settings.json' }).code, 0);
+  });
+
+  await t.test('opus session without a plan ask is not blocked', () => {
+    assert.equal(pre({ sessionId: newSession(), tier: 'opus', file: '/tmp/a.tsx' }).code, 0);
+  });
+
   await t.test('blocks the first source write when a typed prompt asks to implement a plan', () => {
     const { code, stderr } = pre({ sessionId: newSession(), transcriptPath: transcripts.planAsk, file: '/tmp/a.tsx' });
     assert.equal(code, 2);

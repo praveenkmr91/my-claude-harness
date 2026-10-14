@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Write|Edit hook, advisory arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
-#   pre  (PreToolUse): after a typed prompt pairs implement/execute (incl. -s/-ed) with a plans/*.md path, blocks every
+#   pre  (PreToolUse): from a Fable session, blocks every source write outright — Fable never writes code, no exit.
+#        From Opus, after a typed prompt pairs implement/execute (incl. -s/-ed) with a plans/*.md path, blocks every
 #        source write until implementer was dispatched or this turn states `implementer: skip — open call: <item>`.
 #        No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
 #   post (PostToolUse, default): fires on the 6th distinct source file written, and again on the 15th unless
@@ -42,6 +43,10 @@ skipped() {
 }
 
 if [ "$MODE" = pre ]; then
+  case "$MODEL" in *fable*)
+    printf 'This thread runs Fable, and Fable never writes code (~/.claude/subagent-tiers.md). Dispatch `implementer` with the exact edit (file, old text, new text, acceptance check); docs, config and plan files stay direct. No skip line lifts this and a retry stays blocked.\n' >&2
+    exit 2 ;;
+  esac
   # Typed prompts only: tool_result blocks, isMeta records and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths too.
   # No \b in the raw prefilter: JSONL stores a newline as `\n`, so "\nImplement" has no word boundary.
   PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' \
