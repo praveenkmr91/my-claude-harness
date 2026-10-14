@@ -19,9 +19,6 @@
 
 ## Before claiming done
 - **After every code change:** run linter + type checker before declaring done. Static-clean (lint+tsc) ≠ "done" — exercise change at runtime before claiming works. The ticket's worked example IS the acceptance test: replay it end-to-end at runtime before claiming fixed; if it can't pass under the chosen design, that's a design finding to raise before shipping.
-- **Self-review diff through Code-craft lens before commit — required gate, not polish.** Lint + tsc + code-review passing ≠ reading like human. Delete-list first: what can go before what should change. Watch: comment bloat, same *why* stated twice. Inline for small diffs.
-- **Right-size inherited/sibling boilerplate — one holistic sweep.** Per mirrored piece: load-bearing THIS case, or inherited? Drop what isn't. Review/simplify = ONE ranked simplify+correctness sweep, never reactive piecemeal.
-- **Automated sweeps prove behavior preserved, or revert.** Comment/whitespace-only cleanup → `npx esbuild <file> --minify-whitespace` pre/post must byte-match (strips comments+whitespace; any diff = sweep touched code). Anything deeper (renames, restructures) → full verify gate; any red = revert the whole sweep, not patch forward.
 - **No FE workarounds for BE contract gaps.** Poll/retry shims and client-side patches for a wrong or missing backend contract are not built — comment the exact ask on the ticket and block.
 - **Stakeholder-facing text (Jira, PR, commit) is concise, not terse.** Root cause 2-3 sentences, ask 1-2, done note 1-2 (Jira: no commit hashes). No verification narratives, tested-case lists, env caveats, trade-off essays. Full sentences, readable without session context; cut padding, not connective tissue.
 
@@ -30,7 +27,7 @@
 
 ## Delegating
 - **Subagent:** open-ended research (3+ queries), specialized fits (Explore, implementer, checker, external-io, code-reviewer, frontend-design), 2+ independent parallel investigations. An omitted `model` inherits the session tier — dispatch a declared cheap agent rather than a bare `general-purpose`, or mechanical work burns Opus silently.
-- **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 parallel calls.
+- **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 calls per question, all rounds counted; a 4th → Explore.
 - **Anti-pattern:** subagent to read one known file.
 - **Model tier by work KIND.** Brain work and code carrying a design call → Opus+; approved-plan steps and bulk sweeps → Sonnet `implementer`; no-judgment → Haiku `checker` (lint + tsc stay direct); unbounded external → `external-io`, one bounded read inline; Fable: plans, code on yes; the harness advisor only when stuck or before an irreversible / architectural commitment — never routine or done-checks. Spec `~/.claude/subagent-tiers.md`, injected on the first Agent call; `hooks/enforce-subagent-model.sh` enforces.
 - **Never stop in-flight work on inferred intent.** A running agent or task stops only on an explicit "stop" / "kill" / "cancel". A request about what comes next (fresh session, new plan, handoff) never authorises it — list what's running and ask "stop or let it finish?". TaskStop discards the agent's work.
