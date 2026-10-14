@@ -172,8 +172,16 @@ test.describe('subagent tier hook', () => {
     );
   });
 
-  test('implementer, no model, fable session, user asked for Fable -> inherit (hook places no writer)', () => {
-    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.fableAsked })), 'inherit');
+  test('implementer, no model, fable session, user asked for Fable -> inject:opus (Fable never writes)', () => {
+    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.fableAsked })), 'inject:opus');
+  });
+
+  test('general-purpose, no model, fable session -> inject:opus', () => {
+    assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.fable })), 'inject:opus');
+  });
+
+  test('general-purpose, no model, opus session -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.opus })), 'inherit');
   });
 
   test('code-reviewer + model fable, opus session, user asked for Fable -> inherit', () => {

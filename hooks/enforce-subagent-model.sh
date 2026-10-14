@@ -125,6 +125,11 @@ if [ -z "$child_model" ]; then
   if [ "$is_brain_agent" = true ] && [ "$session_rank" -eq 4 ] && [ "$fable_asked" != true ]; then
     inject "opus"
   fi
+  # Fable never writes code: a worker or general-purpose dispatch from a Fable session is
+  # placed on opus rather than inheriting (the /simplify skill fans out general-purpose).
+  if [ "$is_brain_agent" != true ] && [ "$session_rank" -eq 4 ]; then
+    inject "opus"
+  fi
   exit 0
 fi
 
