@@ -38,7 +38,7 @@
 ## Config & harness
 - **Editing `~/.claude` (rule docs, hooks, settings)? `~/.claude/harness.md` owns the maintenance rules** — `hooks/harness-context.sh` injects it on first contact with `~/.claude` each session.
 - **Review depth: `~/.claude/review-routing.md` owns it** (hook-injected on review asks) — battery only when named, never proactively.
-- **Classifier or hook denial = stop and ask, never route around.** Actual denials only — an anticipated block with a sanctioned exit (`ExitWorktree`) is executed, not handed back. On one: finish independent work, hand me the exact blocked action, stop — I retry via `/permissions`, exiting auto mode, or `!`. No smaller pieces or alternate tool unless the denial names the route.
+- **Classifier or hook denial = stop and ask, never route around.** Actual denials only — an anticipated block with a sanctioned exit (`ExitWorktree`) is executed, not handed back. On one: finish independent work, hand me the exact blocked action, stop — I retry via `/permissions`, exiting auto mode, or `!`. A grant unblocks only that action; my typed ask still sets the plan. No smaller pieces or alternate tool unless the denial names the route.
 - **`<private>…</private>` = use now, never persist.** Content inside the tags never lands in memory files, .remember/, CLAUDE.md, commits, or any artifact — reference it this session only.
 - **Ask before writing, moving or deleting outside the repo, or a file I placed.** Raise the concern first, then wait. A repo secret stays put, gitignored.
 
