@@ -212,6 +212,16 @@
         "matcher": "Read|Write|Edit",
         "hooks": [
           {
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md",
+            "timeout": 5
+          }
+        ]
+      },
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh code-craft.md '[.](tsx?|jsx?|mjs|cjs|mts|cts|sh|vue|svelte|css|scss|swift|kts?|dart)$'",
             "timeout": 5
