@@ -38,6 +38,7 @@ for (const [name, entries] of Object.entries({
   planVerbNoPath: [userLine('implement the dark mode toggle'), OPUS_LINE],
   planInToolResult: [userLine([{ type: 'tool_result', content: 'Implement Chunk 2 of docs/plans/x.md' }]), OPUS_LINE],
   planInMeta: [{ type: 'user', isMeta: true, message: { content: 'Implement Chunk 2 of docs/plans/x.md' } }, OPUS_LINE],
+  planInCompactSummary: [{ type: 'user', isCompactSummary: true, message: { content: 'Chunk 1 is built only after an explicit "implement" of ~/.claude/plans/x.md' } }, OPUS_LINE],
   planNounImplementer: [userLine('what did the implementer change? see docs/plans/x.md'), OPUS_LINE],
   planNounImplementation: [userLine('review the implementation notes in docs/plans/x.md'), OPUS_LINE],
   planExecute: [userLine('Execute step 2 of docs/plans/x.md'), OPUS_LINE],
@@ -222,6 +223,10 @@ test('opus write nudge — pre arm', async (t) => {
 
   await t.test('a plan ask in an isMeta record is not a typed prompt', () => {
     assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInMeta, file: '/tmp/a.tsx' }).code, 0);
+  });
+
+  await t.test('a plan ask quoted in a compaction summary is not a typed prompt', () => {
+    assert.equal(pre({ sessionId: newSession(), transcriptPath: transcripts.planInCompactSummary, file: '/tmp/a.tsx' }).code, 0);
   });
 
   await t.test('implementer or implementation as a noun is not the verb', () => {

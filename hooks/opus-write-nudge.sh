@@ -47,10 +47,10 @@ if [ "$MODE" = pre ]; then
     printf 'This thread runs Fable, and Fable never writes code (~/.claude/subagent-tiers.md). Dispatch `implementer` with the exact edit (file, old text, new text, acceptance check); docs, config and plan files stay direct. No skip line lifts this and a retry stays blocked.\n' >&2
     exit 2 ;;
   esac
-  # Typed prompts only: tool_result blocks, isMeta records and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths too.
+  # Typed prompts only: tool_result blocks, isMeta records, compaction summaries and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths too.
   # No \b in the raw prefilter: JSONL stores a newline as `\n`, so "\nImplement" has no word boundary.
   PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' \
-    | jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not)) | .message.content
+    | jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not) and (.isCompactSummary | not)) | .message.content
         | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
         | select((test("^\\s*<") | not) or test("^\\s*<pasted_content"))
         | gsub("\n"; " ")' 2>/dev/null \
