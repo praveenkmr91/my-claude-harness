@@ -34,3 +34,6 @@
 
 # skills/synced is vendored by the sync job, not authored here.
 /skills/synced/
+
+# skills/.trash holds skills deleted through the skill manager, kept only for undo.
+/skills/.trash/
