@@ -310,6 +310,7 @@ test('review-lens-nudge: names lenses on a code edit, once per turn and lens set
 test.describe('rule and hook agree', () => {
   const pairs = [
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'committing.md', /Co-Authored-By/],
+    ['hooks/commit-trailer-check.sh', /co-authored-by/i, 'committing.md', /commit-trailer-check\.sh/],
     ['hooks/block-dangerous-git.sh', /push and PR need a yes/, 'committing.md', /`gh pr create` hook-asked/],
     ['hooks/done-claim-gate.sh', /ran git commit/, 'committing.md', /Stop gate checks lint and lenses on any committing turn/],
     ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied outright for review\/planning agents/],

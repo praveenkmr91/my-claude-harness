@@ -218,6 +218,8 @@ You MUST complete each phase before proceeding to the next.
    - If < 3: Return to Phase 1, re-analyze with new information
    - **If ≥ 3: STOP and question the architecture (step 5 below)**
    - DON'T attempt Fix #4 without architectural discussion
+   - A fix that moves the failure elsewhere, or brings back an earlier one (A → B → A), counts as a failed attempt, not progress
+   - Never pass a gate by editing the test, loosening the assertion, or deleting the code it exercises
 
 5. **If 3+ Fixes Failed: Question Architecture**
 

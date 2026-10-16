@@ -87,6 +87,7 @@ A report with any of these is rejected before its content is read (folded 2026-0
 - Requirements added that the spec never asked for, or features described that the diff does not contain.
 - A fix proposed without a named root cause; a symptom patched where the cause is still live.
 - Three failed fix attempts without re-diagnosing → stop, invoke systematic-debugging.
+- A run that examined nothing reported as green: 0 tests collected, a test filter that matched no file, 0 files scanned, a type check over an empty include set. "Found 0 problems" and "read nothing" print the same line, so zero examined is unverified, never pass — report how many items the run examined.
 
 ## Key Patterns
 
