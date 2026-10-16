@@ -8,6 +8,7 @@ MODE=$(jq -r '.permission_mode // empty' <<<"$IN")
 [ "$EVENT" = "UserPromptSubmit" ] && [ "$MODE" != "plan" ] && exit 0
 if [ "$EVENT" = "PreToolUse" ]; then
   FILE=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
+  case "$FILE" in *.research.md) exit 0 ;; esac
   case "$FILE" in "$HOME/.claude/plans/"*.md|*/docs/plans/*.md) ;; *) exit 0 ;; esac
 fi
 FLAG="/tmp/claude-plan-mode-${SID:-nosid}"

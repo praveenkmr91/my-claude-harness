@@ -4,8 +4,9 @@
 
 const fs = require('node:fs');
 
-const PLAN_PATH = /(^|\/)plans\/[^/]+\.md$/;
-const REPHRASE = 'rephrase as an instruction, a decision or a sourced fact row';
+const PLAN_PATH = /(^|\/)plans\/[^/]+(?<!\.research)\.md$/;
+const REPHRASE =
+  'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
 
 const FIRST_PERSON = /\bI\b/;
 const JOURNAL_MARKER =
@@ -16,6 +17,8 @@ const MASKED_SPAN = /`[^`\n]*`|"[^"\n]*"|“[^”\n]*”/g;
 const TABLE_ROW = /^\s*\|/;
 const HEADING = /^#{1,6}\s/;
 const SECTION_HEADING = /^## /;
+const RESEARCH_HEADING =
+  /\b(sampled|traced|journey|findings?|research|investigation|log|notes|history|vs\.?|addendum|unverified)\b|\d{4}-\d{2}-\d{2}/i;
 const CONTEXT_HEADING = /^## Context\s*$/;
 const OPEN_HEADING = /^## Open\s*$/;
 const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
@@ -74,6 +77,14 @@ function journalFindings(lines, masked) {
       ? [{ line: index + 1, rule: 'P1', text: line.trim() }]
       : [];
   });
+}
+
+function researchHeadings(lines, masked) {
+  return lines.flatMap((line, index) =>
+    SECTION_HEADING.test(line) && RESEARCH_HEADING.test(masked[index])
+      ? [{ line: index + 1, rule: 'P5', text: line.trim() }]
+      : [],
+  );
 }
 
 const isProse = (line) =>
@@ -180,11 +191,17 @@ function longOpenBullets(lines) {
 function lintPlan(text, { fragment }) {
   const lines = text.split(/\r?\n/);
   const fenced = fencedLines(lines);
-  const findings = journalFindings(lines, maskedLines(lines, fenced));
+  const masked = maskedLines(lines, fenced);
+  const findings = journalFindings(lines, masked);
 
   if (!fragment) {
     const outsideFences = lines.map((line, index) => (fenced[index] ? '' : line));
-    findings.push(...longParagraphs(outsideFences), ...unverifiedSteps(outsideFences), ...longOpenBullets(outsideFences));
+    findings.push(
+      ...longParagraphs(outsideFences),
+      ...unverifiedSteps(outsideFences),
+      ...longOpenBullets(outsideFences),
+      ...researchHeadings(outsideFences, masked),
+    );
   }
 
   return findings.sort((a, b) => a.line - b.line);

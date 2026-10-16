@@ -123,6 +123,14 @@ test('plan lint', async (t) => {
     assert.equal(writeContent(inNotPlans, 'we found it\n').stdout, '');
   });
 
+  await t.test('skips a research file beside the plans', () => {
+    const research = path.join(tmpDir, 'plans', 'x.research.md');
+    fs.mkdirSync(path.dirname(research), { recursive: true });
+    fs.writeFileSync(research, 'we found it\n');
+    assert.equal(writeContent(research, 'we found it\n').stdout, '');
+    assert.equal(run('post', { file_path: research }).code, 0);
+  });
+
   await t.test('pre applies P1 only and ignores a 300-char paragraph', () => {
     assert.equal(writeContent(plain, `${'x '.repeat(150).trim()}\n`).stdout, '');
   });
@@ -146,7 +154,10 @@ test('check P1', async (t) => {
     const res = check('Turned out the API is flat.\nI checked it.\n');
     assert.equal(res.code, 1);
     assert.deepEqual(res.findings, ['1 P1 Turned out the API is flat.', '2 P1 I checked it.']);
-    assert.equal(res.stderr.trimEnd().split('\n').at(-1), 'rephrase as an instruction, a decision or a sourced fact row');
+    assert.equal(
+      res.stderr.trimEnd().split('\n').at(-1),
+      'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md',
+    );
   });
 
   await t.test('passes markers inside backticks, quotes, fences and a Source column', () => {
@@ -249,6 +260,22 @@ test('check P4', async (t) => {
 
   await t.test('ends a bullet at a blank line followed by a non-indented line', () => {
     assert.deepEqual(rulesOf(['## Open', '', '- one', '  two', '', 'a', 'b', 'c', 'd'].join('\n')), []);
+  });
+});
+
+test('check P5', async (t) => {
+  await t.test('fails a section heading naming a trace, a sample or a date', () => {
+    assert.deepEqual(check('## Repo vs demo (traced)\n').findings, ['1 P5 ## Repo vs demo (traced)']);
+    assert.deepEqual(check('## Demo journey (sampled 2026-10-13)\n').findings, ['1 P5 ## Demo journey (sampled 2026-10-13)']);
+  });
+
+  await t.test('passes ordinary headings, a path in backticks and a ### heading', () => {
+    const text = ['## Patterns to mirror', '', '## Facts the plan rests on', '', '## Files in `logs/`', '', '### Log out step'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('pre ignores a research heading', () => {
+    assert.equal(writeContent(path.join(tmpDir, 'plans', 'x.md'), '## Repo vs demo\n').stdout, '');
   });
 });
 
