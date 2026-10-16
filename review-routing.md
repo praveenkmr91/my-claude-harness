@@ -26,12 +26,13 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Explore locates code, never judges it.
 
-Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small → + affected specs + lens hand pass. Big (plan-driven or bulk) → two review rounds over fresh diffs + battery, trim, harden once.
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small → + affected specs + lens hand pass. Big (plan-driven or bulk) → two review rounds over fresh diffs + battery, trim, harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
 - Report ≥75 only; one line "N findings below threshold suppressed".
 - Each finding = observation, impact, suggestion.
+- Once findings are routed to a named peer session, every later recheck on that work goes there unasked.
 - Pre-existing debt: Critical (incident or security path) → report, tag pre-existing, never silently fix; High (blocks current work / recurs weekly) → one line; Medium/Low → suppressed count.
 - Refactor recommendation needs a trigger (region touched 3+ times for bugs, 3+ duplicates, >3 mocks to test, planned work depends on it) and a behavioral-equivalence check; ugly-but-correct outside the change path → leave, say so.
 </review-routing>
