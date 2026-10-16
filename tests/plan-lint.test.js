@@ -279,6 +279,33 @@ test('check P5', async (t) => {
   });
 });
 
+test('check P6', async (t) => {
+  await t.test('fails a dated status line, a dated prose line and a dated ### heading', () => {
+    assert.deepEqual(check('- Status 2026-10-13: built and verified.\n').findings, ['1 P6 - Status 2026-10-13: built and verified.']);
+    assert.deepEqual(rulesOf('Decided with the user (Praveen, 2026-09-19).\n'), ['P6']);
+    assert.deepEqual(rulesOf('### Revised 2026-09-19\n'), ['P6']);
+  });
+
+  await t.test('passes a date in backticks, quotes, a fence and a Source column', () => {
+    assert.deepEqual(rulesOf('Path `out/2026-10-04/x.json`.\n'), []);
+    assert.deepEqual(rulesOf('Wording "confirmed 2026-10-08".\n'), []);
+    assert.deepEqual(rulesOf('Steps:\n\n```\nrun of 2026-10-13\n```\n'), []);
+    assert.deepEqual(rulesOf(['| Fact | Source |', '|---|---|', '| flat API | sample 2026-10-13 |'].join('\n')), []);
+  });
+
+  await t.test('passes version and node strings', () => {
+    assert.deepEqual(rulesOf('Pin v8.0.6 and read node 1156:37436.\n'), []);
+  });
+
+  await t.test('gives a dated ## heading P5 only', () => {
+    assert.deepEqual(rulesOf('## Addendum 2026-09-20\n'), ['P5']);
+  });
+
+  await t.test('pre ignores a date', () => {
+    assert.equal(writeContent(path.join(tmpDir, 'plans', 'x.md'), '- Status 2026-10-13\n').stdout, '');
+  });
+});
+
 test('check CLI', async (t) => {
   await t.test('exits 0 silently on a clean file', () => {
     const res = check('Add the key.\n');

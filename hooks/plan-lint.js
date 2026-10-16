@@ -19,6 +19,7 @@ const HEADING = /^#{1,6}\s/;
 const SECTION_HEADING = /^## /;
 const RESEARCH_HEADING =
   /\b(sampled|traced|journey|findings?|research|investigation|log|notes|history|vs\.?|addendum|unverified)\b|\d{4}-\d{2}-\d{2}/i;
+const DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 const CONTEXT_HEADING = /^## Context\s*$/;
 const OPEN_HEADING = /^## Open\s*$/;
 const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
@@ -83,6 +84,14 @@ function researchHeadings(lines, masked) {
   return lines.flatMap((line, index) =>
     SECTION_HEADING.test(line) && RESEARCH_HEADING.test(masked[index])
       ? [{ line: index + 1, rule: 'P5', text: line.trim() }]
+      : [],
+  );
+}
+
+function datedLines(lines, masked) {
+  return lines.flatMap((line, index) =>
+    !SECTION_HEADING.test(line) && DATE.test(masked[index])
+      ? [{ line: index + 1, rule: 'P6', text: line.trim() }]
       : [],
   );
 }
@@ -201,6 +210,7 @@ function lintPlan(text, { fragment }) {
       ...unverifiedSteps(outsideFences),
       ...longOpenBullets(outsideFences),
       ...researchHeadings(outsideFences, masked),
+      ...datedLines(outsideFences, masked),
     );
   }
 
