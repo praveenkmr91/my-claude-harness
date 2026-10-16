@@ -6,11 +6,14 @@
 const SOURCE_EXT = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|swift|kts?|dart|css|scss|html|json|ya?ml|toml|mdx?|csv|sh)$/;
 const DOTFILE = /(^|\/)\.[\w.-]+$/;
 const SCRATCH = /^(\/tmp\/|\/private\/tmp\/|\/private\/var\/folders\/|\/var\/folders\/|\/dev\/)/;
-const TOKEN = String.raw`[^\s'"|;&<>()]+`;
+const TOKEN = String.raw`[^\s'"|;&<>()\`]+`;
 // Lookbehind keeps arrows (=>, ->) in commit messages from reading as redirects.
 const REDIRECT = new RegExp(String.raw`(?<![=\-<>])>>?\|?\s*(['"]?)(${TOKEN})\1`, 'g');
 const TEE = new RegExp(String.raw`\btee\s+(?:-a\s+)?(['"]?)(${TOKEN})\1`, 'g');
 const COPY = /(?<!git\s)\b(?:cp|mv|install)\s+((?:[^\s|;&<>()]+\s+)*?)([^\s|;&<>()]+)(?=\s*(?:$|[|;&)]))/gm;
+const QUOTED = /'[^']*'|"(?:[^"\\]|\\[\s\S])*"/g;
+const NESTED_SHELL = /(?:\b(?:sh|bash|zsh)\s+(?:-\w+\s+)*-\w*c|\beval)\s*$/;
+const SUBSTITUTION = /\$\(|`/;
 const CD = new RegExp(String.raw`\bcd\s+(['"]?)(${TOKEN})\1`, 'g');
 const SHELL_ASSIGN = new RegExp(String.raw`(?:^|[\s;&(])([A-Za-z_]\w*)=(['"]?)(${TOKEN})\2`, 'gm');
 const HEREDOC_BODY = /^([^\n]*<<-?\s*(['"]?)(\w+)\2[^\n]*)\n[\s\S]*?\n\s*\3(?=\n|$)/gm;
@@ -59,13 +62,35 @@ function isGuarded(target, cwd) {
   return (SOURCE_EXT.test(target) || DOTFILE.test(target)) && !inScratch && !inMemory;
 }
 
+// A quoted string is data, not shell syntax, unless a nested shell runs it or a double-quoted
+// command substitution executes inside it.
+function maskQuoted(command) {
+  return command.replace(QUOTED, (span, offset) => {
+    const runsAsShell = NESTED_SHELL.test(command.slice(0, offset)) || (span[0] === '"' && SUBSTITUTION.test(span));
+    return runsAsShell ? span : `${span[0]}${'_'.repeat(span.length - 2)}${span[0]}`;
+  });
+}
+
+// Operators are located on the masked text; targets are captured from the original at the same index.
+function operatorMatches(pattern, command, masked) {
+  const sticky = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}y`);
+  const found = [];
+  for (const m of masked.matchAll(pattern)) {
+    sticky.lastIndex = m.index;
+    const real = sticky.exec(command);
+    if (real) found.push(real);
+  }
+  return found;
+}
+
 function shellTargets(command, vars, sessionCwd) {
   const found = [];
-  for (const m of [...command.matchAll(REDIRECT), ...command.matchAll(TEE)]) {
+  const masked = maskQuoted(command);
+  for (const m of [...operatorMatches(REDIRECT, command, masked), ...operatorMatches(TEE, command, masked)]) {
     const target = expand(m[2], vars);
     if (isGuarded(target, cwdAt(m.index, command, vars, sessionCwd))) found.push(target);
   }
-  for (const m of command.matchAll(COPY)) {
+  for (const m of operatorMatches(COPY, command, masked)) {
     const sources = m[1].trim().split(/\s+/).filter((s) => s && !s.startsWith('-')).map((s) => expand(s, vars));
     const dest = expand(m[2], vars);
     const cwd = cwdAt(m.index, command, vars, sessionCwd);

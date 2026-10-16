@@ -40,6 +40,11 @@ test('bash write guard', async (t) => {
     ['python argv destination resolved to a home path', ['python3 -c \'import sys; open(sys.argv[1], "w").write("x")\' $HOME/repo/a.json', 'repo/a.json']],
     ['node argv index out of range with a guarded path in the command', ['node -e \'require("fs").writeFileSync(process.argv[3], "x")\' a src/x.ts', 'src/x.ts']],
     ['node argv destination from an unexpanded variable', ['node -e \'require("fs").writeFileSync(process.argv[1], "x")\' $UNSET/a.json', 'a.json']],
+    ['redirect inside a bash -c payload', 'bash -c "echo x > src/a.ts"'],
+    ['redirect inside a sh -c payload', "sh -c 'cat a > src/b.ts'"],
+    ['redirect inside an eval payload', 'eval "echo x > src/a.ts"'],
+    ['redirect inside a double-quoted command substitution', 'echo "$(cat a > src/x.ts)"'],
+    ['redirect inside double-quoted backticks', 'git commit -m "`cat a > src/x.ts`"'],
   ];
   for (const [name, entry] of blocked) {
     const [command, listed] = [entry].flat();
@@ -101,6 +106,12 @@ test('bash write guard', async (t) => {
     ],
     ['python argv destination in /tmp', 'python3 -c \'import sys; open(sys.argv[1], "w").write("x")\' /tmp/x.json'],
     ['node argv index out of range, sweep fallback finds no guarded path (exit 0)', 'node -e \'require("fs").writeFileSync(process.argv[3], "x")\' a'],
+    ['angle brackets in a commit message', 'git commit -m "plan-lint: research moves to <name>.research.md beside the plan"'],
+    ['greater-than inside a quoted string', 'echo "a > b.md"'],
+    ['tee named in a commit message', 'git commit -m "pipe output through tee notes.md"'],
+    ['cp named in a commit message', 'git commit -m "cp /tmp/x.ts src/x.ts was the old flow"'],
+    ['empty command', ''],
+    ['single-quoted substitution text, never expanded', "echo '$(cat a > src/x.ts)'"],
   ];
   for (const [name, command] of allowed) {
     await t.test(`allows ${name}`, () => assert.equal(run(...[command].flat()).code, 0));
