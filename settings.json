@@ -9,6 +9,7 @@
   "permissions": {
     "allow": [
       "Skill(update-config)",
+      "SendMessage",
       "Bash(npm view *)",
       "Bash(jq *)",
       "Bash(git check-ignore *)",
