@@ -156,7 +156,7 @@ test('block dangerous git hook', async (t) => {
 
   await t.test("a teammate's additiv co-author trailer passes", () => {
     const { status, stderr } = run(
-      'git commit --amend --no-edit --trailer "Co-authored-by: Ammina Korjenic <ammina.kodro@additiv.com>"',
+      'git commit --amend --no-edit --trailer "Co-authored-by: Teammate Example <teammate@additiv.com>"',
     );
     assert.equal(status, 0, stderr);
   });

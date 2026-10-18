@@ -47,7 +47,7 @@ test('commit trailer check hook', async (t) => {
   });
 
   await t.test("a teammate's additiv co-author trailer passes", () => {
-    commit('fix: x\n\nCo-authored-by: Ammina Korjenic <ammina.kodro@additiv.com>');
+    commit('fix: x\n\nCo-authored-by: Teammate Example <teammate@additiv.com>');
     const { status, stderr } = runCommand(COMMIT_COMMAND, repoDir);
     assert.equal(status, 0);
     assert.equal(stderr, '');
