@@ -8,6 +8,7 @@ const SCRATCH = /^(\/tmp\/|\/private\/tmp\/|\/private\/var\/folders\/|\/var\/fol
 const TMP_DIR = String.raw`["']?(/private)?/(tmp|var/folders)/`;
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
 const LOCAL_SPEC = /^(workspace|file|link):/;
+const INTERNAL = /^@additiv(-[\w-]+)?\//;
 // The `2` of `pnpm install 2>&1` reads as a package name, and `pnpm <script> add` as an install, unless both are excluded.
 const JS_INSTALL = /\b(npm|pnpm|yarn|bun)(?:\s+(?:-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:add|install|i)\s)[^-\s;&|]\S*)?|workspace\s+\S+))*\s+(add|install|i)\s+(?:-\S+\s+)*(?!\d*[<>])[@A-Za-z0-9_]/;
 const PUB_ADD = /\b(flutter|dart)\s+pub\s+add\s+[A-Za-z0-9_]/;
@@ -46,12 +47,20 @@ function addedPackages() {
   const oldNames = depNames(before);
   const newNames = depNames(after);
   if (!oldNames || !newNames) return [];
-  return [...newNames].filter(([name, spec]) => !oldNames.has(name) && !LOCAL_SPEC.test(spec)).map(([name]) => name);
+  return [...newNames].filter(([name, spec]) => !oldNames.has(name) && !LOCAL_SPEC.test(spec) && !INTERNAL.test(name)).map(([name]) => name);
 }
 
 function installsThirdParty() {
   const command = args.command ?? '';
-  if (!JS_INSTALL.test(command) && !PUB_ADD.test(command)) return false;
+  const installs = command.split(/&&|\|\||[;|]/).filter((part) => JS_INSTALL.test(part) || PUB_ADD.test(part));
+  if (!installs.length) return false;
+  // A flag value such as `-w apps/web` reads as a package name here, so it keeps the gate closed rather than open.
+  const packages = installs.flatMap((part) => {
+    const words = part.trim().split(/\s+/);
+    const afterVerb = words.slice(words.findIndex((word) => /^(add|install|i)$/.test(word)) + 1);
+    return afterVerb.filter((word) => !word.startsWith('-') && !/^\d*[<>]/.test(word));
+  });
+  if (packages.every((name) => INTERNAL.test(name))) return false;
   // pnpm's bare --workspace links a workspace package; npm's --workspace=<dir> and pnpm's --workspace-root install third-party deps.
   if (/\bpnpm\b.*\s--workspace(\s|$)/.test(command)) return false;
   if (new RegExp(`^${TMP_DIR}`).test(cwd)) return false;

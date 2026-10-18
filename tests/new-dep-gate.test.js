@@ -78,4 +78,16 @@ test('new dependency gate', async (t) => {
     }
     assert.equal(bash('npm i left-pad', '/private/tmp/claude-501/scratchpad'), '');
   });
+
+  await t.test('passes first-party @additiv packages, asks when a third-party one rides along', () => {
+    assert.equal(edit('"react": "^18.2.0"', '"react": "^18.2.0",\n    "@additiv-hydrogen/data.wealth.rest.use-questionnaires": "^1.0.0"'), '');
+    assert.match(edit('"react": "^18.2.0"', '"react": "^18.2.0",\n    "@additiv-hayah/ui": "^1.0.0",\n    "lodash": "^4.0.0"').permissionDecisionReason, /New dependency: lodash\./);
+    assert.match(edit('"react": "^18.2.0"', '"react": "^18.2.0",\n    "@additivx/ui": "^1.0.0"').permissionDecisionReason, /@additivx\/ui/);
+    for (const command of ['npm i @additiv-hydrogen/data.wealth.rest.use-questionnaires@1.2.0', 'pnpm add -D @additiv-hayah/ui 2>&1 | tail -3', 'npm ci && npm i @additiv/core']) {
+      assert.equal(bash(command), '', command);
+    }
+    for (const command of ['npm i @additiv-hydrogen/x lodash', 'npm i @additiv-hydrogen/x && pnpm add zod', 'npm i @additiv-hydrogen/x -w apps/web', 'npm i @additivx/core']) {
+      assert.equal(bash(command)?.permissionDecision, 'ask', command);
+    }
+  });
 });
