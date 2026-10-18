@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -174,5 +176,35 @@ test('block dangerous git hook', async (t) => {
     assert.equal(status, 2);
     assert.match(stderr, /Do not bulk-stage/);
     assert.match(stderr, /git commit --only/);
+  });
+
+  await t.test('git push passes only when the repo origin is on the whitelist', () => {
+    const mk = (origin) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'push-wl-'));
+      spawnSync('git', ['init', '-q', dir]);
+      spawnSync('git', ['-C', dir, 'remote', 'add', 'origin', origin]);
+      return dir;
+    };
+    const backup = mk('https://github.com/praveenkmr91/my-claude-harness.git');
+    const backupSsh = mk('git@github.com:praveenkmr91/my-claude-harness.git');
+    const other = mk('https://github.com/praveenkmr91/my-claude-harness-fork.git');
+    const work = mk('https://github.com/additiv/some-app.git');
+    try {
+      assert.equal(run('git push origin master', backup).status, 0, 'https backup cwd');
+      assert.equal(run('git push', backupSsh).status, 0, 'ssh backup cwd');
+      assert.equal(run(`git -C ${backup} push origin master`, '/Users/me/repo').status, 0, '-C backup');
+      assert.equal(run('git push origin master', other).status, 2, 'near-twin remote name');
+      assert.equal(run('git push origin master', work).status, 2, 'work remote');
+      assert.equal(run('git push', '/Users/me/not-a-repo').status, 2, 'no repo at cwd');
+      assert.equal(run(`sh -c "git -C ${backup} push"`, backup).status, 2, 'wrapper hides the dir');
+      assert.equal(run('git commit -m x && git push', backup).status, 0, 'commit and push together in backup');
+      assert.equal(run(`git -C ${backup} commit --only hooks/foo.sh -q -m "time to sh out" && git -C ${backup} push origin master`, '/Users/me/repo').status, 0, 'wrapper words inside a pathspec or message');
+      assert.equal(run(`git -C ${backup} commit -q -m x && sudo git -C ${backup} push`, '/Users/me/repo').status, 2, 'wrapper at command position after &&');
+      assert.equal(run('git -C . push origin master', backup).status, 0, 'relative -C resolves against the session cwd');
+      assert.equal(run('git -C . push origin master', work).status, 2, 'relative -C in a work repo stays blocked');
+      assert.equal(run(`cd ${backup} && git push`, '/Users/me/repo').status, 2, 'cd hides the dir');
+    } finally {
+      for (const d of [backup, backupSsh, other, work]) fs.rmSync(d, { recursive: true, force: true });
+    }
   });
 });

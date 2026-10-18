@@ -89,6 +89,26 @@ except Exception:
     sys.exit(3)
 ' "$COMMAND") || DANGER=$(echo "$COMMAND" | grep -oE 'git push|reset --hard|git clean -f|git branch -D|git (checkout|restore) \.|--no-verify' | head -1)
 
+# Push is allowed only to a whitelisted remote: personal backups Praveen owns alone, pushed with every commit.
+# Every `-C <dir>` in the command must point at a whitelisted repo; with none, the session cwd must. A wrapper, subshell,
+# eval or heredoc can hide a `-C` to another repo behind a whitelisted cwd, so those stay blocked regardless. Wrapper
+# words count only at command position: a pathspec like `hooks/foo.sh` or a commit message must not trip the filter.
+PUSH_WHITELIST='github\.com[:/]praveenkmr91/my-claude-harness(\.git)?$'
+SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+whitelisted_repo() {
+  local dir=${1/#\~/$HOME}
+  case "$dir" in /*) ;; *) dir="$SESSION_CWD/$dir" ;; esac
+  git -C "$dir" remote get-url origin 2>/dev/null | grep -qE "$PUSH_WHITELIST"
+}
+WRAPPER_AT_COMMAND_POSITION='(^|[;&|(`]|\$\()[[:space:]]*(cd|pushd|sh|bash|zsh|eval|exec|xargs|sudo|env|nohup|time|nice|command)([[:space:]]|$)|\$\(|`|<<'
+if [ "$DANGER" = "git push" ] && ! printf '%s' "$COMMAND" | grep -qE "$WRAPPER_AT_COMMAND_POSITION"; then
+  REPO_DIRS=$(printf '%s' "$COMMAND" | grep -oE '(^|[;&| (])git -C [^ ]+' | awk '{print $NF}')
+  [ -n "$REPO_DIRS" ] || REPO_DIRS=$SESSION_CWD
+  ALLOWED=1
+  for d in $REPO_DIRS; do whitelisted_repo "$d" || ALLOWED=0; done
+  [ -n "$REPO_DIRS" ] && [ "$ALLOWED" = 1 ] && DANGER=""
+fi
+
 if [ "$DANGER" = "--no-verify" ]; then
   echo "BLOCKED: Do not pass --no-verify. husky/lint-staged are part of the verify gate; if a hook is genuinely broken, surface it to the user instead of skipping it." >&2
   exit 2
