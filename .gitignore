@@ -5,6 +5,7 @@
 /*
 
 !/.gitignore
+!/README.md
 !/CLAUDE.md
 !/persona-core.md
 !/plan-mode.md
