@@ -16,7 +16,7 @@ The hand-authored half of my `~/.claude` directory: the rules, hooks, agents, sk
 | `external-io.md`, `library-docs.md`, `browser-verify.md` | Rules for MCP tools, library documentation lookup, and browser verification. |
 | `hydrogen.md`, `hydrogen-reference.md` | Repo-gated guidance for one internal design system; loads only inside repos that depend on it. |
 | `harness.md`, `harness-backlog.md` | How this harness itself is maintained, and parked friction with evidence. |
-| `plugin-curation.md`, `ecosystem-research.md` | Which plugins are on, which are deliberate tombstones, and why. |
+| `plugin-curation.md` | Which plugins are on, which are deliberate tombstones, and why. |
 | `agents/` | Custom subagents: `implementer`, `checker`, `external-io`, and the review lenses `reuse-analyzer`, `placement-analyzer`, `modern-ts-analyzer`. |
 | `commands/` | Slash commands: `/cycle`, `/learn`, `/delete-list`, `/delete-audit`, `/shortcut-debt`. |
 | `skills/` | Localised skills (TDD, systematic debugging, verification before completion, adversarial review, Jira, a11y and web-quality audits, and others). `skills/synced/` is vendored by a sync job and untracked. |
@@ -47,5 +47,5 @@ Checks that every pointer in a rule doc resolves, that each hook agrees with the
 
 - **One tier owns a rule.** A principle lives in exactly one file; everything else points at it.
 - **Enforce, don't remind.** If a rule matters, a hook checks it; prose alone decays over a long session.
-- **Current instructions, never a journal.** Rule docs and plans are rewritten in place; dated incident notes stay only as the one-line *why* behind a rule.
+- **Current instructions, never a journal.** Rule docs and plans are rewritten in place with no dates or incident log; the *why* behind a rule is one clause, and the history is `git log`.
 - **Measure before changing the harness.** Friction goes into `harness-backlog.md` with evidence; usage questions are answered from transcripts, not memory.
