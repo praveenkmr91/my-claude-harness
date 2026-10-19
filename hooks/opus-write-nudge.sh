@@ -4,8 +4,8 @@
 #        From Opus, after a typed prompt pairs implement/execute (incl. -s/-ed) with a plans/*.md path, blocks every
 #        source write until implementer was dispatched or this turn states `implementer: skip — open call: <item>`.
 #        No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
-#   post (PostToolUse, default): fires on the 6th distinct source file written, and again on the 15th unless
-#        implementer was dispatched.
+#   post (PostToolUse, default): from the 6th distinct source file on, fires on every new one until implementer was
+#        dispatched or this turn states an open-call skip. A one-shot nudge let an "urgent hotfix" skip through (2026-10-19).
 IN=$(cat)
 MODE=${1:-post}
 
@@ -26,7 +26,6 @@ dispatched() {
   jq -rR 'fromjson? | select(.type? == "assistant") | .message.content[]?
     | select(.type? == "tool_use" and .input.subagent_type? == "implementer") | .id' "$T" 2>/dev/null | head -1
 }
-VERDICT='State the call in your next reply as `implementer: dispatching` or `implementer: skip — <reason>`.'
 
 # Assistant text since the last typed prompt names an open plan call; a generic reason does not match.
 skipped() {
@@ -72,17 +71,12 @@ if [ "$MODE" = pre ]; then
 fi
 
 SEEN="/tmp/claude-opus-write-files-$SID"
-grep -qxF "$F" "$SEEN" 2>/dev/null || printf '%s\n' "$F" >>"$SEEN"
+grep -qxF "$F" "$SEEN" 2>/dev/null && exit 0
+printf '%s\n' "$F" >>"$SEEN"
 N=$(wc -l <"$SEEN" | tr -d ' ')
-if [ "$N" -ge 15 ]; then STAGE=15; elif [ "$N" -ge 6 ]; then STAGE=6; else exit 0; fi
-FLAG="/tmp/claude-opus-write-nudge-$SID-$STAGE"
-[ -e "$FLAG" ] && exit 0
-touch "$FLAG"
+[ "$N" -ge 6 ] || exit 0
+[ -n "$(dispatched)" ] && exit 0
+skipped && exit 0
 
-if [ "$STAGE" = 15 ]; then
-  [ -n "$(dispatched)" ] && exit 0
-  printf 'This Opus thread has now written 15 files itself with no `implementer` dispatch this session. Re-check the remainder against "Model tier by work KIND" (~/.claude/CLAUDE.md): approved-plan steps or a bulk mechanical remainder go to `implementer`, one step per dispatch.\n%s\n' "$VERDICT" >&2
-else
-  printf 'This Opus thread has now written 6 files itself. Per "Model tier by work KIND" (~/.claude/CLAUDE.md), direct writes are fine, but remaining approved-plan steps (names, props and paths settled) or a bulk mechanical remainder are cheaper dispatched to `implementer`, one step per dispatch.\n%s\n' "$VERDICT" >&2
-fi
+printf 'This Opus thread has now written %s source files itself with no `implementer` dispatch. Per ~/.claude/subagent-tiers.md, a settled fix (an approved plan step, or a direct ask whose result is fixed) goes to `implementer`, one step per dispatch. Dispatch it, or state `implementer: skip — open call: <the design call still undecided>`; urgency, size and already-loaded context are not open calls. This repeats on every new source file until one of the two happens.\n' "$N" >&2
 exit 2
