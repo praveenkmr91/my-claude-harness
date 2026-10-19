@@ -1,6 +1,6 @@
 ---
 name: reuse-analyzer
-effort: high
+effort: medium
 description: Reviews diffs for reuse failures in both directions — code that re-implements something already available one rung earlier on the dependency ladder (codebase sibling, Hydrogen, stdlib, platform, installed dep), and abstractions extracted for a single caller. Part of the standard code-review battery; give it the diff scope (usually unstaged git diff) when invoking.
 ---
 
