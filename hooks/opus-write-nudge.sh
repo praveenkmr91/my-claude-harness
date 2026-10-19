@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Write|Edit hook, advisory arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
-#   pre  (PreToolUse): from a Fable session, blocks every source write outright — Fable never writes code, no exit.
+#   pre  (PreToolUse): from a Fable session, blocks every source write outright — Fable never writes code unless the last typed prompt carries [tier-override: <why>].
 #        From Opus, after a typed prompt pairs implement/execute (incl. -s/-ed) with a plans/*.md path, blocks every
 #        source write until implementer was dispatched or this turn states `implementer: skip — open call: <item>`.
 #        No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
@@ -42,18 +42,27 @@ skipped() {
     | grep -qE 'implementer: skip[[:space:]]*(—|–|-)+[[:space:]]*open call:[[:space:]]*[^[:space:]]'
 }
 
+# Typed prompts only: tool_result blocks, isMeta records, compaction summaries and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths and override tags too.
+typed_prompts() {
+  jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not) and (.isCompactSummary | not)) | .message.content
+    | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
+    | select(length > 0 and ((test("^\\s*<") | not) or test("^\\s*<pasted_content")))
+    | gsub("\n"; " ")' 2>/dev/null
+}
+
+# Last typed prompt carries [tier-override: <why>] — the same escape enforce-subagent-model.sh takes; a new typed prompt without it re-arms.
+overridden() {
+  typed_prompts <"$T" | tail -1 | grep -q '\[tier-override:'
+}
+
 if [ "$MODE" = pre ]; then
   case "$MODEL" in *fable*)
-    printf 'This thread runs Fable, and Fable never writes code (~/.claude/subagent-tiers.md). Dispatch `implementer` with the exact edit (file, old text, new text, acceptance check); docs, config and plan files stay direct. No skip line lifts this and a retry stays blocked.\n' >&2
+    overridden && exit 0
+    printf 'This thread runs Fable, and Fable never writes code (~/.claude/subagent-tiers.md). Dispatch `implementer` with the exact edit (file, old text, new text, acceptance check); docs, config and plan files stay direct. No skip line lifts this and a retry stays blocked; a typed prompt carrying `[tier-override: <why>]` lifts it for that turn.\n' >&2
     exit 2 ;;
   esac
-  # Typed prompts only: tool_result blocks, isMeta records, compaction summaries and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths too.
   # No \b in the raw prefilter: JSONL stores a newline as `\n`, so "\nImplement" has no word boundary.
-  PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' \
-    | jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not) and (.isCompactSummary | not)) | .message.content
-        | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
-        | select((test("^\\s*<") | not) or test("^\\s*<pasted_content"))
-        | gsub("\n"; " ")' 2>/dev/null \
+  PLAN=$(grep -iE 'implement|execute' "$T" | grep -E 'plans/' | typed_prompts \
     | grep -iE '\b(implement|execute)(s|ed)?\b' | grep -oE '[^[:space:]`"]*plans/[^[:space:]`"]+\.md' | head -1)
   [ -n "$PLAN" ] || exit 0
   [ -n "$(dispatched)" ] && exit 0

@@ -169,6 +169,20 @@ test('opus write nudge — pre arm', async (t) => {
     assert.equal(pre({ sessionId: newSession(), transcriptPath: fableDispatched, file: '/tmp/a.tsx' }).code, 2);
   });
 
+  await t.test('fable session writes source when the last typed prompt carries [tier-override:]', () => {
+    const FABLE_LINE = { type: 'assistant', message: { model: 'claude-fable-5-1' } };
+    const write = (name, entries) => {
+      const p = path.join(tmpDir, `${name}.jsonl`);
+      fs.writeFileSync(p, entries.map((e) => JSON.stringify(e)).join('\n'));
+      return pre({ sessionId: newSession(), transcriptPath: p, file: '/tmp/a.tsx' }).code;
+    };
+    assert.equal(write('fableOverride', [FABLE_LINE, userLine('[tier-override: harness hook edit] go'), FABLE_LINE]), 0);
+    assert.equal(write('fableOverrideBlocks', [FABLE_LINE, userLine([{ type: 'text', text: 'go\n[tier-override: harness hook edit]' }]), FABLE_LINE]), 0);
+    assert.equal(write('fableOverrideStale', [FABLE_LINE, userLine('[tier-override: harness hook edit] go'), FABLE_LINE, userLine('now the test file'), FABLE_LINE]), 2);
+    assert.equal(write('fableOverrideInToolResult', [FABLE_LINE, userLine([{ type: 'tool_result', content: '[tier-override: x]' }]), FABLE_LINE]), 2);
+    assert.equal(write('fableOverrideInMeta', [FABLE_LINE, { type: 'user', isMeta: true, message: { content: '[tier-override: x]' } }, FABLE_LINE]), 2);
+  });
+
   await t.test('fable session still writes docs and config directly', () => {
     assert.equal(pre({ sessionId: newSession(), tier: 'fable', file: '/tmp/notes.md' }).code, 0);
     assert.equal(pre({ sessionId: newSession(), tier: 'fable', file: '/tmp/settings.json' }).code, 0);
