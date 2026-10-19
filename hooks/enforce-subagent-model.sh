@@ -50,8 +50,10 @@ if [ -n "$transcript" ] && [ -r "$transcript" ]; then
     | jq -rR 'fromjson? | select(.type? == "assistant") | .message.model // empty' 2>/dev/null \
     | tail -1)
   # Fable reviews code only on the user's say-so: the last typed turn contains a reserved
-  # bigram — "fable review", "fable battery", "fable consult", "fable opinion", or
-  # "consult fable" / "opinion fable" (any case) — or it approves a reply BEFORE it that
+  # bigram — "fable review", "fable battery", "fable consult", "fable opinion",
+  # "consult fable" / "opinion fable", "reviewed / checked by fable", "ask / get fable to
+  # review", or "have / let fable review" (any case; the trailing \b keeps a report like
+  # "fable reviewed it" from reading as an ask) — or it approves a reply BEFORE it that
   # carries the proposal phrase "Fable review?" / "Fable battery?". Anything looser
   # misfired on 2026-10-14: a heads-up saying "Fable-review gate" and a "yes" to an
   # unrelated question each opened the gate. The current turn's own text comes after that
@@ -69,7 +71,7 @@ if [ -n "$transcript" ] && [ -r "$transcript" ]; then
   last_user_text=$(echo "$turns" | jq -r 'map(select(.type == "user")) | last | .text // empty' 2>/dev/null)
   proposal_text=$(echo "$turns" | jq -r '(map(.type == "user") | rindex(true)) as $i
         | if $i == null then empty else .[:$i] | map(select(.type == "assistant")) | last | .text // empty end' 2>/dev/null)
-  if printf '%s' "$last_user_text" | grep -Eiq 'fable (review|battery|consult|opinion)|(consult|opinion) fable'; then
+  if printf '%s' "$last_user_text" | grep -Eiq 'fable (review|battery|consult|opinion)\b|(consult|opinion) fable\b|(review(ed)?|check(ed)?) by fable\b|(ask|get) fable to (review|check)\b|(have|let) fable (review|check)\b'; then
     fable_asked=true
   fi
   if [ "$fable_asked" != true ] && [ -n "$proposal_text" ] \

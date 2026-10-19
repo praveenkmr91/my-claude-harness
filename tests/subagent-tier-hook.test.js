@@ -42,6 +42,14 @@ fs.writeFileSync(transcripts.fableUserMention, [userMentionTurn, fableTurn].join
 const consultTurn = JSON.stringify({ type: 'user', message: { content: '/consult fable on the Label design' } });
 transcripts.fableConsultAsk = path.join(tmpDir, 'fable-consult-ask.jsonl');
 fs.writeFileSync(transcripts.fableConsultAsk, [consultTurn, fableTurn].join('\n'));
+const opusTurn = JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-5' } });
+const typedAsk = (text) => JSON.stringify({ type: 'user', message: { content: text } });
+transcripts.opusReviewedByAsk = path.join(tmpDir, 'opus-reviewed-by-ask.jsonl');
+transcripts.opusHaveFableReviewAsk = path.join(tmpDir, 'opus-have-fable-review-ask.jsonl');
+transcripts.opusFableReviewedYesterday = path.join(tmpDir, 'opus-fable-reviewed-yesterday.jsonl');
+fs.writeFileSync(transcripts.opusReviewedByAsk, [typedAsk('get it reviewed by fable'), opusTurn].join('\n'));
+fs.writeFileSync(transcripts.opusHaveFableReviewAsk, [typedAsk('have fable review the diff'), opusTurn].join('\n'));
+fs.writeFileSync(transcripts.opusFableReviewedYesterday, [typedAsk('fable reviewed it yesterday, looks fine'), opusTurn].join('\n'));
 transcripts.fableMentionThenYes = path.join(tmpDir, 'fable-mention-then-yes.jsonl');
 fs.writeFileSync(transcripts.fableMentionThenYes, [mentionTurn, yesTurn, fableTurn].join('\n'));
 fs.writeFileSync(transcripts.fableProposalApproved, [proposalTurn, yesTurn, fableTurn].join('\n'));
@@ -133,6 +141,34 @@ test.describe('subagent tier hook', () => {
   test('general-purpose + model fable, fable session, user typed "consult fable" -> deny (it can write)', () => {
     assert.equal(
       verdict(payload({ subagentType: 'general-purpose', model: 'fable', transcriptPath: transcripts.fableConsultAsk })),
+      'deny',
+    );
+  });
+
+  test('code-reviewer + model fable, opus session, user typed "get it reviewed by fable" -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.opusReviewedByAsk })),
+      'inherit',
+    );
+  });
+
+  test('code-reviewer + model fable, opus session, user typed "have fable review the diff" -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.opusHaveFableReviewAsk })),
+      'inherit',
+    );
+  });
+
+  test('code-reviewer + model fable, opus session, user typed "fable reviewed it yesterday" -> deny', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.opusFableReviewedYesterday })),
+      'deny',
+    );
+  });
+
+  test('general-purpose + model fable, opus session, user typed "get it reviewed by fable" -> deny (it can write)', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'general-purpose', model: 'fable', transcriptPath: transcripts.opusReviewedByAsk })),
       'deny',
     );
   });
