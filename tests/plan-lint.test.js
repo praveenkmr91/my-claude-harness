@@ -227,6 +227,16 @@ test('check P3', async (t) => {
     assert.deepEqual(rulesOf(text), []);
   });
 
+  await t.test('passes a step whose verify a formatter wrapped after the arrow', () => {
+    const text = ['## Steps', '', '1. Wire it up. Serves A1. →', '   verify: `npx tsc --noEmit` clean.'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('fails a step with a dangling arrow and no verify', () => {
+    const text = ['## Steps', '', '1. Wire it up. Serves A1. →', '   then lint it.'].join('\n');
+    assert.deepEqual(check(text).findings, ['3 P3 1. Wire it up. Serves A1. →']);
+  });
+
   await t.test('fails a plain numbered step under Steps that has no verify line', () => {
     const text = ['## Steps', '', '1. Create the file. → verify: `ls`', '2. Wire it up.'].join('\n');
     assert.deepEqual(check(text).findings, ['4 P3 2. Wire it up.']);

@@ -156,7 +156,7 @@ function unverifiedSteps(lines) {
     );
     const step = lines.slice(index, stepEnd === -1 ? undefined : stepEnd);
 
-    return step.some((stepLine) => stepLine.includes('→ verify:'))
+    return step.join(' ').replace(/\s+/g, ' ').includes('→ verify:')
       ? []
       : [{ line: index + 1, rule: 'P3', text: line.trim() }];
   });
