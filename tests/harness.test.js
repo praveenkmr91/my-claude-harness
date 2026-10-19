@@ -331,7 +331,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/commit-trailer-check.sh', /co-authored-by/i, 'committing.md', /commit-trailer-check\.sh/],
     ['hooks/block-dangerous-git.sh', /push and PR need a yes/, 'committing.md', /`gh pr create` hook-asked/],
     ['hooks/done-claim-gate.sh', /ran git commit/, 'committing.md', /Stop gate checks lint and lenses on any committing turn/],
-    ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied outright for review\/planning agents/],
+    ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied for review\/planning agents \(one exception/],
     ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'subagent-tiers.md', /\| Explore \| Haiku always/],
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'subagent-tiers.md', /sub-Opus session the hook injects opus/],
     ['settings.json', /inject-once\.sh subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],

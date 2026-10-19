@@ -6,7 +6,8 @@
 | comment-analyzer, modern-ts-analyzer | `model: "opus"` — single-pass lenses; still review work, so Opus and never the Sonnet mechanical tier |
 | pr-test-analyzer | `model: "opus"`; only when package.json scripts has a test runner — a "missing tests" nag on a repo with no suite is noise |
 
-- Members run on Opus even from a Fable session; the tier hook places them there unless Praveen's last typed turn contains `fable battery` or says yes to a reply that ends a sentence with `Fable battery?`, the reserved phrase the hook keys on. Propose it only when the diff earns it, cost named.
+- Members run on Opus even from a Fable session; the tier hook places them there unless Praveen's last typed turn contains `fable battery` / `battery fable` or says yes to a reply that ends a sentence with `Fable battery?`, the reserved phrase the hook keys on. Propose it only when the diff earns it, cost named.
+- A model typed with the verb (`fable battery`, `battery sonnet`) goes to every member as `model:`, overriding the table. Sonnet is his cheap pass, never proposed: the launch line says so, since it missed real bugs Opus found in the 2026-10-04 tier eval. Haiku stays denied.
 - HIGH risk flagged by the routing hook → add adversarial-reviewer + security-review on the main thread. Bulk flagged → add /delete-list + /shortcut-debt. Neither flag → the members above, nothing more.
 - The launch line names the diff under review (e.g. "plan commit `00b1bfa5`, local, no PR"): the `pr-review-toolkit:` prefix is only the plugin the agents ship in, and it reads as a PR flow when no PR exists.
 - All output is leads; confirm each at source before relaying.

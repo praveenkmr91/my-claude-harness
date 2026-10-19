@@ -43,6 +43,7 @@ rank() {
 
 session_model=""
 fable_asked=false
+sonnet_battery_asked=false
 if [ -n "$transcript" ] && [ -r "$transcript" ]; then
   # -R + fromjson?: tolerate the partial first line a byte-offset tail can produce.
   tail_slice=$(tail -c 200000 "$transcript" 2>/dev/null)
@@ -50,8 +51,8 @@ if [ -n "$transcript" ] && [ -r "$transcript" ]; then
     | jq -rR 'fromjson? | select(.type? == "assistant") | .message.model // empty' 2>/dev/null \
     | tail -1)
   # Fable reviews code only on the user's say-so: the last typed turn contains a reserved
-  # bigram — "fable review", "fable battery", "fable consult", "fable opinion",
-  # "consult fable" / "opinion fable", "reviewed / checked by fable", "ask / get fable to
+  # bigram — "fable review", "fable battery" / "battery (on) fable", "fable consult",
+  # "fable opinion", "consult fable" / "opinion fable", "reviewed / checked by fable", "ask / get fable to
   # review", or "have / let fable review" (any case; the trailing \b keeps a report like
   # "fable reviewed it" from reading as an ask) — or it approves a reply BEFORE it that
   # carries the proposal phrase "Fable review?" / "Fable battery?". Anything looser
@@ -71,13 +72,17 @@ if [ -n "$transcript" ] && [ -r "$transcript" ]; then
   last_user_text=$(echo "$turns" | jq -r 'map(select(.type == "user")) | last | .text // empty' 2>/dev/null)
   proposal_text=$(echo "$turns" | jq -r '(map(.type == "user") | rindex(true)) as $i
         | if $i == null then empty else .[:$i] | map(select(.type == "assistant")) | last | .text // empty end' 2>/dev/null)
-  if printf '%s' "$last_user_text" | grep -Eiq 'fable (review|battery|consult|opinion)\b|(consult|opinion) fable\b|(review(ed)?|check(ed)?) by fable\b|(ask|get) fable to (review|check)\b|(have|let) fable (review|check)\b'; then
+  if printf '%s' "$last_user_text" | grep -Eiq 'fable (review|battery|consult|opinion)\b|battery (on |with |using )?fable\b|(consult|opinion) fable\b|(review(ed)?|check(ed)?) by fable\b|(ask|get) fable to (review|check)\b|(have|let) fable (review|check)\b'; then
     fable_asked=true
   fi
   if [ "$fable_asked" != true ] && [ -n "$proposal_text" ] \
       && printf '%s' "$proposal_text" | grep -Eq '[Ff]able (review|battery)\?' \
       && printf '%s' "$last_user_text" | grep -Eiq '^[[:space:]]*(y|yes|yep|yeah|ok|okay|sure|go|go ahead|do it|apply|approved|proceed)\b'; then
     fable_asked=true
+  fi
+  # A cheap battery is typed only, never proposed: no yes-to-a-proposal path.
+  if printf '%s' "$last_user_text" | grep -Eiq 'sonnet battery\b|battery (on |with |using )?sonnet\b'; then
+    sonnet_battery_asked=true
   fi
 fi
 session_rank=$(rank "$session_model")
@@ -97,10 +102,12 @@ case "$subagent_type" in
 esac
 
 if [ "$override" != "true" ]; then
-  # A Sonnet or Haiku verdict on code is not an oracle.
+  # A Sonnet or Haiku verdict on code is not an oracle, unless the user typed for a Sonnet battery.
   if [ "$is_brain_agent" = true ]; then
+    below_tier="\"$subagent_type\" is review/planning work: it runs on opus (~/.claude/subagent-tiers.md). Pass model \"opus\", or omit model to have this hook place it."
     case "$child_model" in
-      *sonnet*|*haiku*) deny "\"$subagent_type\" is review/planning work: it runs on opus (~/.claude/subagent-tiers.md). Pass model \"opus\", or omit model to have this hook place it." ;;
+      *sonnet*) { [ "$sonnet_battery_asked" = true ] && [ "$subagent_type" != "Plan" ]; } || deny "$below_tier" ;;
+      *haiku*) deny "$below_tier" ;;
     esac
   fi
   # Fable reviews a plan. Exact match only: a glob here would hand the costliest tier to
