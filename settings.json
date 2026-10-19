@@ -51,6 +51,7 @@
       "mcp__chrome-devtools__performance_stop_trace",
       "mcp__chrome-devtools__performance_analyze_insight",
       "mcp__chrome-devtools__take_heapsnapshot",
+      "mcp__chrome-devtools__evaluate_script",
       "Bash(node --test ~/.claude/tests/*.test.js)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
