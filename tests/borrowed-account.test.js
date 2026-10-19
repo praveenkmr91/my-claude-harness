@@ -34,6 +34,7 @@ test('borrowed-account hook', async (t) => {
     assert.match(out, /^BORROWED ACCOUNT \(willy\)/);
     assert.match(out, /everything is done in his name/);
     assert.match(out, /stop and report instead of posting/);
+    assert.match(out, /Never write anything under .*\.claude-willy/);
   });
 
   await t.test('a config dir without .profile-name stays quiet', () => {
