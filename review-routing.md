@@ -2,7 +2,7 @@
 - Six verbs are the only entry points; everything else is a lens a verb pulls in.
 - Default ask is **review**; the hook's `<review-joins>` line picks verb + lenses — load exactly those.
 - A named verb overrides the hook's `verb=`, the heavier of two (battery > harden > review); its `lenses=` still ride along.
-- Announce the pass in one line, then do it — main thread, session tier, unless the verb says otherwise.
+- Announce the pass as `Pass: <verb>`, then do it — main thread, session tier, unless the verb says otherwise.
 - Effort (`effort=` on the joins line, only when the ask states one; xhigh / max read as high) sets depth, never members. **low** → report only findings verified at source with a reproduced failure scenario. **medium** or unstated → as below. **high** → every joined lens dispatched as an agent, and findings 60-74 also reported, tagged uncertain. A stated level goes to the `code-review` skill on PR asks, and raises an agent's `effort` above its frontmatter, never lowers it. It overrides the per-lens and threshold rules below. A joins line without `lenses=` means nothing was in scope: the verb row's members apply.
 
 | Verb | Members | Runs as |

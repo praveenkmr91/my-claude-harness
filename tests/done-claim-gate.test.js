@@ -250,30 +250,38 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [listing] }), 2);
   });
 
-  await t.test('a review verb named in the prompt needs real member calls, even on a no-edit turn', () => {
+  await t.test('a `Pass: <verb>` line in the reply needs real member calls, even on a no-edit turn', () => {
     const agent = (subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } });
     const skill = (name) => ({ type: 'tool_use', name: 'Skill', input: { skill: name } });
-    const { status, stderr } = runFull('adversarial-reviewer: 0 findings\nsecurity-review: 0 findings', { editedFile: null, prompt: 'harden the auth hook' });
+    const { status, stderr } = runFull('Pass: harden\nadversarial-reviewer: 0 findings\nsecurity-review: 0 findings', { editedFile: null });
     assert.equal(status, 2);
-    assert.match(stderr, /NAMED VERB NOT RUN[\s\S]*`harden`[\s\S]*adversarial-reviewer, security-review/);
-    assert.equal(run('Two findings below.', { editedFile: null, prompt: 'harden the auth hook', reviews: [skill('adversarial-reviewer'), skill('security-review')] }), 0);
+    assert.match(stderr, /NAMED VERB NOT RUN[\s\S]*`Pass: harden`[\s\S]*adversarial-reviewer, security-review/);
+    assert.equal(run('Pass: harden\nTwo findings below.', { editedFile: null, reviews: [skill('adversarial-reviewer'), skill('security-review')] }), 0);
     const battery = ['code-reviewer', 'silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'comment-analyzer', 'modern-ts-analyzer'];
-    assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery', reviews: battery.slice(1).map(agent) }), 2);
-    assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery', reviews: battery.map((m) => agent(`pr-review-toolkit:${m}`)) }), 0);
+    assert.equal(run('Pass: battery\nFindings below.', { editedFile: null, reviews: battery.slice(1).map(agent) }), 2);
+    assert.equal(run('Pass: battery\nFindings below.', { editedFile: null, reviews: battery.map((m) => agent(`pr-review-toolkit:${m}`)) }), 0);
+  });
+
+  await t.test('a bullet, bold or backtick `Pass:` label counts as the announcement', () => {
+    assert.equal(run('- **Pass:** trim\nFindings below.', { editedFile: null }), 2);
+    assert.equal(run('`Pass:` trim\nFindings below.', { editedFile: null }), 2);
+    assert.equal(run('pass: trim\nFindings below.', { editedFile: null }), 2);
   });
 
   await t.test('a named-verb member declared `not run — <reason>` counts as handled; undeclared members stay missing', () => {
-    const opts = { editedFile: null, prompt: 'harden the auth hook' };
-    assert.equal(run('security-review: not run — ran last turn on the same diff\nadversarial-reviewer: not run — same', opts), 0);
-    const { status, stderr } = runFull('security-review: not run — ran last turn on the same diff', opts);
+    const opts = { editedFile: null };
+    assert.equal(run('Pass: harden\nsecurity-review: not run — ran last turn on the same diff\nadversarial-reviewer: not run — same', opts), 0);
+    const { status, stderr } = runFull('Pass: harden\nsecurity-review: not run — ran last turn on the same diff', opts);
     assert.equal(status, 2);
     assert.match(stderr, /no Skill\/Agent call ran for adversarial-reviewer\./);
     assert.match(stderr, /`<member>: not run — <reason>`/);
   });
 
-  await t.test('a ticket key is not the trim verb', () => {
-    assert.equal(run('Fix is below.', { editedFile: null, prompt: 'ticket: https://x.atlassian.net/browse/TRIM-48' }), 0);
-    assert.equal(run('Findings below.', { editedFile: null, prompt: 'trim the diff' }), 2);
+  await t.test('talking about a verb is not announcing it: the prompt is never read, and `Pass:` must start a line', () => {
+    assert.equal(run('Findings below.', { editedFile: null, prompt: 'run the battery' }), 0);
+    assert.equal(run('The battery now accepts a model.', { editedFile: null, prompt: 'i want battery review to also accept model' }), 0);
+    assert.equal(run('See Pass: battery in the routing doc.', { editedFile: null }), 0);
+    assert.equal(run('', { editedFile: null }), 0);
   });
 
   await t.test('isMeta records (skill bodies, hand-backs, hook feedback) do not reset the turn', () => {
@@ -283,15 +291,11 @@ test('done-claim gate', async (t) => {
       { type: 'user', message: { content: 'harden the auth hook' } },
       { type: 'assistant', message: { content: [skill('adversarial-reviewer'), skill('security-review')] } },
       { type: 'user', isMeta: true, message: { content: 'You are a senior security engineer doing a security review' } },
-      { type: 'user', isMeta: true, message: { content: 'Stop hook feedback: the prompt asks for `trim`' } },
-      { type: 'assistant', message: { content: [{ type: 'text', text: 'Two findings below.' }] } },
+      { type: 'user', isMeta: true, message: { content: 'Stop hook feedback: this reply announces `Pass: trim`' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Pass: harden\nTwo findings below.' }] } },
     ].map((r) => JSON.stringify(r)).join('\n'));
     const { status } = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
     assert.equal(status, 0);
-  });
-
-  await t.test('a question about a verb is not a request for it', () => {
-    assert.equal(run('It runs seven agents.', { editedFile: null, prompt: 'what does the battery run?' }), 0);
   });
 
   await t.test('an implementer nudge needs a dispatch or verdict line in the same turn', () => {

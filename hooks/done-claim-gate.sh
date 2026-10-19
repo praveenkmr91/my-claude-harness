@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stop hook: claim = first line only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
 # One-shot: stop_hook_active passes the retry unchecked, so the block message must carry the exact verdict format.
-# Claim and lens checks fire only on turns that edited a code file — answers, commits and doc edits carry no runtime claim. A review verb named in the prompt is checked on every turn.
+# Claim and lens checks fire only on turns that edited a code file — answers, commits and doc edits carry no runtime claim. A `Pass: <verb>` line in the reply is checked on every turn.
 
 INPUT=$(cat)
 python3 - "$INPUT" <<'PY'
@@ -20,7 +20,7 @@ def lens_ran(b):
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
-texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; prompt=''; nudged=False
+texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; nudged=False
 for line in open(path):
     try: r=json.loads(line)
     except: continue
@@ -30,7 +30,7 @@ for line in open(path):
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta'):
-            texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; prompt=txt; nudged=False
+            texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; nudged=False
         if not isinstance(c,str):
             for b in c or []:
                 if isinstance(b,dict) and b.get('type')=='tool_result': results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
@@ -51,17 +51,16 @@ for line in open(path):
 final=inp.get('last_assistant_message')
 if isinstance(final,str) and final.strip() and (not texts or texts[-1].strip()!=final.strip()): texts.append(final)
 problems=[]
-# Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. Triggers omit the aliases `simplify` and `break it` on purpose: they collide with build asks.
+# Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
 NAMED_VERBS={
-    'battery':(r'\b(battery|full review|deep review|thorough review)\b',['code-reviewer','silent-failure-hunter','type-design-analyzer','reuse-analyzer','placement-analyzer','comment-analyzer','modern-ts-analyzer']),
-    'harden':(r'\b(harden|security review|bug hunt|adversarial)\b',['adversarial-reviewer','security-review']),
-    'trim':(r'\b(trim|de-vibe)\b(?!-\d)',['delete-list','simplify','comment-analyzer','modern-ts-analyzer','shortcut-debt']),
+    'battery':['code-reviewer','silent-failure-hunter','type-design-analyzer','reuse-analyzer','placement-analyzer','comment-analyzer','modern-ts-analyzer'],
+    'harden':['adversarial-reviewer','security-review'],
+    'trim':['delete-list','simplify','comment-analyzer','modern-ts-analyzer','shortcut-debt'],
 }
-if not prompt.rstrip().endswith('?'):
-    for verb,(pattern,members) in NAMED_VERBS.items():
-        if not re.search(pattern,prompt,re.I): continue
-        missing=[m for m in members if m not in ran and not re.search(label_open+re.escape(m)+label_close+r'not run[ \t]*[—–:-][ \t]*\S','\n'.join(texts),re.M)]
-        if missing: problems.append(f"NAMED VERB NOT RUN: the prompt asks for `{verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or write `<member>: not run — <reason>` for each one you are not running.")
+for verb,members in NAMED_VERBS.items():
+    if not re.search(label_open+r'Pass'+label_close+verb+r'\b','\n'.join(texts),re.M|re.I): continue
+    missing=[m for m in members if m not in ran and not re.search(label_open+re.escape(m)+label_close+r'not run[ \t]*[—–:-][ \t]*\S','\n'.join(texts),re.M)]
+    if missing: problems.append(f"NAMED VERB NOT RUN: this reply announces `Pass: {verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or write `<member>: not run — <reason>` for each one you are not running.")
 if nudged and 'implementer' not in ran and not re.search(label_open+r'implementer'+label_close+r'(?:dispatching\b|'+skip_reason+r')','\n'.join(texts),re.M):
     problems.append("IMPLEMENTER NUDGE UNANSWERED: opus-write-nudge fired this turn and no `implementer` dispatch or verdict line followed. Write `implementer: dispatching` (and dispatch) or `implementer: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')

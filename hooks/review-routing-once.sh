@@ -7,7 +7,7 @@ grep -qiE '\b(review|audit|de-?vibe|modern|simplif|comments|clean ?up|tidy|verif
 SID=$(jq -r '.session_id // empty' <<<"$IN")
 FLAG="/tmp/claude-review-routing-$SID"
 if [ -n "$SID" ] && [ -e "$FLAG" ]; then
-  echo "<review-routing>applies (injected earlier this session; re-Read ~/.claude/review-routing.md if it scrolled out of context). Announce the chosen pass in one line, then do it.</review-routing>"
+  echo "<review-routing>applies (injected earlier this session; re-Read ~/.claude/review-routing.md if it scrolled out of context). Announce the chosen pass as a \`Pass: <verb>\` line, then do it.</review-routing>"
 else
   cat "$HOME/.claude/review-routing.md"
 fi

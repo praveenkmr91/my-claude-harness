@@ -344,6 +344,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/comment-delta-check.js', /ZERO by default/, 'code-craft.md', /default to ZERO/],
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'code-craft.md', /Surgical on build tasks/],
     ['hooks/done-claim-gate.sh', /REVIEW NOT RUN/, 'review-routing.md', /Stop gate blocks/],
+    ['hooks/done-claim-gate.sh', /'Pass'/, 'review-routing.md', /`Pass: <verb>`/],
     ['hooks/done-claim-gate.sh', /LINT\/TSC NOT RUN/, 'CLAUDE.md', /run linter \+ type checker/],
     ['hooks/block-dangerous-git.sh', /updatedInput/, 'CLAUDE.md', /auto-quotes unquoted/],
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
