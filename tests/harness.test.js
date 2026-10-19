@@ -178,6 +178,24 @@ test('review-routing: high-risk matches whole words, not substrings', () => {
   fs.rmSync(`/tmp/claude-review-routing-${sessionId}`, { force: true });
 });
 
+test('review-routing: subagent hand-backs do not trigger routing', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'routing-handback-'));
+  fs.mkdirSync(path.join(home, '.claude'));
+  fs.writeFileSync(path.join(home, '.claude', 'review-routing.md'), 'ROUTED');
+  const repo = path.join(home, 'repo');
+  fs.mkdirSync(repo);
+  fs.writeFileSync(path.join(repo, 'a.ts'), '');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  const run = (prompt, sessionId) => execFileSync('bash', [path.join(ROOT, 'hooks', 'review-routing-once.sh')], { input: JSON.stringify({ prompt, session_id: sessionId }), cwd: repo, encoding: 'utf8', env: { ...process.env, HOME: home } });
+  const firingId = `harness-fire-${process.pid}-${Date.now()}`;
+  const handBackId = `harness-handback-${process.pid}-${Date.now()}`;
+  assert.match(run('review high', firingId), /ROUTED/);
+  assert.equal(run('<agent-message from="a1">Reviewed it; review high effort=high</agent-message>', handBackId), '');
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(`/tmp/claude-review-routing-${firingId}`, { force: true });
+  fs.rmSync(`/tmp/claude-review-routing-${handBackId}`, { force: true });
+});
+
 test('review-routing: PR asks trigger and scope lenses to the PR diff', () => {
   const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'routing-pr-'));
   fs.mkdirSync(path.join(home, '.claude'));
@@ -330,6 +348,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/block-dangerous-git.sh', /updatedInput/, 'CLAUDE.md', /auto-quotes unquoted/],
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
     ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
+    ['hooks/review-classify.sh', /effort=\$EFFORT/, 'review-routing.md', /`effort=` on the joins line/],
     ['hooks/bash-write-guard.js', /Use Write or Edit/, 'harness.md', /bash-write-guard\.js` blocks them/],
     ['hooks/docs-context.sh', /library-docs\.md/, 'CLAUDE.md', /cites `pkg@x\.y\.z`/],
     ['hooks/plan-lint.js', /rephrase as an instruction/, 'plan-mode.md', /plan-lint\.js` refuses/],

@@ -10,6 +10,11 @@ if [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
 fi
 # A named PR replaces session scope: a colleague's PR has no edits here and a clean tree.
 P=$(jq -r '.prompt // ""' <<<"$IN")
+# Stated forms only: a bare level word also reads "high-risk", "low priority", "--max-findings".
+EFFORT=$(grep -oiE '\beffort[ =:]+(low|medium|x?high|max)\b|\b(low|medium|x?high|max)[ -]effort\b|\b(review|battery|harden|trim|audit|verify) (low|medium|x?high|max)([[:space:].,;:!?]|$)' <<<"$P" \
+  | grep -oiE '(low|medium|x?high|max)' | head -1 | tr '[:upper:]' '[:lower:]')
+case "$EFFORT" in xhigh|max) EFFORT=high;; esac
+no_scope() { [ -n "$EFFORT" ] && echo "<review-joins effort=$EFFORT>"; exit 0; }
 PR=""; PR_DIFF=""
 if grep -qiE '\b(check|review)(ing)? (out |over )?(the |my |this |that |a )?(PR|pull request)s?\b|github\.com/[^ ]+/pull/[0-9]+' <<<"$P" && command -v gh >/dev/null 2>&1; then
   PR=$(grep -oE 'https://github\.com/[^[:space:]]+/pull/[0-9]+' <<<"$P" | head -1)
@@ -19,7 +24,7 @@ fi
 if [ -n "$PR_DIFF" ]; then
   FILES=$(sed -nE 's#^diff --git a/.* b/(.*)$#\1#p' <<<"$PR_DIFF" | sort -u)
 else
-  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || no_scope
   TOP=$(git rev-parse --show-toplevel)
   # The dirty tree often carries another task's in-flight work; it is scope only when this session edited nothing here.
   SCOPED=$(printf '%s\n' "$EDITED" | sed -n "s#^$TOP/##p" | sort -u)
@@ -39,7 +44,7 @@ if [ -n "$SCOPED" ]; then
   while IFS= read -r f; do [ -n "$f" ] && SCOPE_CODE+=("$f"); done < <(grep -E '\.(ts|tsx|js|jsx|mjs|cjs|vue)$' <<<"$SCOPED" | grep -vE '\.(test|spec)\.|__tests__/|^tests/')
   [ ${#SCOPE_CODE[@]} -eq 0 ] && NO_CODE=yes
 fi
-[ -n "$FILES" ] || exit 0
+[ -n "$FILES" ] || no_scope
 REACT=no; grep -qE '\.(tsx|jsx)$|/use-[a-z0-9-]+\.ts$' <<<"$FILES" && REACT=yes
 STYLED=no; grep -qE '\.(tsx|jsx|vue|css|scss|less)$' <<<"$FILES" && STYLED=yes
 # Repo-agnostic on purpose; this runs in every repo. Whole-word match after a camelCase split —
@@ -81,4 +86,4 @@ if jq -e '(.scripts.test // "") as $t | $t != "" and ($t | test("no test specifi
   && grep -qE '\.(ts|tsx|js|jsx|vue)$' <<<"$FILES" && ! grep -qE '\.(test|spec)\.|__tests__/|(^|/)tests?/' <<<"$FILES"; then
   lens pr-test-analyzer
 fi
-echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT styled=$STYLED high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}>"
+echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT styled=$STYLED high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}${EFFORT:+ effort=$EFFORT}>"
