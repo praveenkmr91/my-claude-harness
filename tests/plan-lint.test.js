@@ -316,6 +316,84 @@ test('check P6', async (t) => {
   });
 });
 
+test('check P7', async (t) => {
+  const P7_HINT = 'name each criterion in the step that delivers it';
+  const REPHRASE_HINT =
+    'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
+  const A2_UNNAMED = ['## Criteria', '', '- A1: first', '- A2: second', '', '## Step 1: hook (A1)'];
+
+  await t.test('fails a criterion that no step names, at the criterion line', () => {
+    assert.deepEqual(check(A2_UNNAMED.join('\n')).findings, ['4 P7 criterion A2 has no step']);
+  });
+
+  await t.test('does not read A10 as naming A1', () => {
+    const text = ['## Criteria', '', '- A1: first', '- A10: tenth', '', '## Step 1: hook (A10)'].join('\n');
+    assert.deepEqual(check(text).findings, ['3 P7 criterion A1 has no step']);
+  });
+
+  await t.test('does not count a name under Decided, Open or inside a fence', () => {
+    const decided = [...A2_UNNAMED, '', '## Decided', '', '- A2 is settled'];
+    const open = [...A2_UNNAMED, '', '## Open', '', '- A2 is undecided'];
+    const fenced = [...A2_UNNAMED, '', '```', 'A2', '```'];
+    assert.deepEqual(check(decided.join('\n')).findings, ['4 P7 criterion A2 has no step']);
+    assert.deepEqual(check(open.join('\n')).findings, ['4 P7 criterion A2 has no step']);
+    assert.deepEqual(check(fenced.join('\n')).findings, ['4 P7 criterion A2 has no step']);
+  });
+
+  await t.test('passes a range, in all three forms, and an S<n> heading', () => {
+    const criteria = ['## Criteria', '', '- A1: first', '- A2: second', '- A3: third', '- A4: fourth', ''];
+    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1–A4)'].join('\n')), []);
+    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1-A4)'].join('\n')), []);
+    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1-4)'].join('\n')), []);
+    assert.deepEqual(rulesOf([...criteria, '## S1 — hook (A1–A2)', '', '## S2 — rules (A3-A4)'].join('\n')), []);
+  });
+
+  await t.test('names a criterion from the body of a step section', () => {
+    const text = ['## Criteria', '', '- A1: first', '', '## Steps', '', '- Wire it up (A1).'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('passes bold and backticked criterion bullets', () => {
+    const text = ['## Criteria', '', '- **A1**: first', '- `A2`: second', '', '## Step 1: hook (A1, A2)'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('reads an Acceptance and an acceptance criteria heading', () => {
+    assert.deepEqual(check(A2_UNNAMED.join('\n').replace('## Criteria', '## Acceptance')).findings, ['4 P7 criterion A2 has no step']);
+    assert.deepEqual(check(A2_UNNAMED.join('\n').replace('## Criteria', '## acceptance criteria')).findings, [
+      '4 P7 criterion A2 has no step',
+    ]);
+  });
+
+  await t.test('passes criteria with no step section, and an empty file', () => {
+    assert.deepEqual(rulesOf(['## Criteria', '', '- A1: first'].join('\n')), []);
+    assert.deepEqual(rulesOf(''), []);
+  });
+
+  await t.test('does not read a bullet inside a fence under Criteria as a criterion', () => {
+    const text = ['## Criteria', '', '- A1: first', '', '```', '- A3: third', '```', '', '## Step 1: hook (A1)'].join('\n');
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('ends with the P7 hint alone, and with the rephrase hint when another rule fires', () => {
+    const alone = check(A2_UNNAMED.join('\n'));
+    assert.equal(alone.code, 1);
+    assert.equal(alone.stderr.trimEnd().split('\n').at(-1), P7_HINT);
+    assert.doesNotMatch(alone.stderr, /rephrase/);
+
+    const withP1 = check(['I checked it.', ...A2_UNNAMED].join('\n'));
+    assert.deepEqual(withP1.findings, ['1 P1 I checked it.', '5 P7 criterion A2 has no step']);
+    assert.deepEqual(withP1.stderr.trimEnd().split('\n').slice(-2), [P7_HINT, REPHRASE_HINT]);
+  });
+
+  await t.test('post exits 2 with the P7 line for a plan on disk', () => {
+    const file = planFile(path.join(tmpDir, 'post-p7'), 'x.md', A2_UNNAMED.join('\n'));
+    const res = run('post', { file_path: file });
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /4 P7 criterion A2 has no step/);
+  });
+});
+
 test('check CLI', async (t) => {
   await t.test('exits 0 silently on a clean file', () => {
     const res = check('Add the key.\n');

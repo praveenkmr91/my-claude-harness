@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const PLAN_PATH = /(^|\/)plans\/[^/]+(?<!\.research)\.md$/;
 const REPHRASE =
   'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
+const NAME_CRITERIA = 'name each criterion in the step that delivers it';
 
 const FIRST_PERSON = /\bI\b/;
 const JOURNAL_MARKER =
@@ -29,6 +30,12 @@ const STEP = /^(\d+\. \*\*|#{3,4} \d+\.)/;
 const STEPS_HEADING = /^## Steps\b/i;
 const PLAIN_STEP = /^\d+\. /;
 const TOP_LEVEL_BULLET = /^- /;
+
+const CRITERIA_HEADING = /^## (Criteria|Acceptance criteria|Acceptance)\s*$/i;
+const CRITERION = /^- (?:\*\*|`)?A(\d+)\b/;
+const STEP_SECTION_HEADING = /^## (Step|Chunk|S\d)/i;
+const CRITERION_NAME = /\bA(\d+)\b/g;
+const CRITERION_RANGE = /\bA(\d+)[–-]A?(\d+)\b/g;
 
 const PARAGRAPH_LIMIT = 200;
 const CONTEXT_PARAGRAPH_LIMIT = 500;
@@ -197,6 +204,45 @@ function longOpenBullets(lines) {
   return findings;
 }
 
+function namedCriteria(line) {
+  const single = [...line.matchAll(CRITERION_NAME)].map((match) => Number(match[1]));
+  const ranged = [...line.matchAll(CRITERION_RANGE)].flatMap((match) => {
+    const [from, to] = [Number(match[1]), Number(match[2])];
+    return Array.from({ length: Math.max(to - from + 1, 0) }, (_, offset) => from + offset);
+  });
+
+  return [...single, ...ranged];
+}
+
+function criteriaWithoutStep(lines) {
+  const criteria = [];
+  const named = new Set();
+  let section = '';
+  let hasStepSection = false;
+
+  lines.forEach((line, index) => {
+    if (SECTION_HEADING.test(line)) {
+      section = '';
+      if (CRITERIA_HEADING.test(line)) section = 'criteria';
+      if (STEP_SECTION_HEADING.test(line)) {
+        section = 'step';
+        hasStepSection = true;
+      }
+    }
+
+    if (section === 'step') namedCriteria(line).forEach((number) => named.add(number));
+
+    const criterion = section === 'criteria' ? CRITERION.exec(line) : null;
+    if (criterion) criteria.push({ line: index + 1, number: Number(criterion[1]) });
+  });
+
+  if (!hasStepSection) return [];
+
+  return criteria
+    .filter(({ number }) => !named.has(number))
+    .map(({ line, number }) => ({ line, rule: 'P7', text: `criterion A${number} has no step` }));
+}
+
 function lintPlan(text, { fragment }) {
   const lines = text.split(/\r?\n/);
   const fenced = fencedLines(lines);
@@ -209,6 +255,7 @@ function lintPlan(text, { fragment }) {
       ...longParagraphs(outsideFences),
       ...unverifiedSteps(outsideFences),
       ...longOpenBullets(outsideFences),
+      ...criteriaWithoutStep(outsideFences),
       ...researchHeadings(outsideFences, masked),
       ...datedLines(outsideFences, masked),
     );
@@ -219,19 +266,27 @@ function lintPlan(text, { fragment }) {
 
 const formatFindings = (findings) => findings.map((f) => `${f.line} ${f.rule} ${f.text}`).join('\n');
 
+function hintLines(rules) {
+  const hints = [];
+  if (rules.includes('P7')) hints.push(NAME_CRITERIA);
+  if (rules.some((rule) => rule !== 'P7')) hints.push(REPHRASE);
+  return hints;
+}
+
 function runCheck(paths) {
-  const report = paths.flatMap((file) => {
+  const entries = paths.flatMap((file) => {
     let text;
     try {
       text = fs.readFileSync(file, 'utf8');
     } catch {
-      return [`${file}: unreadable`];
+      return [{ rule: 'unreadable', line: `${file}: unreadable` }];
     }
-    return lintPlan(text, { fragment: false }).map((f) => `${file}:${f.line} ${f.rule} ${f.text}`);
+    return lintPlan(text, { fragment: false }).map((f) => ({ rule: f.rule, line: `${file}:${f.line} ${f.rule} ${f.text}` }));
   });
 
-  if (report.length === 0) process.exit(0);
-  process.stderr.write(`${report.join('\n')}\n${REPHRASE}\n`);
+  if (entries.length === 0) process.exit(0);
+  const report = [...entries.map((entry) => entry.line), ...hintLines(entries.map((entry) => entry.rule))];
+  process.stderr.write(`${report.join('\n')}\n`);
   process.exit(1);
 }
 
@@ -265,7 +320,7 @@ function runHook(mode) {
     const findings = lintPlan(text, { fragment: mode === 'pre' }).filter((f) => mode === 'post' || f.rule === 'P1');
     if (findings.length === 0) process.exit(0);
 
-    const report = `${formatFindings(findings)}\n${REPHRASE}`;
+    const report = [formatFindings(findings), ...hintLines(findings.map((f) => f.rule))].join('\n');
     if (mode === 'post') {
       process.stderr.write(`${report}\n`);
       process.exit(2);
