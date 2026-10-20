@@ -233,6 +233,11 @@
           },
           {
             "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/build-approval-gate.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh subagent-tiers.md",
             "timeout": 5
           }
@@ -411,6 +416,11 @@
           {
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/opus-write-nudge.sh pre",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/build-approval-gate.sh",
             "timeout": 5
           }
         ]
