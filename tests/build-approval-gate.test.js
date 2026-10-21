@@ -140,10 +140,25 @@ test('build approval gate', async (t) => {
     assert.equal(write('/repo/src/a.tsx', transcript([user('implement the plan'), planEdit(), reply])).code, 2);
   });
 
-  await t.test('a plan edit after the approval re-arms the gate', () => {
-    const rearmed = transcript([planEdit(), user('implement'), reply, planEdit(), reply]);
-    assert.equal(write('/repo/src/a.tsx', rearmed).code, 2);
+  await t.test('a later edit to an already approved plan stays approved', () => {
+    const revised = transcript([planEdit(), user('implement'), reply, planEdit(), reply, planEdit('Write'), reply]);
+    assert.equal(write('/repo/src/a.tsx', revised).code, 0);
+    assert.equal(dispatch('implementer', revised).code, 0);
+  });
+
+  await t.test('an edit to a different plan after an approval re-arms the gate', () => {
+    const other = '/repo/docs/plans/other-feature.md';
+    const rearmed = transcript([planEdit(), user('implement'), reply, planEdit('Edit', other), reply]);
+    const res = write('/repo/src/a.tsx', rearmed);
+    assert.equal(res.code, 2);
+    assert.ok(res.stderr.includes(other), res.stderr);
     assert.equal(dispatch('implementer', rearmed).code, 2);
+  });
+
+  await t.test('returning to an approved plan after another plan was approved stays approved', () => {
+    const other = '/repo/docs/plans/other-feature.md';
+    const back = transcript([planEdit(), user('implement'), planEdit('Edit', other), user('build it'), planEdit(), reply]);
+    assert.equal(write('/repo/src/a.tsx', back).code, 0);
   });
 
   await t.test('a plan research file is not a plan edit', () => {
