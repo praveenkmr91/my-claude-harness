@@ -34,14 +34,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** the extension gate in `opus-write-nudge.sh` has no notion of where a file lives; exempting a path needs the scratchpad root, which only the session knows (`CLAUDE_SCRATCHPAD`-style env or the `/private/tmp/claude-<uid>/` prefix).
 - **Fix:** in the `pre` arm, exit 0 when `file_path` starts with the session scratchpad prefix; a probe is not shipped code.
 
-### Building or committing before the user approved
-
-- **Evidence:** 27 user corrections in 19 sessions of the census — "wait, i didnt approve plans. why are u implementing already?", "yes. dont commit yet". The largest single correction theme.
-- **Why parked:** a mechanical gate needs a reliable approval signal; "yes" answering a question, "go" on part of a plan, and "commit locally unasked" (committing.md) all blur it. Needs a design pass.
-- **Fix:** a PreToolUse gate on Write|Edit of source files that blocks while a plan file written this session has no explicit approval prompt ("approve", "proceed", "go" on that plan) after its last write; reconcile with the commit-unasked rule.
-- **Signal candidates:** one reserved approval phrase the gate keys on, so a "yes" to some other question never unlocks it (the shape of RIPER-5's explicit execute mode and Launch Codes' one-time confirm code, both on claudemod.com), vs native `ExitPlanMode` approval. Pick one in the design pass.
-- **Worth doing when:** next time this correction recurs, or before the next multi-step plan.
-
 ### Stop-gate block chains run long
 
 - **Evidence:** "DONE-CLAIM WITHOUT EVIDENCE" averages 3.6 consecutive blocks per turn (longest 8, 12 sessions); "NAMED VERB NOT RUN" averages 2.7 (harden 28, battery 10, trim 7).
