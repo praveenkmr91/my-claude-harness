@@ -29,14 +29,12 @@ if [ $# -eq 4 ]; then
   BRIEF=$4
   prefix="$MODEL-$EFFORT-probe"
 elif [ "$KIND" = plan ]; then
-  BRIEF=$(grep -o '"Read <path>\.[^"]*Do not redesign\."' "$HOME/.claude/plan-mode.md" | head -n 1)
+  BRIEF=$(grep -o 'You will execute this plan with only this file.*Do not redesign\.' "$HOME/.claude/agents/cold-reader.md" | head -n 1)
   if [ -z "$BRIEF" ]; then
-    echo "ERROR cold-read brief not found in $HOME/.claude/plan-mode.md (expected a quoted string from \"Read <path>. through Do not redesign.)" >&2
+    echo "ERROR cold-read brief not found in $HOME/.claude/agents/cold-reader.md (expected the sentence from \"You will execute\" through \"Do not redesign.\")" >&2
     exit 1
   fi
-  BRIEF=${BRIEF#\"}
-  BRIEF=${BRIEF%\"}
-  BRIEF=${BRIEF//"<path>"/$SB/REVIEW_INPUT.md}
+  BRIEF="Read $SB/REVIEW_INPUT.md. $BRIEF"
   prefix="$MODEL-$EFFORT"
 else
   BRIEF='Review the change in input.diff, already applied in this checkout. Report every defect that would cause wrong behavior, one per line as `<file>:<line> — <defect>`. Do not report style. Do not fix anything.'

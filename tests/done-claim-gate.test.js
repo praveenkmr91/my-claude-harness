@@ -241,15 +241,37 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Fixed.', { editedFile: null, bashCommand: "sed -i '' 's/a/b/' src/app.tsx" }), 2);
   });
 
-  await t.test('counts a browser MCP call or an external-io run as runtime evidence', () => {
+  await t.test('counts a browser MCP call or a browser-verifier run as runtime evidence', () => {
     const snapshot = { type: 'tool_use', name: 'mcp__chrome-devtools__take_snapshot', input: {} };
     const worker = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'external-io' } };
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [snapshot] }), 0);
-    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [worker] }), 0);
+    const ioRun = runFull(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [worker] });
+    assert.equal(ioRun.status, 2);
+    assert.match(ioRun.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
     const listing = { type: 'tool_use', name: 'mcp__claude_ai_Figma__get_metadata', input: {} };
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [listing] }), 2);
-    const verifier = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'browser-verifier' } };
-    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [verifier] }), 0);
+    const verifierRun = (handback, from = 'a1') => {
+      const verifierPath = path.join(tmpDir, `t${seq++}.jsonl`);
+      fs.writeFileSync(verifierPath, [
+        { type: 'user', message: { content: 'go' } },
+        { type: 'assistant', message: { content: [
+          { type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } },
+          { type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: '/repo/src/app.ts' } },
+          { type: 'tool_use', id: 'verify', name: 'Agent', input: { subagent_type: 'browser-verifier' } },
+        ] } },
+        { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'verify', content: [{ type: 'text', text: 'Async agent launched successfully.\nagentId: a1 (internal ID)' }] }] } },
+        ...(handback ? [{ type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n<agent-message from="${from}">\n${handback}` } }] : []),
+        { type: 'assistant', message: { content: [{ type: 'text', text: `Done: the edits landed.\n${BASE_VERDICTS}` }] } },
+      ].map((r) => JSON.stringify(r)).join('\n'));
+      return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: verifierPath }), encoding: 'utf8' });
+    };
+    const passStep = '  1. open /login — pass — snapshot shows the form\n';
+    assert.equal(verifierRun(passStep).status, 0);
+    assert.equal(verifierRun(passStep, 'zz').status, 2);
+    const blockedRun = verifierRun(`${passStep}  2. submit — blocked — button has no effect\n`);
+    assert.equal(blockedRun.status, 2);
+    assert.match(blockedRun.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    assert.equal(verifierRun(null).status, 2);
     const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
     fs.writeFileSync(transcriptPath, [
       { type: 'user', message: { content: 'go' } },

@@ -96,7 +96,7 @@ fi
 # Agents that exercise judgment about code or a design: opus work.
 is_brain_agent=false
 case "$subagent_type" in
-  Plan|*review*|*analyzer*|*simplifier*|*silent-failure*|*adversarial*) is_brain_agent=true ;;
+  Plan|*review*|*analyzer*|*simplifier*|*silent-failure*|*adversarial*|*cold-reader*) is_brain_agent=true ;;
 esac
 
 if [ "$override" != "true" ]; then

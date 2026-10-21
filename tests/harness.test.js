@@ -378,7 +378,9 @@ test.describe('rule and hook agree', () => {
     ['hooks/plan-lint.js', /has no step/, 'plan-mode.md', /\(P7\)/],
     ['hooks/bash-write-guard.js', /edit plan files with Write or Edit/, 'harness.md', /which only Write or Edit may change/],
     ['hooks/browser-main-guard.sh', /browser-verifier/, 'external-io.md', /browser-main-guard\.sh/],
+    ['hooks/done-claim-gate.sh', /pass\|fail\|blocked/, 'agents/browser-verifier.md', /pass\|fail\|blocked/],
     ['hooks/enforce-subagent-model.sh', /no `subagent_type`/, 'subagent-tiers.md', /no `subagent_type`/],
+    ['hooks/enforce-subagent-model.sh', /cold-reader/, 'plan-mode.md', /cold-reader/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {
@@ -386,6 +388,12 @@ test.describe('rule and hook agree', () => {
       assert.match(read(doc), docPattern, `${doc} no longer states the rule the hook enforces`);
     });
   }
+});
+
+test('eval-run.sh: the cold-read brief grep yields the brief without the dispatch-prompt rule', () => {
+  const brief = execFileSync('grep', ['-o', 'You will execute this plan with only this file.*Do not redesign\\.', path.join(ROOT, 'agents/cold-reader.md')], { encoding: 'utf8' });
+  assert.ok(brief.startsWith('You will execute'), 'the brief must start at "You will execute"');
+  assert.doesNotMatch(brief, /dispatch prompt/, 'the brief must not carry the dispatch-prompt rule');
 });
 
 test('reset-context-flags.sh: every hook flag is reset on compaction or is a nudge counter', () => {

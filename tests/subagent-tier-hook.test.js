@@ -117,6 +117,10 @@ test.describe('subagent tier hook', () => {
     assert.equal(verdict(payload({ subagentType: 'Plan', transcriptPath: transcripts.opus })), 'inherit');
   });
 
+  test('cold-reader, no model, sonnet session -> inject:opus', () => {
+    assert.equal(verdict(payload({ subagentType: 'cold-reader', transcriptPath: transcripts.sonnet })), 'inject:opus');
+  });
+
   test('implementer, no model, sonnet session -> inherit', () => {
     assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.sonnet })), 'inherit');
   });
@@ -359,6 +363,13 @@ test.describe('subagent tier hook', () => {
   test('Plan + model haiku, opus session -> deny', () => {
     assert.equal(
       verdict(payload({ subagentType: 'Plan', model: 'haiku', transcriptPath: transcripts.opus })),
+      'deny',
+    );
+  });
+
+  test('cold-reader + model sonnet, opus session -> deny', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'cold-reader', model: 'sonnet', transcriptPath: transcripts.opus })),
       'deny',
     );
   });

@@ -9,5 +9,5 @@ disallowedTools: Edit, Write, NotebookEdit, Agent
 - A run starts from the URL, the login (or the file holding it) and the steps. Any of the three missing → end your turn with the question in your report; never guess a port or a credential.
 - Run the steps in order and check each one per `browser-verify.md`: snapshot, geometry, console, network. A missing element or a click that has no effect makes that step `blocked`; never reach the same screen by another route.
 - A click that saves, submits or changes backend data is an outward write. Run only the exact payload the prompt says Praveen approved; anything else goes back in the report as a proposal.
-- Report one line per step, `pass | fail | blocked` plus the evidence that decided it (snapshot node, geometry values, console line, request + status), then the console errors raised during the run. Never give an overall verdict; that call is the dispatcher's.
+- Report one line per step, exactly `<n>. <step> — <pass|fail|blocked> — <evidence>` (em dash separators, the result word lowercase), the evidence being what decided it (snapshot node, geometry values, console line, request + status), then the console errors raised during the run. Never give an overall verdict; that call is the dispatcher's.
 - `browser-verify.md` is injected on your first browser call; follow it.
