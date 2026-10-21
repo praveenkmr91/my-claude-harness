@@ -8,7 +8,7 @@
 
 - Members run on Opus even from a Fable session; the tier hook places them there unless Praveen's last typed turn contains `fable battery` / `battery fable` or says yes to a reply that ends a sentence with `Fable battery?`, the reserved phrase the hook keys on. Propose it only when the diff earns it, cost named.
 - A model typed with the verb (`fable battery`, `battery sonnet`) goes to every member as `model:`, overriding the table. Sonnet is his cheap pass, never proposed: the launch line says so, since it missed real bugs Opus found in the 2026-10-04 tier eval. Haiku stays denied.
-- HIGH risk flagged by the routing hook → add adversarial-reviewer + security-review on the main thread. Bulk flagged → add /delete-list + /shortcut-debt. Neither flag → the members above, nothing more.
+- HIGH risk flagged by the routing hook → add the adversarial-reviewer agent, plus security-review on the main thread. Bulk flagged → add /delete-list + /shortcut-debt. Neither flag → the members above, nothing more.
 - The launch line names the diff under review (e.g. "plan commit `00b1bfa5`, local, no PR"): the `pr-review-toolkit:` prefix is only the plugin the agents ship in, and it reads as a PR flow when no PR exists.
 - All output is leads; confirm each at source before relaying.
 - Open: re-run the Opus-vs-session A/B on a frozen diff before moving the multi-hop members to Opus; a diff that moves mid-run invalidates the comparison.

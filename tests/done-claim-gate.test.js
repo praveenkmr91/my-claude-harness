@@ -295,6 +295,7 @@ test('done-claim gate', async (t) => {
     assert.equal(status, 2);
     assert.match(stderr, /NAMED VERB NOT RUN[\s\S]*`Pass: harden`[\s\S]*adversarial-reviewer, security-review/);
     assert.equal(run('Pass: harden\nTwo findings below.', { editedFile: null, reviews: [skill('adversarial-reviewer'), skill('security-review')] }), 0);
+    assert.equal(run('Pass: harden\nTwo findings below.', { editedFile: null, reviews: [agent('adversarial-reviewer'), skill('security-review')] }), 0);
     const battery = ['code-reviewer', 'silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'comment-analyzer', 'modern-ts-analyzer'];
     assert.equal(run('Pass: battery\nFindings below.', { editedFile: null, reviews: battery.slice(1).map(agent) }), 2);
     assert.equal(run('Pass: battery\nFindings below.', { editedFile: null, reviews: battery.map((m) => agent(`pr-review-toolkit:${m}`)) }), 0);

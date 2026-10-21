@@ -17,9 +17,9 @@ The hand-authored half of my `~/.claude` directory: the rules, hooks, agents, sk
 | `hydrogen.md`, `hydrogen-reference.md` | Repo-gated guidance for one internal design system; loads only inside repos that depend on it. |
 | `harness.md`, `harness-backlog.md` | How this harness itself is maintained, and parked friction with evidence. |
 | `plugin-curation.md` | Which plugins are on, which are deliberate tombstones, and why. |
-| `agents/` | Custom subagents: `implementer`, `checker`, `external-io`, `browser-verifier`, the plan readers `cold-reader` and `dry-runner`, and the review lenses `reuse-analyzer`, `placement-analyzer`, `modern-ts-analyzer`. |
+| `agents/` | Custom subagents: `implementer`, `checker`, `external-io`, `browser-verifier`, `dfs-lookup`, the plan readers `cold-reader` and `dry-runner`, and the review lenses `reuse-analyzer`, `placement-analyzer`, `modern-ts-analyzer`, `adversarial-reviewer`. |
 | `commands/` | Slash commands: `/cycle`, `/learn`, `/delete-list`, `/delete-audit`, `/shortcut-debt`. |
-| `skills/` | Localised skills (TDD, systematic debugging, verification before completion, adversarial review, Jira, a11y and web-quality audits, and others). `skills/synced/` is vendored by a sync job and untracked. |
+| `skills/` | Localised skills (TDD, systematic debugging, verification before completion, Jira, a11y and web-quality audits, and others). `skills/synced/` is vendored by a sync job and untracked. |
 | `hooks/` | The enforcement layer — see below. |
 | `automation/` | Weekly repo audit (launchd), a context canary that checks every injection channel still reaches the model, and an eval runner for comparing model tiers on review tasks. |
 | `tests/` | `node --test` suite over the whole harness. |
