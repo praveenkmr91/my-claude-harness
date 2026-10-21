@@ -90,11 +90,39 @@ test('build approval gate', async (t) => {
     assert.equal(dispatch('implementer', multi).code, 0);
   });
 
-  await t.test('a vetoed line does not approve without a clean approving line', () => {
-    const single = transcript([planEdit(), reply, user('implement it, do not skip tests')]);
-    const questioned = transcript([planEdit(), reply, user('why did you implement\nthat was wrong')]);
-    assert.equal(write('/repo/src/a.tsx', single).code, 2);
-    assert.equal(write('/repo/src/a.tsx', questioned).code, 2);
+  // Real prompts from transcripts: each approving one is paired with a near-twin that must stay blocked.
+  await t.test('a clause that opens with the word approves, whatever other clauses say', () => {
+    for (const text of [
+      'implement. dont complicate or overnegineer. keep it simple',
+      'dont wait for me, proceed to build and commit',
+      'implement it, do not skip tests',
+      'yes to both, implement chunk 1',
+      'review plan and implement',
+      'approved. start impl. follow subagent tier rules',
+      'yes start 134',
+      'Build it! Never mind the docs',
+    ]) {
+      assert.equal(write('/repo/src/a.tsx', transcript([planEdit(), reply, user(text)])).code, 0, text);
+    }
+  });
+
+  await t.test('a deferral, question or mere mention does not approve', () => {
+    for (const text of [
+      'approved, move it. dont implement yet',
+      'i only approved plan. doesnt mean u can start implementation',
+      'new session will implement this plan. prepare and give me prompt',
+      'are u proceeding to implement or making a plan first?',
+      'lets implement all your plans first. prepare for implementation. ask for my approval',
+      'build it later',
+      "don't implement a.tsx yet",
+      'start app',
+      'thats not same app stupid. start this app server',
+      'final submit is not deployed yet. only start is deployed',
+      'why u never check shadcn baseui? after all our components are build/based on them',
+      'why did you implement\nthat was wrong',
+    ]) {
+      assert.equal(write('/repo/src/a.tsx', transcript([planEdit(), reply, user(text)])).code, 2, text);
+    }
   });
 
   await t.test('an approval word inside a tool result or harness record is not a typed prompt', () => {
