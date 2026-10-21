@@ -50,6 +50,11 @@ transcripts.opusFableReviewedYesterday = path.join(tmpDir, 'opus-fable-reviewed-
 fs.writeFileSync(transcripts.opusReviewedByAsk, [typedAsk('get it reviewed by fable'), opusTurn].join('\n'));
 fs.writeFileSync(transcripts.opusHaveFableReviewAsk, [typedAsk('have fable review the diff'), opusTurn].join('\n'));
 fs.writeFileSync(transcripts.opusFableReviewedYesterday, [typedAsk('fable reviewed it yesterday, looks fine'), opusTurn].join('\n'));
+const summaryText = 'This session is being continued from a previous conversation. The user asked: run a fable battery on this diff';
+transcripts.opusCompactSummaryAsk = path.join(tmpDir, 'opus-compact-summary-ask.jsonl');
+transcripts.opusTypedSummaryAsk = path.join(tmpDir, 'opus-typed-summary-ask.jsonl');
+fs.writeFileSync(transcripts.opusCompactSummaryAsk, [JSON.stringify({ type: 'user', isCompactSummary: true, message: { content: summaryText } }), opusTurn].join('\n'));
+fs.writeFileSync(transcripts.opusTypedSummaryAsk, [typedAsk(summaryText), opusTurn].join('\n'));
 transcripts.fableMentionThenYes = path.join(tmpDir, 'fable-mention-then-yes.jsonl');
 fs.writeFileSync(transcripts.fableMentionThenYes, [mentionTurn, yesTurn, fableTurn].join('\n'));
 fs.writeFileSync(transcripts.fableProposalApproved, [proposalTurn, yesTurn, fableTurn].join('\n'));
@@ -180,6 +185,20 @@ test.describe('subagent tier hook', () => {
     );
   });
 
+  test('code-reviewer + model fable, opus session, "fable battery" only in a compaction summary -> deny', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.opusCompactSummaryAsk })),
+      'deny',
+    );
+  });
+
+  test('code-reviewer + model fable, opus session, same "fable battery" text typed -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', model: 'fable', transcriptPath: transcripts.opusTypedSummaryAsk })),
+      'inherit',
+    );
+  });
+
   test('general-purpose + model fable, opus session, user typed "get it reviewed by fable" -> deny (it can write)', () => {
     assert.equal(
       verdict(payload({ subagentType: 'general-purpose', model: 'fable', transcriptPath: transcripts.opusReviewedByAsk })),
@@ -232,6 +251,10 @@ test.describe('subagent tier hook', () => {
 
   test('general-purpose, no model, opus session -> inherit', () => {
     assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.opus })), 'inherit');
+  });
+
+  test('no subagent_type, no model, opus session -> deny', () => {
+    assert.equal(verdict(payload({ transcriptPath: transcripts.opus })), 'deny');
   });
 
   test('code-reviewer + model fable, opus session, user asked for Fable -> inherit', () => {

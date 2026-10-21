@@ -46,7 +46,7 @@ for line in open(path):
             if b.get('type')!='tool_use': continue
             if b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command','')); cmd_ids.append(b.get('id'))
             elif b.get('name') in ('Write','Edit','NotebookEdit'): edits.append(b.get('input',{}).get('file_path',''))
-            else: ran.add(lens_ran(b)); tools.append(b.get('name',''))
+            else: ran.add(lens_ran(b)); tools.append((b.get('name',''),b.get('id')))
 # Stop can fire before the final reply is flushed to the transcript, which drops its verdict lines.
 final=inp.get('last_assistant_message')
 if isinstance(final,str) and final.strip() and (not texts or texts[-1].strip()!=final.strip()): texts.append(final)
@@ -83,7 +83,7 @@ commit_ask=re.search(r'\bcommit(?!ted)',last,re.I) and re.search(r'\?|\bsay\b|ap
 committed=any(re.search(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b',c) for c in cmds)
 why='claims done' if claim else 'asks to commit' if commit_ask else 'ran git commit'
 evidence=re.compile(r'\b(pnpm|npm|yarn|bun)\s+(run\s+)?(verify|test|e2e)|vitest|playwright|node --test|curl\s|http://localhost',re.I)
-browser_run=any(n.startswith(('mcp__chrome-devtools__','mcp__playwright__')) for n in tools) or 'external-io' in ran
+browser_run=any(n.startswith(('mcp__chrome-devtools__','mcp__playwright__')) and not (results.get(i) or (False,))[0] for n,i in tools) or 'external-io' in ran or 'browser-verifier' in ran
 # A pipe into grep/tail exits 0 over a red suite, so the runner's own fail markers count as much as the exit code.
 fail_marker=re.compile(r'ℹ fail [1-9]|^# fail [1-9]|^not ok \d|^\s*(?:×\s*)?FAIL\s|\b[1-9]\d* failed\b',re.M)
 def failed(res): return bool(res) and ((res[0] and res[1].startswith('Exit code')) or bool(fail_marker.search(res[1])))

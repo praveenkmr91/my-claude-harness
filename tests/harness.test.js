@@ -89,11 +89,26 @@ test.describe('frontmatter', () => {
     });
   }
   for (const file of fs.readdirSync(path.join(ROOT, 'agents')).filter((f) => f.endsWith('.md'))) {
-    test(`agents/${file}: name matches filename, description present`, () => {
+    test(`agents/${file}: name matches filename, description carries a trigger`, () => {
       const fm = frontmatter(read(`agents/${file}`));
       assert.ok(fm, 'no frontmatter');
       assert.equal(fm.name, path.basename(file, '.md'));
-      assert.ok(fm.description, 'missing description');
+      assert.match(fm.description ?? '', /Use (when|for)/);
+    });
+    test(`agents/${file}: body matches its tool grants`, () => {
+      const text = read(`agents/${file}`);
+      const fm = frontmatter(text);
+      const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---/, '');
+      if (fm?.tools !== undefined) {
+        const granted = fm.tools.split(/,\s*/);
+        assert.ok(!granted.includes('AskUserQuestion'), 'AskUserQuestion granted to a subagent');
+        if (body.includes('Skill(')) assert.ok(granted.some((t) => /^Skill\b/.test(t)), 'body names Skill( without the grant');
+        if (/\bBash\b/.test(body)) assert.ok(granted.includes('Bash'), 'body names Bash without the grant');
+      }
+      const askSentences = body
+        .split(/(?<=[.!?])\s+|\n+/)
+        .filter((s) => /ask the user|confirm with the user/i.test(s) && !/cannot|never|no way|not available/i.test(s));
+      assert.deepEqual(askSentences, [], 'a subagent cannot ask the user');
     });
   }
 });
@@ -104,6 +119,13 @@ test.describe('hook scripts', () => {
       const abs = path.join(ROOT, 'hooks', script);
       if (script.endsWith('.sh')) execFileSync('bash', ['-n', abs]);
       else execFileSync('node', ['--check', abs]);
+    });
+  }
+
+  const libDir = path.join(ROOT, 'hooks', 'lib');
+  for (const module of fs.readdirSync(libDir).filter((f) => f.endsWith('.jq'))) {
+    test(`hooks/lib/${module} parses`, () => {
+      execFileSync('jq', ['-n', '-L', libDir, `include "${path.basename(module, '.jq')}"; true`]);
     });
   }
 
@@ -355,6 +377,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/plan-lint.js', /rephrase as an instruction/, 'plan-mode.md', /plan-lint\.js` refuses/],
     ['hooks/plan-lint.js', /has no step/, 'plan-mode.md', /\(P7\)/],
     ['hooks/bash-write-guard.js', /edit plan files with Write or Edit/, 'harness.md', /which only Write or Edit may change/],
+    ['hooks/browser-main-guard.sh', /browser-verifier/, 'external-io.md', /browser-main-guard\.sh/],
+    ['hooks/enforce-subagent-model.sh', /no `subagent_type`/, 'subagent-tiers.md', /no `subagent_type`/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {

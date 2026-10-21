@@ -29,24 +29,15 @@ dispatched() {
 
 # Assistant text since the last typed prompt names an open plan call; a generic reason does not match.
 skipped() {
-  jq -rR 'fromjson? |
-    if .type? == "user" and (.isMeta | not) then
-      (.message.content | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end)
-      | select(length > 0 and ((test("^\\s*<") | not) or test("^\\s*<pasted_content")))
-      | "U"
-    elif .type? == "assistant" then
-      .message.content[]? | select(.type? == "text") | "A " + (.text | gsub("\n"; " "))
-    else empty end' "$T" 2>/dev/null \
+  jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? |
+    (typed_text | "U"), (assistant_text | "A " + gsub("\n"; " "))' "$T" 2>/dev/null \
     | awk '$0 == "U" { buf = ""; next } { buf = buf "\n" $0 } END { print buf }' \
     | grep -qE 'implementer: skip[[:space:]]*(—|–|-)+[[:space:]]*open call:[[:space:]]*[^[:space:]]'
 }
 
 # Typed prompts only: tool_result blocks, isMeta records, compaction summaries and `<`-prefixed harness wrappers (except pasted blocks) quote plan paths and override tags too.
 typed_prompts() {
-  jq -rR 'fromjson? | select(.type? == "user" and (.isMeta | not) and (.isCompactSummary | not)) | .message.content
-    | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
-    | select(length > 0 and ((test("^\\s*<") | not) or test("^\\s*<pasted_content")))
-    | gsub("\n"; " ")' 2>/dev/null
+  jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? | typed_text | gsub("\n"; " ")' 2>/dev/null
 }
 
 # Last typed prompt carries [tier-override: <why>] — the same escape enforce-subagent-model.sh takes; a new typed prompt without it re-arms.

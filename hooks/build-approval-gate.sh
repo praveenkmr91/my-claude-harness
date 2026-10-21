@@ -16,11 +16,7 @@ else
   [ "$(jq -r '.tool_input.subagent_type // empty' <<<"$IN")" = implementer ] || exit 0
 fi
 
-UNAPPROVED_PLAN=$(jq -nRr '
-  def typed_prompt:
-    select(.type? == "user" and (.isMeta | not) and (.isCompactSummary | not)) | .message.content
-    | if type == "string" then . else ([.[]? | select(.type? == "text") | .text] | join(" ")) end
-    | select(length > 0 and ((test("^\\s*<") | not) or test("^\\s*<pasted_content")));
+UNAPPROVED_PLAN=$(jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -nRr 'include "turns";
   def approving_clause:
     test("^\\s*(?:(?:yes|ok|okay|approved|sure|go ahead and|go ahead|now|so|please|pls|proceed to|let[\u0027\u2019]?s)\\b[\\s,.!-]*)*(?:implement|build|start(?=\\s*$|\\s+(?:impl\\w*|building|coding|now|it\\b|step|chunk|\\d)))\\b"; "i")
     and (test("\\b(?:didn|don|doesn|won|isn|shouldn)[\u0027\u2019]?t\\b|\\b(?:not|never|why|later|yet|until)\\b"; "i") | not);
@@ -33,7 +29,7 @@ UNAPPROVED_PLAN=$(jq -nRr '
         | .input.file_path // empty
         | select(test("/plans/[^/]+\\.md$") and (test("\\.research\\.md$") | not))] | last) as $edited
       | if $edited then {plan: $edited, approved: false} else . end
-    elif .plan and ([$e | typed_prompt | select(approves)] | length) > 0 then .approved = true
+    elif .plan and ([$e | typed_text | select(approves)] | length) > 0 then .approved = true
     else . end)
   | select(.plan and (.approved | not)) | .plan' "$T" 2>/dev/null)
 [ -n "$UNAPPROVED_PLAN" ] || exit 0

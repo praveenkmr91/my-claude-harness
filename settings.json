@@ -260,6 +260,11 @@
             "type": "command",
             "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh browser-verify.md",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/browser-main-guard.sh",
+            "timeout": 5
           }
         ]
       },

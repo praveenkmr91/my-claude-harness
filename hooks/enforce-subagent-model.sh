@@ -3,7 +3,7 @@
 # fable(4) > opus(3) > sonnet(2) > haiku(1).
 # Policy: ~/.claude/subagent-tiers.md.
 # Escapes: "fork" (inherits parent); "[tier-override: <why>]" in the prompt — which lifts
-# every gate here EXCEPT a worker reaching for fable.
+# every gate here EXCEPT a worker reaching for fable and a dispatch with no subagent_type.
 # Session model = last assistant .message.model in transcript_path (tracks live
 # /model switches, unlike settings.json). Fail-open on malformed input, unreadable
 # transcript, or unknown session model — EXCEPT fable, which fails closed.
@@ -24,6 +24,8 @@ deny() {
   jq -n --arg reason "$1" '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":$reason}}'
   exit 0
 }
+
+[ -z "$subagent_type" ] && deny 'Name the agent: a dispatch with no `subagent_type` silently becomes `general-purpose`, and a review fan-out or audit flavor is a `fork` (review-routing.md). Pick an agent from ~/.claude/agents/ or a plugin, or name `general-purpose` or `fork`.'
 
 inject() {
   echo "$input" | jq --arg m "$1" \
@@ -61,14 +63,10 @@ if [ -n "$transcript" ] && [ -r "$transcript" ]; then
   # turn, so the dispatcher cannot self-attest. tool_result turns are also type=user, so
   # only text content counts. Whole file, not the tail slice: a few big tool results push
   # the last typed turn past 200 KB. ~0.35 s on a 27 MB transcript.
-  # Same typed-turn filter as opus-write-nudge.sh: isMeta turns and "<…>"-leading text are
-  # hook injections stored as user turns, not something Praveen typed.
-  turns=$(jq -cR -n '[inputs | fromjson? | select(.type? == "user" or .type? == "assistant")
-        | select(.type == "assistant" or (.isMeta | not))
-        | {type, text: ((.message.content // "")
-            | if type == "string" then . else (map(select(.type? == "text") | .text) | join(" ")) end)}
-        | select(.text | length > 0)
-        | select(.type == "assistant" or (.text | test("^\\s*<") | not) or (.text | test("^\\s*<pasted_content")))]' "$transcript" 2>/dev/null)
+  # Typed-turn filter from hooks/lib/turns.jq: isMeta turns, compaction summaries and
+  # "<…>"-leading text are stored as user turns, not something Praveen typed.
+  turns=$(jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -cR -n 'include "turns";
+        [inputs | fromjson? | {type: "user", text: typed_text}, {type: "assistant", text: assistant_text}]' "$transcript" 2>/dev/null)
   last_user_text=$(echo "$turns" | jq -r 'map(select(.type == "user")) | last | .text // empty' 2>/dev/null)
   proposal_text=$(echo "$turns" | jq -r '(map(.type == "user") | rindex(true)) as $i
         | if $i == null then empty else .[:$i] | map(select(.type == "assistant")) | last | .text // empty end' 2>/dev/null)

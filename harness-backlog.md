@@ -10,12 +10,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** neither shape has occurred; the first needs an older trailer already in HEAD, the second only misses (never blocks wrongly).
 - **Fix:** record `git rev-parse HEAD` in a PreToolUse twin and skip when it is unchanged; resolve `cd <dir> &&` and any `-C` position, relative to the hook input's `cwd`.
 
-### Skill and agent files are not linted against their tool grants
-
-- **Evidence:** HERA (`hera/.claude/skills/_shared/scripts/check_skill_tool_grants.py`) fails a skill whose body says to run a script or invoke a skill without the matching tool, because the model improvises and reports compliance. `tests/harness.test.js` checks only `name` and `description` presence.
-- **Why parked:** no drift seen yet in `agents/*.md` or the custom skills; a linter without a defect behind it gets ignored.
-- **Fix:** one test over `agents/*.md` and `skills/*/SKILL.md`: name equals directory, description carries a "Use when" trigger, and a body naming `Skill(`, `Bash` or `AskUserQuestion` has the tool in `tools:` / `allowed-tools:` (AskUserQuestion in an agent body is always a fail). Advisory, with an allowlist.
-
 ### Existing hook tests lack quiet-twin and empty-input cases
 
 - **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `plan-lint.js`, `comment-delta-check.js`, `new-dep-gate.js`.

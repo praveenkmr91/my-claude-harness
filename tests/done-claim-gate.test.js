@@ -248,6 +248,22 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [worker] }), 0);
     const listing = { type: 'tool_use', name: 'mcp__claude_ai_Figma__get_metadata', input: {} };
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [listing] }), 2);
+    const verifier = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'browser-verifier' } };
+    assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { reviews: [verifier] }), 0);
+    const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+    fs.writeFileSync(transcriptPath, [
+      { type: 'user', message: { content: 'go' } },
+      { type: 'assistant', message: { content: [
+        { type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } },
+        { type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: '/repo/src/app.ts' } },
+        { type: 'tool_use', id: 'click', name: 'mcp__chrome-devtools__click', input: { uid: '1_2' } },
+      ] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'click', is_error: true, content: 'Browser actions run off the main thread (~/.claude/external-io.md): dispatch browser-verifier for a verification, or fork for a debug that needs this context. Praveen lifts it for one turn by typing [browser-inline: <why>].' }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: `Done: the edits landed.\n${BASE_VERDICTS}` }] } },
+    ].map((r) => JSON.stringify(r)).join('\n'));
+    const { status, stderr } = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+    assert.equal(status, 2);
+    assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
   });
 
   await t.test('a `Pass: <verb>` line in the reply needs real member calls, even on a no-edit turn', () => {

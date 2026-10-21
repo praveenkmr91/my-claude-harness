@@ -17,7 +17,7 @@ The hand-authored half of my `~/.claude` directory: the rules, hooks, agents, sk
 | `hydrogen.md`, `hydrogen-reference.md` | Repo-gated guidance for one internal design system; loads only inside repos that depend on it. |
 | `harness.md`, `harness-backlog.md` | How this harness itself is maintained, and parked friction with evidence. |
 | `plugin-curation.md` | Which plugins are on, which are deliberate tombstones, and why. |
-| `agents/` | Custom subagents: `implementer`, `checker`, `external-io`, and the review lenses `reuse-analyzer`, `placement-analyzer`, `modern-ts-analyzer`. |
+| `agents/` | Custom subagents: `implementer`, `checker`, `external-io`, `browser-verifier`, and the review lenses `reuse-analyzer`, `placement-analyzer`, `modern-ts-analyzer`. |
 | `commands/` | Slash commands: `/cycle`, `/learn`, `/delete-list`, `/delete-audit`, `/shortcut-debt`. |
 | `skills/` | Localised skills (TDD, systematic debugging, verification before completion, adversarial review, Jira, a11y and web-quality audits, and others). `skills/synced/` is vendored by a sync job and untracked. |
 | `hooks/` | The enforcement layer — see below. |
@@ -32,7 +32,7 @@ Rules that must hold are enforced, not just written down. Each hook is a small s
 - **Git guards** — `block-dangerous-git.sh` denies `git push`, asks on `gh pr create`, strips attribution trailers; `commit-trailer-check.sh` re-checks the landed commit.
 - **Write guards** — `bash-write-guard.js` blocks shell-side writes (heredocs, redirects, `tee`) to source and docs so the Write/Edit hooks always see them; `protect-secrets.js` keeps `.env` and credentials out of text tools; `new-dep-gate.js` asks before a new dependency; `plan-lint.js` refuses research narrative inside a plan file; `comment-delta-check.js` watches comment bloat.
 - **Done gates** — `review-classify.sh` reads the prompt and diff into a review verb plus lens list; `review-lens-nudge.sh` surfaces those lenses mid-turn; `review-routing-once.sh` injects `review-routing.md` on a review ask; `done-claim-gate.sh` blocks a "done" claim or commit ask until lint, type-check and every named lens have run.
-- **Model tiers** — `enforce-subagent-model.sh` pins each agent kind to its tier and denies escalation; `opus-write-nudge.sh` pushes approved-plan edits off the main thread to the `implementer` and blocks source writes from a Fable session outright; `agent-file-scope.sh` reports a subagent that wrote outside the files its brief named.
+- **Model tiers** — `enforce-subagent-model.sh` pins each agent kind to its tier and denies escalation; `opus-write-nudge.sh` pushes approved-plan edits off the main thread to the `implementer` and blocks source writes from a Fable session outright; `browser-main-guard.sh` denies a main-thread browser action, which runs on the `browser-verifier` agent or a fork; `agent-file-scope.sh` reports a subagent that wrote outside the files its brief named.
 - **Housekeeping** — `reset-context-flags.sh` clears the once-per-session injection flags; `plugin-drift-guard.sh` warns when enabled plugins drift from the blessed snapshot; `audit-due.sh` nudges when a repo has had no audit in 30 days; `correction-learn.sh` detects a correction in a prompt and asks for a `/learn` pass. `protect-secrets.js` is a frozen, locally tuned copy of karanb192/claude-code-hooks (MIT).
 
 ## Tests
