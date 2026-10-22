@@ -8,6 +8,8 @@ if [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
   EDITED=$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name|test("^(Write|Edit|MultiEdit)$"))) | .input.file_path // empty' "$TRANSCRIPT" 2>/dev/null)
   SINCE=$(jq -r 'select(.timestamp) | .timestamp' "$TRANSCRIPT" 2>/dev/null | head -1)
 fi
+# The PostToolUse nudge runs before this edit reaches the transcript, so the edited file comes from the payload.
+EDITED=$(printf '%s\n%s' "$EDITED" "$(jq -r '.tool_input.file_path // empty' <<<"$IN")")
 # A named PR replaces session scope: a colleague's PR has no edits here and a clean tree.
 P=$(jq -r '.prompt // ""' <<<"$IN")
 # Stated forms only: a bare level word also reads "high-risk", "low priority", "--max-findings".
@@ -49,7 +51,9 @@ REACT=no; grep -qE '\.(tsx|jsx)$|/use-[a-z0-9-]+\.ts$' <<<"$FILES" && REACT=yes
 STYLED=no; grep -qE '\.(tsx|jsx|vue|css|scss|less)$' <<<"$FILES" && STYLED=yes
 # Repo-agnostic on purpose; this runs in every repo. Whole-word match after a camelCase split —
 # bare substrings flag author/, recorder.ts and design tokens, silently upgrading review to harden.
-RISK=$(paste <(sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' <<<"$FILES") <(printf '%s\n' "$FILES") \
+# Risk reads source paths only: docs, manifests, specs and mocks never carry it, and a tokens/ directory is no credential.
+SRC=$(grep -E '\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte|swift|kt|kts|dart)$' <<<"$FILES" | grep -vE '\.(test|spec)\.|__tests__/|(^|/)tests?/|(^|/)mocks/|__mocks__/')
+RISK=$(paste <(sed -E 's/([a-z0-9])([A-Z])/\1-\2/g; s#(^|/)tokens/#/#g' <<<"$SRC") <(printf '%s\n' "$SRC") \
   | awk -F'\t' -v re='(^|[^a-z0-9])(o?auth|authentic[a-z]*|authori[sz][a-z]*|session|tokens?|(re)?payments?|checkout|orders?|wallet)([^a-z0-9]|$)' \
         -v ex='design-tokens|tokens?\.(css|scss|less)$' '{l=tolower($1)} l ~ re && l !~ ex {print $2}' | head -5 | tr '\n' ' ')
 # Bulk = over-engineering risk: added lines across committed-this-session + dirty + untracked, new files likewise.
@@ -85,5 +89,30 @@ has '(^|[^.[:alnum:]_$])var[[:space:]]|\.indexOf\([^)]*\)[[:space:]]*[!=<>]=*[[:
 if jq -e '(.scripts.test // "") as $t | $t != "" and ($t | test("no test specified") | not)' "$(git rev-parse --show-toplevel 2>/dev/null)/package.json" >/dev/null 2>&1 \
   && grep -qE '\.(ts|tsx|js|jsx|vue)$' <<<"$FILES" && ! grep -qE '\.(test|spec)\.|__tests__/|(^|/)tests?/' <<<"$FILES"; then
   lens pr-test-analyzer
+fi
+# Comment-only exit: lines are judged alone, never by block state. Directive comments (lint, ts, build hints) change tool output, so they count as code.
+if [ -n "$PR_DIFF" ]; then
+  DIFF_TEXT=$PR_DIFF; UNTRACKED=""
+else
+  DIFF_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff HEAD -- "${SCOPE[@]}" 2>/dev/null; } )
+  UNTRACKED=$(git ls-files --others --exclude-standard -- "${SCOPE[@]}" 2>/dev/null)
+fi
+if [ -z "$UNTRACKED" ] && grep -E '^[+-]' <<<"$DIFF_TEXT" | grep -vE '^(\+\+\+|---) ' | awk '
+  { t = substr($0, 2); n++ }
+  t ~ /eslint-|oxlint-|@ts-|@type|@vitest-|<reference|prettier-ignore|istanbul|webpackChunkName|@vite-ignore|__PURE__/ { code++; next }
+  t ~ /^[[:space:]]*$/ { next }
+  { sub(/^[[:space:]]+/, "", t) }
+  t ~ /^\/\// { next }
+  substr(t, 1, 2) == "/*" || substr(t, 1, 3) == "{/*" {
+    jsx = substr(t, 1, 1) == "{"; rest = substr(t, jsx ? 4 : 3); i = index(rest, "*/")
+    if (i == 0) next
+    after = substr(rest, i + 2)
+    if (after ~ /^[[:space:]]*$/ || (jsx && after ~ /^\}[[:space:]]*$/)) next
+    code++; next
+  }
+  t !~ /\/\*/ && t !~ /[=(]/ && t ~ /\*\/\}?[[:space:]]*$/ { next }
+  { code++ }
+  END { exit !(n > 0 && code == 0) }'; then
+  VERB=review; LENSES=comment-analyzer
 fi
 echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT styled=$STYLED high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}${EFFORT:+ effort=$EFFORT}>"

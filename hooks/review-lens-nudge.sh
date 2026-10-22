@@ -3,8 +3,9 @@
 # Every failure path exits 0 silently.
 IN=$(cat)
 HOOKS=$(cd "$(dirname "$0")" && pwd)
-grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)$' <<<"$(jq -r '.tool_input.file_path // empty' <<<"$IN")" || exit 0
-cd "$(jq -r '.cwd // empty' <<<"$IN")" 2>/dev/null || exit 0
+FILE=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
+grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)$' <<<"$FILE" || exit 0
+cd "$(dirname "$FILE")" 2>/dev/null || exit 0
 LENSES=$(bash "$HOOKS/review-classify.sh" <<<"$IN" | grep -oE 'lenses=[^ ]+' | cut -d= -f2)
 [ -n "$LENSES" ] || exit 0
 TRANSCRIPT=$(jq -r '.transcript_path // empty' <<<"$IN")

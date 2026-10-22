@@ -184,7 +184,7 @@ test('review-routing: high-risk matches whole words, not substrings', () => {
   fs.mkdirSync(path.join(home, '.claude'));
   fs.writeFileSync(path.join(home, '.claude', 'review-routing.md'), '');
   const repo = path.join(home, 'repo');
-  for (const file of ['src/useAuth.ts', 'src/use-session.ts', 'src/recorder.ts', 'author-rules/x.md', 'styles/tokens.css']) {
+  for (const file of ['src/useAuth.ts', 'src/use-session.ts', 'src/recorder.ts', 'author-rules/x.md', 'styles/tokens.css', 'tooling/tokens/build.ts', 'docs/plans/app-token.md', 'src/session.spec.ts', 'auth-pkg/package.json', 'src/auth/mocks/handlers.ts', 'src/auth/tokens/refresh.ts']) {
     fs.mkdirSync(path.join(repo, path.dirname(file)), { recursive: true });
     fs.writeFileSync(path.join(repo, file), '');
   }
@@ -195,7 +195,8 @@ test('review-routing: high-risk matches whole words, not substrings', () => {
   const risk = out.match(/high-risk=(.*?) bulk=/)[1];
   assert.match(risk, /useAuth\.ts/);
   assert.match(risk, /use-session\.ts/);
-  assert.doesNotMatch(risk, /recorder|author-rules|tokens\.css/);
+  assert.match(risk, /src\/auth\/tokens\/refresh\.ts/);
+  assert.doesNotMatch(risk, /recorder|author-rules|tokens\.css|tooling\/tokens|app-token|session\.spec|auth-pkg|mocks\/handlers/);
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(`/tmp/claude-review-routing-${sessionId}`, { force: true });
 });
@@ -345,6 +346,43 @@ test('review-lens-nudge: names lenses on a code edit, once per turn and lens set
   assert.match(edit('api.ts'), /Review lenses/);
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(`/tmp/claude-review-lenses-${sessionId}`, { force: true });
+});
+
+test('review-lens-nudge: scores the edited file\'s repo, not the payload cwd', () => {
+  // Under the pre-commit hook git exports GIT_INDEX_FILE etc.; inherited, they point the scratch repos at ~/.claude's index.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'lens-')));
+  const sessionIds = [];
+  const lensesFor = ({ cwd, file }) => {
+    const sessionId = `harness-lens-${process.pid}-${Date.now()}-${sessionIds.length}`;
+    sessionIds.push(sessionId);
+    const out = execFileSync('bash', [path.join(ROOT, 'hooks', 'review-lens-nudge.sh')], {
+      input: JSON.stringify({ tool_input: { file_path: file }, cwd, session_id: sessionId }),
+      encoding: 'utf8',
+      env,
+    });
+    return JSON.parse(out).hookSpecificOutput.additionalContext.match(/Review lenses for this change: (.*?)\. Before/)[1];
+  };
+  const dirtyRepo = (name, file, source) => {
+    const repo = path.join(home, name);
+    fs.mkdirSync(repo);
+    execFileSync('git', ['init', '-q'], { cwd: repo, env });
+    fs.writeFileSync(path.join(repo, file), source);
+    return path.join(repo, file);
+  };
+  const tsx = dirtyRepo('a', 'view.tsx', 'export const View = () => <div />;\n');
+  const ts = dirtyRepo('b', 'api.ts', 'p.catch(() => null);\n');
+
+  try {
+    assert.match(lensesFor({ cwd: path.dirname(tsx), file: tsx }), /react-best-practices/);
+    const fromOtherRepo = lensesFor({ cwd: path.dirname(tsx), file: ts });
+    assert.doesNotMatch(fromOtherRepo, /react-best-practices/);
+    assert.equal(lensesFor({ cwd: path.dirname(ts), file: ts }), fromOtherRepo);
+    assert.equal(execFileSync('bash', [path.join(ROOT, 'hooks', 'review-lens-nudge.sh')], { input: '', encoding: 'utf8', env }), '');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+    for (const sessionId of sessionIds) fs.rmSync(`/tmp/claude-review-lenses-${sessionId}`, { force: true });
+  }
 });
 
 test.describe('rule and hook agree', () => {
