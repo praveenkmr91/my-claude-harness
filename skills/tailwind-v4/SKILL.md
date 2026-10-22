@@ -1,209 +1,116 @@
 ---
 name: tailwind-v4
-description: Tailwind CSS v4 rules checked against the official v3-to-v4 upgrade guide; load when writing or reviewing Tailwind classes or CSS in a Tailwind v4 repo, or when migrating a repo from v3 to v4. It does not apply to Tailwind v3 repos.
-license: MIT
-provenance: localized 2026-10-22 from https://github.com/ofershap/tailwind-best-practices @61fe313 (plugin v0.1.0); verified against tailwindcss.com/docs/upgrade-guide (tailwindcss.com repo @aa6ad90) for tailwindcss@4.3.3; Patterns list pruned, gradient/config/opacity/rename/variant rules corrected, 6 upgrade-guide rules added (outline-hidden, ring-3, border colour, space-*, bg-(--var), trailing !); refresh = re-clone + diff
-metadata:
-  author: ofershap
-  version: "0.1.0"
+description: Tailwind CSS v4 usage guide and v3-to-v4 differences. Use when writing, reviewing, or refactoring Tailwind CSS code in a repo pinned to Tailwind v4. Triggers on tasks involving Tailwind classes, @theme blocks, CSS-first configuration, or cleanup of v3-era syntax. Does not apply to Tailwind v3 repos.
+license: Apache-2.0
+provenance: localized 2026-10-22 from https://github.com/mastra-ai/mastra/blob/15987b3/.claude/skills/tailwind-v4/SKILL.md (Mastra, updated with each Tailwind upgrade); edits = description and "Version and sources" de-Mastra'd; token names in examples (surface5, accent1) are Mastra's and illustrative; refresh = re-pull and diff
 ---
 
 # Tailwind CSS v4
 
-Models are trained mostly on v3 code, so they write v3 config, directives and class names. Each rule below matches the v4 upgrade guide or the v4 docs page for that feature.
+How to write idiomatic Tailwind v4 and spot v3-era syntax that still compiles but should not appear in new code.
+
+## Version and sources
+
+Check the pinned version before using recent utilities: read `tailwindcss` in the repo's `package.json` or lockfile (v4.3 added utilities like `scrollbar-*`, `zoom-*`, and `tab-*`). When unsure whether a utility, variant, or directive exists in the pinned version, verify against the docs instead of guessing:
+
+- Utility/variant reference: https://tailwindcss.com/docs
+- v3 → v4 migration: https://tailwindcss.com/docs/upgrade-guide
+- What each minor added: https://tailwindcss.com/blog/tailwindcss-v4 (and `/tailwindcss-v4-1`, `/tailwindcss-v4-3`, ...)
+
+## CSS-first configuration
+
+Tailwind v4 is configured in CSS, not JavaScript.
+
+| Use                                                                        | Never use (v3-era)                    |
+| -------------------------------------------------------------------------- | ------------------------------------- |
+| `@import 'tailwindcss'`                                                    | `@tailwind base/components/utilities` |
+| `@theme { --color-x: ...; }` for tokens that should generate utilities     | `tailwind.config.ts` for new work     |
+| `@utility name { ... }` for custom utilities (works with variants)         | `@layer utilities { .name { ... } }`  |
+| `@custom-variant dark (&:is(.dark *))`                                     | JS `plugins` / `addVariant`           |
+| `@source "path"` / `@source inline("...")` for extra sources / safelisting | `content` array / `safelist` config   |
+| `@variant dark { ... }` to apply a Tailwind variant inside custom CSS      | duplicating media queries / selectors |
+| `@reference "app.css"` for `@apply` in scoped styles (Vue, CSS Modules)    | duplicating stylesheet imports        |
+| `var(--color-x)` in CSS, `getComputedStyle` in JS                          | `theme()` function, `resolveConfig`   |
+| `@config "…"` / `@plugin "…"` only for existing JS-config integrations     | adding new JS configs or plugins      |
+
+`@theme` variables are API: each one emits a native CSS variable AND generates utilities (`--color-*` → `bg-*`/`text-*`/`border-*`/..., `--text-*` → `text-*`, `--shadow-*` → `shadow-*`, `--animate-*` → `animate-*`, `--breakpoint-*` → responsive variants). A plain `:root { --x: ...; }` variable generates nothing — use it for runtime-only values. When a token's value references another variable (`--color-x: var(--y)`), declare it in `@theme inline` so the utility resolves the reference at the declaration site. In custom CSS, `--alpha(var(--color-x) / 50%)` and `--spacing(4)` replace v3 `theme()` math.
+
+## v3 → v4 renames
+
+Bare names shifted one step down the scale, so the v3 spelling silently renders smaller or lighter:
+
+| v3                                | v4                                                                |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `shadow-sm` / `shadow`            | `shadow-xs` / `shadow-sm`                                         |
+| `drop-shadow-sm` / `drop-shadow`  | `drop-shadow-xs` / `drop-shadow-sm`                               |
+| `blur-sm` / `blur`                | `blur-xs` / `blur-sm`                                             |
+| `rounded-sm` / `rounded`          | `rounded-xs` / `rounded-sm`                                       |
+| `outline-none`                    | `outline-hidden` (a11y-safe); `outline-none` now truly removes it |
+| `ring` (3px)                      | `ring-3`; the default ring is now 1px `currentColor`              |
+| `bg-opacity-50`, `text-opacity-*` | opacity modifier: `bg-black/50`, `text-white/50`                  |
+| `bg-gradient-to-r`                | `bg-linear-to-r` (plus new `bg-conic-*`, `bg-radial-*`)           |
+| `!bg-red-500` (prefix)            | `bg-red-500!` (suffix)                                            |
+| `flex-shrink-*` / `flex-grow-*`   | `shrink-*` / `grow-*`                                             |
+| `bg-[--var]`                      | `bg-(--var)`; brackets now require `bg-[var(--var)]`              |
+| `grid-cols-[a,b]` (commas)        | underscores: `grid-cols-[max-content_auto]`                       |
+
+## Prefer generated utilities over arbitrary values
+
+The spacing scale is infinite — every number compiles via `calc(var(--spacing) * n)` — so most v3-era arbitrary values have a named form:
+
+| Don't                                  | Do                                                                                      |
+| -------------------------------------- | --------------------------------------------------------------------------------------- |
+| `min-w-[400px]`, `w-[600px]`           | `min-w-100`, `w-150`                                                                    |
+| `h-[1.5rem] w-[1.5rem]`                | `size-6`                                                                                |
+| `mt-[68px]`                            | `mt-17`                                                                                 |
+| `grid-cols-[repeat(15,minmax(0,1fr))]` | `grid-cols-15`                                                                          |
+| `h-[100dvh]`, `w-[100dvw]`, `h-[1lh]`  | `h-dvh`, `w-dvw`, `h-lh`                                                                |
+| `max-w-[80rem]`                        | `max-w-7xl` (container scale)                                                           |
+| `data-[current]:opacity-100`           | `data-current:opacity-100` (values keep brackets: `data-[state=open]:`)                 |
+| `bg-[var(--row-bg)]`                   | `bg-(--row-bg)`; type hints when ambiguous: `text-(color:--fg)`, `text-(length:--size)` |
+
+Square brackets remain correct for true one-offs: `max-h-[calc(100dvh-3rem)]`, `grid-cols-[200px_minmax(0,1fr)]`, and arbitrary properties like `[mask-type:luminance]`.
+
+Class strings must stay complete and statically detectable: map props to full strings (`{ success: 'bg-positive1' }[tone]`), never build fragments like `` `bg-${tone}-500` ``.
+
+## Don't hand-write CSS or JS for what a variant covers
+
+Before writing a stylesheet rule, a `style` prop, or an event handler for styling, check for a variant:
+
+| Hand-written                                   | Tailwind                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| `.btn:active { ... }` in CSS                   | `active:bg-surface5`                                                     |
+| `:focus-visible` rules                         | `focus-visible:outline-accent1`                                          |
+| `[aria-expanded="true"]` selectors             | `aria-expanded:rotate-180` (any `aria-*` boolean or value)               |
+| `[data-state="open"]` selectors                | `data-[state=open]:opacity-100`, boolean: `data-current:`                |
+| JS hover/focus state to style a sibling/child  | `group`/`group-hover:`, `peer`/`peer-checked:`, `in-focus:`              |
+| parent-state selectors / JS "has child" checks | `has-checked:bg-accent1`, `has-[>svg]:pl-8`                              |
+| `mask-image` / fade-out gradients in CSS       | `mask-b-from-80%`, `mask-t-from-*`                                       |
+| `@media (hover: none)` blocks                  | `pointer-coarse:`/`pointer-fine:`                                        |
+| first/last/nth rules in CSS                    | `first:`, `last:`, `odd:`, `nth-3:`, `not-first:`                        |
+| styling all children from CSS                  | `*:rounded-full` (children), `**:data-avatar:rounded-full` (descendants) |
+
+## New capabilities — reach for these before hacks or JS
+
+- `field-sizing-content` — auto-growing textarea without a JS resize listener.
+- `wrap-anywhere` / `wrap-break-word` — long-word breaking inside flex without the `min-w-0` hack.
+- `items-center-safe`, `justify-center-safe` — centering that falls back to `start` on overflow.
+- `pointer-coarse:` / `pointer-fine:` — adapt touch targets without user-agent sniffing.
+- `user-valid:` / `user-invalid:` — validation styling only after user interaction (unlike `:valid`).
+- `starting:` (+ `transition-discrete` for `display`/popover) — enter transitions without JS mount tricks.
+- `text-shadow-*`, `mask-t-from-*`/`mask-b-to-*` (fade-out edges), `scheme-dark` (native controls/scrollbars), 3D transforms (`rotate-x-*`, `perspective-*`).
+
+## Behavior changes to remember
+
+- Transforms use individual CSS properties: custom transition lists need `transition-[opacity,scale]`, not `transition-[opacity,transform]`; reset with `scale-none`/`rotate-none`/`translate-none`.
+- `hover:` only applies on hover-capable devices (`@media (hover: hover)`) — never gate required touch functionality behind hover.
+- Default `border-*`, `divide-*`, ring, and outline colors are `currentColor` — set an explicit color when the color matters.
+- Variant stacking applies left to right: v3 `first:*:pt-0` is now `*:first:pt-0`.
+- `space-x/y-*` changed selectors (`:not(:last-child)`); prefer flex/grid with `gap-*`.
+- Container queries are built in: `@container` on the parent, `@sm:`/`@max-md:` on children.
+- Useful v4 variants: `starting:` (enter transitions), `not-*`, `in-*` (like `group-*` without the `group` class), `nth-*`, `*:` (direct children), `**:` (descendants), `inert:`.
 
-## Setup and config
+## Motion
 
-### 1. Use `@import` instead of `@tailwind` directives
-
-**Wrong:** `@tailwind base; @tailwind components; @tailwind utilities;`
-
-**Correct:**
-
-```css
-@import "tailwindcss";
-```
-
-**Why:** v4 imports Tailwind with a regular CSS `@import`, not the v3 `@tailwind` directives.
-
-### 2. Configure the theme in CSS with `@theme`
-
-**Wrong:**
-
-```js
-// tailwind.config.js
-module.exports = { theme: { extend: { colors: { brand: "#3b82f6" }, spacing: { 18: "4.5rem" } } } };
-```
-
-**Correct:**
-
-```css
-@import "tailwindcss";
-
-@theme {
-  --color-brand: #3b82f6;
-  --spacing-18: 4.5rem;
-}
-```
-
-**Why:** Theme variables in `@theme` decide which utilities exist. A JS config is still supported for backward compatibility, but v4 no longer detects it automatically; load it explicitly with `@config "../tailwind.config.js";`. Its `corePlugins`, `safelist` and `separator` options are not supported.
-
-### 3. Use the `@tailwindcss/postcss` plugin
-
-**Wrong:** `plugins: { "postcss-import": {}, tailwindcss: {}, autoprefixer: {} }`
-
-**Correct:**
-
-```js
-// postcss.config.mjs
-export default { plugins: { "@tailwindcss/postcss": {} } };
-```
-
-**Why:** The PostCSS plugin moved to `@tailwindcss/postcss`, and v4 handles imports and vendor prefixing itself. With Vite, the guide recommends the `@tailwindcss/vite` plugin instead.
-
-### 4. Use `@import "tailwindcss" important` for the global important flag
-
-**Wrong:** `module.exports = { important: true };`
-
-**Correct:**
-
-```css
-@import "tailwindcss" important;
-```
-
-**Why:** The `important` flag on the import marks every utility `!important`.
-
-## Class names
-
-### 5. Use opacity modifiers, not `*-opacity-*`
-
-**Wrong:** `<div class="bg-red-500 bg-opacity-50 text-blue-600 text-opacity-75">`
-
-**Correct:** `<div class="bg-red-500/50 text-blue-600/75">`
-
-**Why:** `bg-opacity-*`, `text-opacity-*`, `border-opacity-*`, `divide-opacity-*`, `ring-opacity-*` and `placeholder-opacity-*` were removed. Use the slash modifier.
-
-### 6. Use the renamed shadow, radius and blur scales
-
-**Wrong (when you mean the smallest step):** `<div class="shadow-sm blur-sm rounded-sm">`
-
-**Correct:** `<div class="shadow-xs blur-xs rounded-xs">`
-
-**Why:** Every scale step now has a name: `shadow-sm` → `shadow-xs`, `shadow` → `shadow-sm`, and the same for `drop-shadow`, `blur`, `backdrop-blur` and `rounded`. The bare names still work for compatibility, but `*-sm` now renders what bare `*` rendered in v3.
-
-### 7. Use `outline-hidden`, not `outline-none`
-
-**Wrong:** `<input class="focus:outline-none" />`
-
-**Correct:** `<input class="focus:outline-hidden" />`
-
-**Why:** v3 `outline-none` set an invisible outline that still showed in forced colors mode. That utility is now `outline-hidden`, and the new `outline-none` really sets `outline-style: none`. `outline` now defaults to 1px, and `outline-<number>` sets `outline-style: solid` on its own.
-
-### 8. Write `ring-3` and give rings a colour
-
-**Wrong:** `<button class="focus:ring">`
-
-**Correct:** `<button class="focus:ring-3 focus:ring-blue-500">`
-
-**Why:** `ring` changed from 3px to 1px, and its default colour changed from `blue-500` to `currentColor`. Replace `ring` with `ring-3` and add `ring-blue-500` wherever you relied on the default colour.
-
-### 9. Give borders and dividers an explicit colour where the v3 default was relied on
-
-**Wrong:** `<div class="border px-2 py-3">` expecting a light grey line
-
-**Correct:** `<div class="border border-gray-200 px-2 py-3">`, or the repo's own border token
-
-**Why:** In v3, `border-*` and `divide-*` used `gray-200` by default. In v4 they use `currentColor`. A repo that sets its border colour in `@theme` or a base layer needs no change; one that relied on the v3 default does.
-
-### 10. Use `bg-linear-*` for gradients
-
-**Wrong:** `<div class="bg-gradient-to-r from-blue-500 to-purple-500">`
-
-**Correct:** `<div class="bg-linear-to-r from-blue-500 to-purple-500">`
-
-**Why:** The v4 docs name linear gradients `bg-linear-to-*` and `bg-linear-<angle>` (for example `bg-linear-45`), alongside `bg-radial` and `bg-conic-<angle>`. `bg-gradient-to-*` still compiles in 4.3.3, but only as a legacy alias.
-
-### 11. Use `bg-(--var)` for CSS variables in arbitrary values
-
-**Wrong:** `<div class="bg-[--brand-color]">`
-
-**Correct:** `<div class="bg-(--brand-color)">`
-
-**Why:** Bare variables in square brackets are ambiguous in modern CSS, so v4 uses parentheses. `bg-(--x)` is shorthand for `bg-[var(--x)]`.
-
-### 12. Put the important modifier at the end
-
-**Wrong:** `<div class="!flex !bg-red-500 hover:!bg-red-600/50">`
-
-**Correct:** `<div class="flex! bg-red-500! hover:bg-red-600/50!">`
-
-**Why:** v4 puts `!` at the very end of the class name. The leading `!` still works but is deprecated.
-
-### 13. Prefer theme variables over one-off arbitrary colours
-
-**Wrong:** `<div class="bg-[#3b82f6]">`
-
-**Correct:** `@theme { --color-brand: #3b82f6; }`, then `<div class="bg-brand">`
-
-**Why:** This is style guidance, not a v4 change. The docs say a design is usually built from a constrained set of tokens, and arbitrary values are for the rare one-off.
-
-## Layout and variants
-
-### 14. Know the new `space-x-*` / `space-y-*` selector
-
-**Before (v3):** `.space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }`
-
-**Now (v4):** `.space-y-4 > :not(:last-child) { margin-bottom: 1rem; }`
-
-**Why:** The selector changed for performance. Layouts that use `space-*` with inline children, or that add their own margins to children, can shift. The guide recommends a flex or grid layout with `gap` instead: `class="flex flex-col gap-4"`. `divide-x-*` / `divide-y-*` changed the same way.
-
-### 15. Use container queries for parent-sized layouts
-
-**Viewport-based:** `<div class="flex flex-col md:flex-row">`
-
-**Correct (when the layout should follow its parent, not the viewport):**
-
-```html
-<div class="@container">
-  <div class="flex flex-col @md:flex-row"></div>
-</div>
-```
-
-**Why:** Container queries are built in. Mark the parent with `@container` and use `@sm:`, `@md:` or `@max-md:` on children.
-
-### 16. Use `@utility` for custom utilities
-
-**Wrong:** `@layer utilities { .content-auto { content-visibility: auto; } }`
-
-**Correct:**
-
-```css
-@utility content-auto {
-  content-visibility: auto;
-}
-```
-
-**Why:** v4 uses native cascade layers and no longer hijacks `@layer`, so `@utility` replaces `@layer utilities` and makes the class work with variants. `@layer components` is still documented for component classes such as `.card` that utilities should override. Define custom variants with `@custom-variant`; `@variant` only applies an existing variant inside CSS.
-
-### 17. Use the `not-*` variant for negation
-
-**Wrong:** `<button class="hover:bg-indigo-700">` with no way to skip the hover style while the button is focused.
-
-**Correct:** `<button class="bg-indigo-600 hover:not-focus:bg-indigo-700">`
-
-**Why:** `not-*` styles an element when a condition is not true, and it combines with other variants.
-
-### 18. Use `starting:` for entry transitions
-
-**Wrong:** toggling an `.open` class from JavaScript to animate in.
-
-**Correct:** `<div class="starting:opacity-0 opacity-100 transition-opacity duration-300">`; for an element that leaves `display: none` (a popover or dialog), add `transition-discrete` as the docs example does.
-
-**Why:** The `starting` variant maps to `@starting-style` and sets how an element looks when it is first rendered or leaves `display: none`, with no JavaScript.
-
-## Anti-patterns
-
-- Do not add `tailwind.config.js` for theme tokens; use `@theme`, and load a JS config only through `@config`.
-- Do not keep `postcss-import` or `autoprefixer` in a v4 PostCSS setup.
-- Do not write bare `ring`, bare `border` without a colour, or `outline-none` when you mean the v3 behaviour.
-- Do not use `*-opacity-*` utilities or `[--var]` arbitrary values.
+- Gate decorative animation: `motion-safe:animate-spin motion-reduce:animate-none`.
+- Reusable animations are `--animate-*` tokens with their `@keyframes` inside `@theme`; local one-offs use `animate-(--local-animation)` or `animate-[...]`.
