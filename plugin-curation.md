@@ -57,6 +57,7 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 - `react-best-practices` — from vercel-labs/agent-skills, Next.js/RSC rules pruned. Refresh = re-clone + diff.
 - `tdd`, `/learn` — from superpowers + affaan-m/ECC; ECC not installed.
 - `figma-design-to-code` — verbatim from the figma plugin.
+- `delete-list`, `delete-audit`, `shortcut-debt` — from DietrichGebert/ponytail v5.3.2, provenance in each file's header comment. Refresh = diff upstream `skills/ponytail-{review,audit,debt}`. Not installed: its ladder duplicates CLAUDE.md, its band claude-hud.
 
 ## claude.ai account connectors and skills
 - claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls, not settable from `~/.claude`. Optional hygiene only — unused connectors surface as deferred names, so disconnecting saves near-zero context. Figma, Claude Docs, Atlassian kept.

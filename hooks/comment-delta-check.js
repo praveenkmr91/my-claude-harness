@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// PostToolUse(Edit|Write): warns when an edit ADDS comment lines — makes the
-// code-craft.md "comments default ZERO / footgun bar" rule fire at write time.
+// PostToolUse(Write|Edit): warns when an edit ADDS comment lines (code-craft.md "comments
+// default ZERO / footgun bar") and when it adds a `shortcut:` marker with no upgrade trigger.
 let raw = '';
 process.stdin.on('data', (c) => (raw += c));
 process.stdin.on('end', () => {
@@ -8,16 +8,32 @@ process.stdin.on('end', () => {
   try { input = JSON.parse(raw); } catch { return; }
   const ti = input.tool_input || {};
   const file = ti.file_path || '';
-  if (!/\.(ts|tsx|js|jsx|mjs|css|scss|swift|kt|sh)$/.test(file)) return;
+  if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts|sh|vue|svelte|css|scss|swift|kts?|dart)$/.test(file)) return;
   const count = (s) =>
     (s || '').split('\n').filter((l) => /^\s*(\/\/(?!\/)|\/\*|\*\s|#(?!!)|<!--)/.test(l)).length;
   const added = input.tool_name === 'Write'
     ? count(ti.content)
     : count(ti.new_string) - count(ti.old_string);
-  if (added < 2) return;
-  const context =
-    `comment-check: this ${input.tool_name.toLowerCase()} added ${added} comment lines to ${file.split('/').pop()}. ` +
-    `code-craft.md bar: ZERO by default — keep only lines naming a constraint the code cannot show (a footgun a future reader trips on). ` +
-    `Re-read each added comment now; delete the ones that label blocks, restate code, or justify the change to a reviewer.`;
-  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context } }));
+  const markers = (s) => ((s || '').match(/shortcut:/g) || []).length;
+  const addedText = (input.tool_name === 'Write' ? ti.content : ti.new_string) || '';
+  const addsMarker = input.tool_name === 'Write'
+    ? markers(ti.content) > 0
+    : markers(ti.new_string) > markers(ti.old_string);
+  const hasTrigger = /\b(?:until|once|when|upgrade|revisit|lands?|replaced?|before)\b/i.test(addedText);
+  const name = file.split('/').pop();
+  const lines = [];
+  if (addsMarker && !hasTrigger) {
+    lines.push(
+      `comment-check: ${name} adds a shortcut: marker with no upgrade trigger — form is \`shortcut: <limit>, <when to upgrade>\` (until / once / when / before …); add the trigger or drop the marker.`
+    );
+  }
+  if (added >= 2) {
+    lines.push(
+      `comment-check: this ${input.tool_name.toLowerCase()} added ${added} comment lines to ${name}. ` +
+      `code-craft.md bar: ZERO by default — keep only lines naming a constraint the code cannot show (a footgun a future reader trips on). ` +
+      `Re-read each added comment now; delete the ones that label blocks, restate code, or justify the change to a reviewer.`
+    );
+  }
+  if (!lines.length) return;
+  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: lines.join('\n') } }));
 });

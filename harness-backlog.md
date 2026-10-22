@@ -12,7 +12,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Existing hook tests lack quiet-twin and empty-input cases
 
-- **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `plan-lint.js`, `comment-delta-check.js`, `new-dep-gate.js`.
+- **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `plan-lint.js`, `new-dep-gate.js`.
 - **Why parked:** the rule applies on touch; a retro-audit of every hook has no failure behind it yet.
 - **Fix:** per hook, feed `{}`, a missing transcript and an unmatched command, and assert the documented fail-open or fail-closed outcome.
 
