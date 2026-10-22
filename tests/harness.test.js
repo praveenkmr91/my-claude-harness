@@ -384,6 +384,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/done-claim-gate.sh', /pass\|fail\|blocked/, 'agents/browser-verifier.md', /pass\|fail\|blocked/],
     ['hooks/enforce-subagent-model.sh', /no `subagent_type`/, 'subagent-tiers.md', /no `subagent_type`/],
     ['hooks/enforce-subagent-model.sh', /cold-reader/, 'plan-mode.md', /cold-reader/],
+    ['hooks/inline-call-nudge.sh', /direct lookups/, 'subagent-tiers.md', /inline-call-nudge\.sh/],
+    ['hooks/inline-call-nudge.sh', /≤3 direct calls per question/, 'CLAUDE.md', /≤3 calls per question, all rounds counted; a 4th → Explore/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {
@@ -401,7 +403,7 @@ test('eval-run.sh: the cold-read brief grep yields the brief without the dispatc
 
 test('reset-context-flags.sh: every hook flag is reset on compaction or is a nudge counter', () => {
   const reset = read('hooks/reset-context-flags.sh');
-  const counters = ['claude-opus-write-', 'claude-review-lenses'];
+  const counters = ['claude-opus-write-', 'claude-review-lenses', 'claude-inline-calls'];
   const prefixes = new Set();
   for (const script of HOOK_SCRIPTS) {
     for (const m of read(`hooks/${script}`).matchAll(/\/tmp\/(claude-[a-z-]+?)-\$/g)) prefixes.add(m[1]);
