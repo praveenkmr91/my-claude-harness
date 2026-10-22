@@ -64,7 +64,7 @@ test('inject-once hook', async (t) => {
 
   await t.test('compaction resets the flag so the doc injects again, nudge counters kept', () => {
     const sid = newSession();
-    const counter = `/tmp/claude-opus-write-files-${sid}`;
+    const counter = `/tmp/claude-inline-calls-${sid}`;
     fs.writeFileSync(counter, '3');
     run('subagent-tiers.md', call(sid, 'agent-a'));
     const reset = spawnSync('bash', [path.resolve(__dirname, '..', 'hooks', 'reset-context-flags.sh')], { input: JSON.stringify({ session_id: sid }), encoding: 'utf8' });

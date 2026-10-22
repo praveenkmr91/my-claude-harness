@@ -36,10 +36,7 @@ for line in open(path):
             for b in c or []:
                 if isinstance(b,dict) and b.get('type')=='tool_result': results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
         # A PreToolUse block lands as an errored tool_result, not a hook_blocking_error attachment.
-        if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'executes an approved plan' in str(b.get('content','')) for b in c or []): nudged=True
-    elif t=='attachment':
-        a=r.get('attachment') or {}
-        if a.get('type')=='hook_blocking_error' and 'This Opus thread has now written' in str(a.get('blockingError','')): nudged=True
+        if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'about to write source' in str(b.get('content','')) for b in c or []): nudged=True
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
             if not isinstance(b,dict): continue
