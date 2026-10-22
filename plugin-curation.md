@@ -57,6 +57,7 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 - `react-best-practices` — from vercel-labs/agent-skills, Next.js/RSC rules pruned. Refresh = re-clone + diff.
 - `tdd`, `/learn` — from superpowers + affaan-m/ECC; ECC not installed.
 - `figma-design-to-code` — verbatim from the figma plugin.
+- `tailwind-v4` — ofershap/tailwind-best-practices, re-checked against the v4 upgrade guide; v4 repos only. Refresh = re-read the guide.
 - `delete-list`, `delete-audit`, `shortcut-debt` — from DietrichGebert/ponytail v5.3.2, provenance in each file's header comment. Refresh = diff upstream `skills/ponytail-{review,audit,debt}`. Not installed: its ladder duplicates CLAUDE.md, its band claude-hud.
 
 ## claude.ai account connectors and skills
