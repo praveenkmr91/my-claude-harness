@@ -161,6 +161,22 @@ test('build approval gate', async (t) => {
     assert.equal(write('/repo/src/a.tsx', back).code, 0);
   });
 
+  await t.test('an approved plan moved into the repo stays approved', () => {
+    const moved = transcript([planEdit(), user('build'), reply, planEdit('Edit', '/repo/docs/plans/build-approval-gate.md'), reply]);
+    assert.equal(write('/repo/src/a.tsx', moved).code, 0);
+    assert.equal(dispatch('implementer', moved).code, 0);
+  });
+
+  await t.test('a moved plan with a different name stays gated', () => {
+    const renamed = transcript([planEdit(), user('build'), reply, planEdit('Edit', '/repo/docs/plans/other-feature.md'), reply]);
+    assert.equal(write('/repo/src/a.tsx', renamed).code, 2);
+  });
+
+  await t.test('hook files are never gated, other harness scripts are', () => {
+    assert.equal(write('/Users/me/.claude/hooks/build-approval-gate.sh', unapproved).code, 0);
+    assert.equal(write('/Users/me/.claude/automation/weekly-audit.sh', unapproved).code, 2);
+  });
+
   await t.test('a plan research file is not a plan edit', () => {
     const research = transcript([planEdit('Write', '/Users/me/.claude/plans/build-approval-gate.research.md'), reply]);
     assert.equal(write('/repo/src/a.tsx', research).code, 0);

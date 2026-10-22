@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Write|Edit and Agent PreToolUse hook: after a plans/*.md edit, blocks source writes and `implementer` dispatches until a typed prompt says implement / build / start.
 # Once a plan is approved in this transcript, later edits to that same plan (as-built notes, review-fix folds) stay approved; a different plan needs its own word.
+# Plans match by file name, so an approval follows a plan moved from ~/.claude/plans/ to the repo's docs/plans/.
+# Hook files under ~/.claude/hooks/ are never gated, so a fix to this gate cannot deadlock behind it.
 # Approval = a clause that opens with the word ("implement", "yes, build it", "review plan and implement"), outside a question, with no not / don't / why / later / yet / until in that clause.
 # Third-person or descriptive mentions ("new session will implement", "start app", "only start is deployed") and a prompt that defers ("ask for my approval") never approve.
 # Fails open (exit 0) on a subagent call, an unreadable transcript, no plan edit in the transcript, or an ungated target.
@@ -12,6 +14,7 @@ T=$(jq -r '.transcript_path // empty' <<<"$IN")
 [ -r "$T" ] || exit 0
 
 if [ -n "$F" ]; then
+  grep -q '/\.claude/hooks/' <<<"$F" && exit 0
   grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py|csv)$|(^|/)package\.json$' <<<"$F" || exit 0
 else
   [ "$(jq -r '.tool_input.subagent_type // empty' <<<"$IN")" = implementer ] || exit 0
@@ -29,8 +32,8 @@ UNAPPROVED_PLAN=$(jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -nRr 'include "turn
       ([$e.message.content[]? | select(.type? == "tool_use" and (.name == "Write" or .name == "Edit"))
         | .input.file_path // empty
         | select(test("/plans/[^/]+\\.md$") and (test("\\.research\\.md$") | not))] | last) as $edited
-      | if $edited then .plan = $edited | .approved = (.approvedPlans | index([$edited]) != null) else . end
-    elif .plan and ([$e | typed_text | select(approves)] | length) > 0 then .approved = true | .approvedPlans += [.plan]
+      | if $edited then .plan = $edited | .approved = (.approvedPlans | index([$edited | sub(".*/"; "")]) != null) else . end
+    elif .plan and ([$e | typed_text | select(approves)] | length) > 0 then .approved = true | .approvedPlans += [.plan | sub(".*/"; "")]
     else . end)
   | select(.plan and (.approved | not)) | .plan' "$T" 2>/dev/null)
 [ -n "$UNAPPROVED_PLAN" ] || exit 0
