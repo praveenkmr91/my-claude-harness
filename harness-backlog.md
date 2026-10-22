@@ -22,11 +22,11 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** the rule applies on touch; a retro-audit of every hook has no failure behind it yet.
 - **Fix:** per hook, feed `{}`, a missing transcript and an unmatched command, and assert the documented fail-open or fail-closed outcome.
 
-### Fable write-block is blind to shell writes
+### Main-thread write-block is blind to shell writes
 
-- **Evidence:** `opus-write-nudge.sh pre` blocks Write|Edit of source files from a Fable session, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so a Fable main thread can still edit source from Bash.
-- **Why parked:** closing it means teaching the Bash guard the session model, and `sed -i` on source is also a legitimate Opus path; needs one rule for both hooks, not a second guard.
-- **Fix:** in `bash-write-guard.js`, read the live model the same way the nudge does and deny `sed -i` / `perl -pi` on source extensions from a Fable session with the same message.
+- **Evidence:** `opus-write-nudge.sh` blocks the first Write|Edit of a source file per turn from an Opus-or-above main thread, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so the same thread can still edit source from Bash.
+- **Why parked:** closing it means teaching the Bash guard the session model and the hook's three escapes; needs one rule for both hooks, not a second guard. Measure first: the two-week census after the block (see `state/census/2026-10-22.tar.gz`, `dispatch-census.js`) shows whether writes moved to `sed -i`.
+- **Fix:** in `bash-write-guard.js`, read the live model the same way the hook does and deny `sed -i` / `perl -pi` on source extensions from an Opus-or-above main thread unless that turn carries a dispatch, an open-call skip or a typed override, with the same message.
 
 ### Workers write source through interpreter scripts, unseen by write-time hooks
 
