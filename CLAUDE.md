@@ -31,6 +31,7 @@
 - **Direct tool:** known target (file path → Read, symbol → Grep), ≤3 calls per question, all rounds counted; a 4th → Explore.
 - **Model tier by work KIND.** Brain work and design-carrying code → Opus+; approved-plan steps and bulk sweeps → Sonnet `implementer`; no-judgment → Haiku `checker` (lint + tsc stay direct); external tools per `~/.claude/external-io.md`, injected on the first MCP call; Fable: plans, code on yes; the harness advisor only when stuck or before an irreversible / architectural commitment, never routine. Spec `~/.claude/subagent-tiers.md`, injected on the first Agent call; `hooks/enforce-subagent-model.sh` enforces.
 - **Never stop in-flight work on inferred intent.** A running agent or task stops only on an explicit "stop" / "kill" / "cancel"; a request about what comes next (fresh session, new plan, handoff) gets the running list and "stop or let it finish?". TaskStop discards the agent's work. A peer session is messaged and stops its own process; a stray port holder stops by PID from `lsof -tiTCP:<port> -sTCP:LISTEN`, never a pattern kill.
+- **A peer's handoff reports back to that peer too**, unasked, even when it says "report to Praveen".
 
 ## Config & harness
 - **Editing `~/.claude` (rule docs, hooks, settings)? `~/.claude/harness.md` owns the maintenance rules** — `hooks/harness-context.sh` injects its Maintenance section on the first write under `~/.claude` each session.
