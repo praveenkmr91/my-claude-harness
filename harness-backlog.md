@@ -18,7 +18,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Existing hook tests lack quiet-twin and empty-input cases
 
-- **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `plan-lint.js`, `new-dep-gate.js`.
+- **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `new-dep-gate.js`.
 - **Why parked:** the rule applies on touch; a retro-audit of every hook has no failure behind it yet.
 - **Fix:** per hook, feed `{}`, a missing transcript and an unmatched command, and assert the documented fail-open or fail-closed outcome.
 
@@ -67,3 +67,9 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** one sighting, and rewording the message is a cheap way around it; tokenizing every rule in the hook is a larger change than the friction.
 - **Fix:** match command words only, not quoted arguments — reuse the `shlex` segment scan from `block-dangerous-git.sh`, or anchor the rule to command position (`(?:^|[;&|]\s*)printenv\b`).
 - **Worth doing when:** it denies a legitimate command twice more.
+
+### Implementer dispatched after an unread plan fold
+
+- **Evidence:** a peer session's count, not re-run here: 3 sessions since the cold reader landed, all of which dispatched `implementer` after a plan edit no cold read followed (31 dispatches).
+- **Why parked:** two days of history; most of those edits are wording folds `plan-mode.md` lets through without a re-read.
+- **Fix:** if a re-count a month on still shows dispatches after behaviour folds: a `SubagentStop` hook stamps the cold reader's own `shasum` line (an agent-written stamp is denied by the auto-mode classifier), and `build-approval-gate.sh` re-arms only when the plan changed after the last cold read's report.

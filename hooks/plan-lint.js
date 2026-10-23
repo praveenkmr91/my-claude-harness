@@ -8,6 +8,7 @@ const PLAN_PATH = /(^|\/)plans\/[^/]+(?<!\.research)\.md$/;
 const REPHRASE =
   'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
 const NAME_CRITERIA = 'name each criterion in the step that delivers it';
+const WRITE_PARSEABLE = 'write steps as `1. **`, `1.1 **`, `### 1.` or `## Step 1`, and criteria as `- A1` bullets';
 
 const FIRST_PERSON = /\bI\b/;
 const JOURNAL_MARKER =
@@ -26,20 +27,24 @@ const OPEN_HEADING = /^## Open\s*$/;
 const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
 const INDENTED = /^\s{2,}\S/;
 const VERIFY_LINE = /^\s*→ verify/;
-const STEP = /^(\d+\. \*\*|#{3,4} \d+\.)/;
+const STEP =
+  /^(\d{1,2}(?:\.\d{1,2})+\.? \*\*|\d{1,2}\. \*\*|#{3,4} \d{1,2}(?:\.\d{1,2})+\.?(\s|$)|#{3,4} \d{1,2}\.(\s|$)|## (?:Step \d+\b|S\d+(?=\s*(?:[:.—–-]|$))))/;
+const HEADING_STEP = /^## (?:Step \d+\b|S\d+(?=\s*(?:[:.—–-]|$)))/;
 const STEPS_HEADING = /^## Steps\b/i;
 const PLAIN_STEP = /^\d+\. /;
 const TOP_LEVEL_BULLET = /^- /;
 
 const CRITERIA_HEADING = /^## (Criteria|Acceptance criteria|Acceptance)\s*$/i;
-const CRITERION = /^- (?:\*\*|`)?A(\d+)\b/;
+const CRITERION = /^- (?:\*\*|`)?([A-Z])(\d+)\b/;
 const STEP_SECTION_HEADING = /^## (Step|Chunk|S\d)/i;
-const CRITERION_NAME = /\bA(\d+)\b/g;
-const CRITERION_RANGE = /\bA(\d+)[–-]A?(\d+)\b/g;
+const UNPARSED_STEP_HEADING = /^## (Steps\s*$|Step \d+\b|Chunk \d+\b|S\d+(?=\s*(?:[:.—–-]|$)))/i;
+const CRITERION_NAME = /\b([A-Z])(\d+)\b/g;
+const CRITERION_RANGE = /\b([A-Z])(\d+)[–-]\1?(\d+)\b/g;
 
 const PARAGRAPH_LIMIT = 200;
 const CONTEXT_PARAGRAPH_LIMIT = 500;
 const OPEN_BULLET_LIMIT = 3;
+const MAX_RANGE_SPAN = 99;
 
 function fencedLines(lines) {
   let inFence = false;
@@ -136,14 +141,24 @@ function longParagraphs(lines) {
   return findings;
 }
 
+function sectionEnd(lines, start) {
+  const nextSection = lines.findIndex((line, index) => index > start && SECTION_HEADING.test(line));
+  return nextSection === -1 ? lines.length : nextSection;
+}
+
 function stepFlags(lines) {
   const flags = lines.map((line) => STEP.test(line));
 
   lines.forEach((heading, start) => {
+    if (!HEADING_STEP.test(heading)) return;
+
+    if (flags.slice(start + 1, sectionEnd(lines, start)).some(Boolean)) flags[start] = false;
+  });
+
+  lines.forEach((heading, start) => {
     if (!STEPS_HEADING.test(heading)) return;
 
-    const nextSection = lines.findIndex((line, index) => index > start && SECTION_HEADING.test(line));
-    const end = nextSection === -1 ? lines.length : nextSection;
+    const end = sectionEnd(lines, start);
     if (flags.slice(start, end).some(Boolean)) return;
 
     for (let index = start + 1; index < end; index++) flags[index] = PLAIN_STEP.test(lines[index]);
@@ -205,10 +220,11 @@ function longOpenBullets(lines) {
 }
 
 function namedCriteria(line) {
-  const single = [...line.matchAll(CRITERION_NAME)].map((match) => Number(match[1]));
+  const single = [...line.matchAll(CRITERION_NAME)].map((match) => `${match[1]}${Number(match[2])}`);
   const ranged = [...line.matchAll(CRITERION_RANGE)].flatMap((match) => {
-    const [from, to] = [Number(match[1]), Number(match[2])];
-    return Array.from({ length: Math.max(to - from + 1, 0) }, (_, offset) => from + offset);
+    const [from, to] = [Number(match[2]), Number(match[3])];
+    if (to < from || to - from > MAX_RANGE_SPAN) return [];
+    return Array.from({ length: to - from + 1 }, (_, offset) => `${match[1]}${from + offset}`);
   });
 
   return [...single, ...ranged];
@@ -230,17 +246,42 @@ function criteriaWithoutStep(lines) {
       }
     }
 
-    if (section === 'step') namedCriteria(line).forEach((number) => named.add(number));
+    if (section === 'step') namedCriteria(line).forEach((name) => named.add(name));
 
     const criterion = section === 'criteria' ? CRITERION.exec(line) : null;
-    if (criterion) criteria.push({ line: index + 1, number: Number(criterion[1]) });
+    if (criterion) criteria.push({ line: index + 1, name: `${criterion[1]}${Number(criterion[2])}` });
   });
 
   if (!hasStepSection) return [];
 
   return criteria
-    .filter(({ number }) => !named.has(number))
-    .map(({ line, number }) => ({ line, rule: 'P7', text: `criterion A${number} has no step` }));
+    .filter(({ name }) => !named.has(name))
+    .map(({ line, name }) => ({ line, rule: 'P7', text: `criterion ${name} has no step` }));
+}
+
+function hasCriterion(lines) {
+  let inCriteria = false;
+
+  return lines.some((line) => {
+    if (SECTION_HEADING.test(line)) inCriteria = CRITERIA_HEADING.test(line);
+    return inCriteria && CRITERION.test(line);
+  });
+}
+
+function unparsedShapes(lines) {
+  const findings = [];
+
+  const criteriaHeading = lines.findIndex((line) => CRITERIA_HEADING.test(line));
+  if (criteriaHeading !== -1 && !hasCriterion(lines)) {
+    findings.push({ line: criteriaHeading + 1, rule: 'P8', text: 'no criteria parsed' });
+  }
+
+  const stepHeading = lines.findIndex((line) => UNPARSED_STEP_HEADING.test(line));
+  if (stepHeading !== -1 && !stepFlags(lines).some(Boolean)) {
+    findings.push({ line: stepHeading + 1, rule: 'P8', text: 'no steps parsed' });
+  }
+
+  return findings;
 }
 
 function lintPlan(text, { fragment }) {
@@ -256,6 +297,7 @@ function lintPlan(text, { fragment }) {
       ...unverifiedSteps(outsideFences),
       ...longOpenBullets(outsideFences),
       ...criteriaWithoutStep(outsideFences),
+      ...unparsedShapes(outsideFences),
       ...researchHeadings(outsideFences, masked),
       ...datedLines(outsideFences, masked),
     );
@@ -269,7 +311,8 @@ const formatFindings = (findings) => findings.map((f) => `${f.line} ${f.rule} ${
 function hintLines(rules) {
   const hints = [];
   if (rules.includes('P7')) hints.push(NAME_CRITERIA);
-  if (rules.some((rule) => rule !== 'P7')) hints.push(REPHRASE);
+  if (rules.includes('P8')) hints.push(WRITE_PARSEABLE);
+  if (rules.some((rule) => rule !== 'P7' && rule !== 'P8')) hints.push(REPHRASE);
   return hints;
 }
 

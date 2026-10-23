@@ -147,6 +147,15 @@ test('plan lint', async (t) => {
     assert.equal(res.status, 0);
     assert.equal(res.stdout, '');
   });
+
+  await t.test('pre and post exit 0 with no output on empty input', () => {
+    for (const mode of ['pre', 'post']) {
+      const res = run(mode);
+      assert.equal(res.code, 0);
+      assert.equal(res.stdout, '');
+      assert.equal(res.stderr, '');
+    }
+  });
 });
 
 test('check P1', async (t) => {
@@ -195,8 +204,9 @@ test('check P2', async (t) => {
   });
 
   await t.test('fails the Steps preamble as three wrapped lines and as one line', () => {
-    assert.deepEqual(check(`## Steps\n\n${STEPS_PREAMBLE_LINES.join('\n')}`).findings, [`3 P2 ${STEPS_PREAMBLE_LINES[0]}`]);
-    assert.deepEqual(rulesOf(`## Steps\n\n${STEPS_PREAMBLE_LINES.join(' ')}`), ['P2']);
+    const step = '\n\n1. **Do it.**\n→ verify: `ls`';
+    assert.deepEqual(check(`## Steps\n\n${STEPS_PREAMBLE_LINES.join('\n')}${step}`).findings, [`3 P2 ${STEPS_PREAMBLE_LINES[0]}`]);
+    assert.deepEqual(rulesOf(`## Steps\n\n${STEPS_PREAMBLE_LINES.join(' ')}${step}`), ['P2']);
   });
 
   await t.test('allows 500 characters inside Context and not after it', () => {
@@ -254,6 +264,39 @@ test('check P3', async (t) => {
   await t.test('keeps a nested plain list inside a ### step from becoming a step', () => {
     const text = ['## Steps', '', '### 1. Foo', '', '1. first', '2. second', '', '→ verify: `pnpm test`'].join('\n');
     assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('fails a ## Step N heading with no verify and passes it with one', () => {
+    assert.deepEqual(check('## Step 1: hook\n\n- wire it up\n').findings, ['1 P3 ## Step 1: hook']);
+    assert.deepEqual(rulesOf('## Step 1: hook\n\n- wire it up\n→ verify: run it\n'), []);
+  });
+
+  await t.test('fails a ## S<n> heading with no verify and passes it with one', () => {
+    assert.deepEqual(check('## S1 — hook\n\n- wire it up\n').findings, ['1 P3 ## S1 — hook']);
+    assert.deepEqual(rulesOf('## S1 — hook\n\n- wire it up\n→ verify: run it\n'), []);
+  });
+
+  await t.test('leaves a ## S3 upload heading as prose', () => {
+    assert.deepEqual(rulesOf('## S3 upload\n\n- wire it up\n'), []);
+  });
+
+  await t.test('treats a ## Step N heading holding ### sub-steps as a container', () => {
+    const text = ['## Step 1: hook', '', '### 1.1 One', '→ verify: run it', '', '### 1.2 Two', '→ verify: run it'];
+    assert.deepEqual(rulesOf(text.join('\n')), []);
+    assert.deepEqual(check(text.slice(0, -1).join('\n')).findings, ['6 P3 ### 1.2 Two']);
+  });
+
+  await t.test('reads ### 1. at end of line and ### 1.1 as steps, and a quiet twin of each', () => {
+    assert.deepEqual(check('### 1.\n').findings, ['1 P3 ### 1.']);
+    assert.deepEqual(check('### 1.1 Foo\n').findings, ['1 P3 ### 1.1 Foo']);
+    assert.deepEqual(rulesOf('### 1.\n→ verify: run it\n'), []);
+    assert.deepEqual(rulesOf('### 1.1 Foo\n→ verify: run it\n'), []);
+  });
+
+  await t.test('leaves ### 2026 notes, ### 3 options and 1 **x** as prose', () => {
+    assert.deepEqual(rulesOf('### 2026 notes\n'), []);
+    assert.deepEqual(rulesOf('### 3 options\n'), []);
+    assert.deepEqual(rulesOf('1 **x**\n'), []);
   });
 });
 
@@ -320,14 +363,28 @@ test('check P7', async (t) => {
   const P7_HINT = 'name each criterion in the step that delivers it';
   const REPHRASE_HINT =
     'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
-  const A2_UNNAMED = ['## Criteria', '', '- A1: first', '- A2: second', '', '## Step 1: hook (A1)'];
+  const A2_UNNAMED = ['## Criteria', '', '- A1: first', '- A2: second', '', '## Step 1: hook (A1)', '→ verify: run it'];
 
   await t.test('fails a criterion that no step names, at the criterion line', () => {
     assert.deepEqual(check(A2_UNNAMED.join('\n')).findings, ['4 P7 criterion A2 has no step']);
   });
 
+  await t.test('reads 1.1 steps and B criteria: one P3 and the unserved B3, and a quiet twin', () => {
+    const criteria = ['## Criteria', '', '- B1: first', '- B2: second', '- B3: third', '', '## Chunk 1'];
+    const broken = [...criteria, '1.1 **One.** Serves B1.', '→ verify: run it', '1.2 **Two.** Serves B2.'];
+    assert.deepEqual(check(broken.join('\n')).findings, ['5 P7 criterion B3 has no step', '10 P3 1.2 **Two.** Serves B2.']);
+
+    const fixed = [...criteria, '1.1 **One.** Serves B1.', '→ verify: run it', '1.2 **Two.** Serves B2, B3.', '→ verify: run it'];
+    assert.deepEqual(rulesOf(fixed.join('\n')), []);
+  });
+
+  await t.test('keys criteria on the letter as well as the number', () => {
+    const text = ['## Criteria', '', '- B1: first', '', '## Chunk 1', '1. **One.** Serves A1.', '→ verify: run it'].join('\n');
+    assert.deepEqual(check(text).findings, ['3 P7 criterion B1 has no step']);
+  });
+
   await t.test('does not read A10 as naming A1', () => {
-    const text = ['## Criteria', '', '- A1: first', '- A10: tenth', '', '## Step 1: hook (A10)'].join('\n');
+    const text = ['## Criteria', '', '- A1: first', '- A10: tenth', '', '## Step 1: hook (A10)', '→ verify: run it'].join('\n');
     assert.deepEqual(check(text).findings, ['3 P7 criterion A1 has no step']);
   });
 
@@ -342,19 +399,37 @@ test('check P7', async (t) => {
 
   await t.test('passes a range, in all three forms, and an S<n> heading', () => {
     const criteria = ['## Criteria', '', '- A1: first', '- A2: second', '- A3: third', '- A4: fourth', ''];
-    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1–A4)'].join('\n')), []);
-    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1-A4)'].join('\n')), []);
-    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1-4)'].join('\n')), []);
-    assert.deepEqual(rulesOf([...criteria, '## S1 — hook (A1–A2)', '', '## S2 — rules (A3-A4)'].join('\n')), []);
+    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1–A4)', '→ verify: run it'].join('\n')), []);
+    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1-A4)', '→ verify: run it'].join('\n')), []);
+    assert.deepEqual(rulesOf([...criteria, '## Step 1: hook (A1-4)', '→ verify: run it'].join('\n')), []);
+    const sections = ['## S1 — hook (A1–A2)', '→ verify: run it', '', '## S2 — rules (A3-A4)', '→ verify: run it'];
+    assert.deepEqual(rulesOf([...criteria, ...sections].join('\n')), []);
+  });
+
+  await t.test('takes B1-8 as naming B1 to B8 under Chunk 1', () => {
+    const criteria = Array.from({ length: 8 }, (_, offset) => `- B${offset + 1}: criterion`);
+    const text = ['## Criteria', '', ...criteria, '', '## Chunk 1', '1. **Do it.** Serves B1-8.', '→ verify: run it'];
+    assert.deepEqual(check(text.join('\n')).findings, []);
+  });
+
+  await t.test('does not crash on a huge range or an uppercase UUID in a step', () => {
+    const criteria = ['## Criteria', '', '- A1: first', '', '## Chunk 1'];
+    const step = '1. **Do it.** Serves A1. Flyway V1-30000000 baseline.';
+    const uuid = '1. **Do it.** Serves A1. Row 550E8400-E29B-41D4-A716-446655440000.';
+    assert.deepEqual(check([...criteria, step, '→ verify: run it'].join('\n')).findings, []);
+    assert.deepEqual(check([...criteria, uuid, '→ verify: run it'].join('\n')).findings, []);
+    assert.deepEqual(check([...criteria, step.replace('A1', 'A2'), '→ verify: run it'].join('\n')).findings, [
+      '3 P7 criterion A1 has no step',
+    ]);
   });
 
   await t.test('names a criterion from the body of a step section', () => {
-    const text = ['## Criteria', '', '- A1: first', '', '## Steps', '', '- Wire it up (A1).'].join('\n');
+    const text = ['## Criteria', '', '- A1: first', '', '## Steps', '', '- Wire it up (A1).', '', '1. **Do it.**', '→ verify: `ls`'].join('\n');
     assert.deepEqual(rulesOf(text), []);
   });
 
   await t.test('passes bold and backticked criterion bullets', () => {
-    const text = ['## Criteria', '', '- **A1**: first', '- `A2`: second', '', '## Step 1: hook (A1, A2)'].join('\n');
+    const text = ['## Criteria', '', '- **A1**: first', '- `A2`: second', '', '## Step 1: hook (A1, A2)', '→ verify: run it'].join('\n');
     assert.deepEqual(rulesOf(text), []);
   });
 
@@ -371,7 +446,7 @@ test('check P7', async (t) => {
   });
 
   await t.test('does not read a bullet inside a fence under Criteria as a criterion', () => {
-    const text = ['## Criteria', '', '- A1: first', '', '```', '- A3: third', '```', '', '## Step 1: hook (A1)'].join('\n');
+    const text = ['## Criteria', '', '- A1: first', '', '```', '- A3: third', '```', '', '## Step 1: hook (A1)', '→ verify: run it'].join('\n');
     assert.deepEqual(rulesOf(text), []);
   });
 
@@ -391,6 +466,72 @@ test('check P7', async (t) => {
     const res = run('post', { file_path: file });
     assert.equal(res.code, 2);
     assert.match(res.stderr, /4 P7 criterion A2 has no step/);
+  });
+});
+
+test('check P8', async (t) => {
+  const P7_HINT = 'name each criterion in the step that delivers it';
+  const P8_HINT = 'write steps as `1. **`, `1.1 **`, `### 1.` or `## Step 1`, and criteria as `- A1` bullets';
+  const REPHRASE_HINT =
+    'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
+
+  await t.test('fails a Criteria heading with no parseable criterion, and passes it with one', () => {
+    assert.deepEqual(check('## Criteria\n\nIt should work.\n').findings, ['1 P8 no criteria parsed']);
+    assert.deepEqual(rulesOf('## Criteria\n\n- A1: it works\n'), []);
+  });
+
+  await t.test('fails a Steps heading with only bullets, and passes it with a plain step', () => {
+    assert.deepEqual(check('## Steps\n\n- wire it up\n').findings, ['1 P8 no steps parsed']);
+    assert.deepEqual(rulesOf('## Steps\n\n1. Wire it up.\n→ verify: run it\n'), []);
+  });
+
+  await t.test('fails a lowercase ## steps and ## step 1 with only bullets, and hints at the forms', () => {
+    assert.deepEqual(check('## steps\n\n- wire it up\n').findings, ['1 P8 no steps parsed']);
+    const lowercase = check('## step 1\n\n- wire it up\n');
+    assert.deepEqual(lowercase.findings, ['1 P8 no steps parsed']);
+    assert.equal(lowercase.stderr.trimEnd().split('\n').at(-1), P8_HINT);
+    assert.deepEqual(rulesOf('## steps\n\n1. Wire it up.\n→ verify: run it\n'), []);
+  });
+
+  await t.test('reports one P8 for several Chunk headings that hold no step', () => {
+    assert.deepEqual(check('## Chunk 1\n\n- wire it up\n\n## Chunk 2\n\n- test it\n').findings, ['1 P8 no steps parsed']);
+  });
+
+  await t.test('stays quiet for a bullet-only chunk beside a parsed chunk', () => {
+    const text = ['## Chunk 1', '', '1. **One.**', '→ verify: run it', '', '## Chunk 2', '', '- test it'];
+    assert.deepEqual(rulesOf(text.join('\n')), []);
+  });
+
+  await t.test('stays quiet for headings that only start like a step section', () => {
+    assert.deepEqual(rulesOf('## Chunking ideas\n\n- wire it up\n'), []);
+    assert.deepEqual(rulesOf('## Step-by-step guide\n\n- wire it up\n'), []);
+    assert.deepEqual(rulesOf('## Steps to reproduce\n\n- wire it up\n'), []);
+    assert.deepEqual(rulesOf('## Stepping\n\n- wire it up\n'), []);
+  });
+
+  await t.test('stays quiet on an empty file', () => {
+    const res = check('');
+    assert.equal(res.code, 0);
+    assert.deepEqual(res.findings, []);
+    assert.equal(res.stderr, '');
+  });
+
+  await t.test('prints the P7 hint, then the P8 hint, then the rephrase hint only when another rule fires', () => {
+    const text = ['## Criteria', '', '- A1: first', '', '## Chunk 1', '', '- wire it up'];
+    const both = check(text.join('\n'));
+    assert.deepEqual(both.findings, ['3 P7 criterion A1 has no step', '5 P8 no steps parsed']);
+    assert.deepEqual(both.stderr.trimEnd().split('\n').slice(-2), [P7_HINT, P8_HINT]);
+    assert.doesNotMatch(both.stderr, /rephrase/);
+
+    const withP1 = check(['I checked it.', ...text].join('\n'));
+    assert.deepEqual(withP1.stderr.trimEnd().split('\n').slice(-3), [P7_HINT, P8_HINT, REPHRASE_HINT]);
+  });
+
+  await t.test('post exits 2 with P8 for a headings-only plan on disk', () => {
+    const file = planFile(path.join(tmpDir, 'post-p8'), 'x.md', '# Plan\n\n## Steps\n');
+    const res = run('post', { file_path: file });
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /3 P8 no steps parsed/);
   });
 });
 
