@@ -425,6 +425,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/inline-call-nudge.sh', /direct lookups/, 'subagent-tiers.md', /inline-call-nudge\.sh/],
     ['hooks/inline-call-nudge.sh', /≤3 direct calls per question/, 'CLAUDE.md', /≤3 calls per question, all rounds counted; a 4th → Explore/],
     ['hooks/opus-write-nudge.sh', /about to write source/, 'subagent-tiers.md', /first source write of every turn/],
+    ['hooks/step-gate.sh', /handed back with no/, 'plan-mode.md', /step-gate\.sh/],
+    ['hooks/step-gate.sh', /handed back with no/, 'README.md', /step-gate\.sh/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {
