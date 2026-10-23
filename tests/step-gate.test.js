@@ -125,6 +125,8 @@ test('step gate', async (t) => {
       ['FOO=1 pnpm test', 'FOO=1 pnpm build'],
       ['cd x\nnpx tsc --noEmit', 'cd x\necho "npx tsc"'],
       ['pnpm --filter web lint', 'pnpm --filter web build'],
+      ['npx jest', 'echo npx jest'],
+      ['pnpm exec jest --ci', 'pnpm exec cat jest.config.js'],
     ];
     for (const [check, notCheck] of pairs) {
       assert.equal(counts(check), true, check);

@@ -101,6 +101,7 @@ web=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte)\b')
 harness=os.path.expanduser('~/.claude/')
 # Command position only: a bare word match passes on `grep eslint package.json` or `git log --grep verify`.
 # Each token must parse one way (a flag value is never `run`/`exec`; `--f` splits one way), or backtracking outlives the Stop timeout and the gate fails open.
+# Twin detector: hooks/step-gate.sh CHECK (jq port, with test runners added); keep the two in step.
 static_check=re.compile(r'(?:^|[;&|(]\s*)(?:time\s+)?(?:\w+=\S*\s+)*(?:'
     r'(?:pnpm|npm|yarn|bun|npx|bunx)(?:\s+(?:run|exec|-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+'
     r'[\w:.-]*(?:lint|tsc|typecheck|type-check|check:types?|ts:check|verify)[\w:.-]*'

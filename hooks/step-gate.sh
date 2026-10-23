@@ -15,7 +15,7 @@ jq -e '.tool_input.subagent_type == "implementer" and (.tool_input.prompt // "" 
 # Quoted spans are blanked to underscores with the quotes kept, so `git -C "/p" commit` still matches and a commit message naming tsc is no check.
 QUOTED='(?<q>'\''[^'\'']*'\''|"[^"\\]*(\\.[^"\\]*)*")'
 # Twin detector: hooks/done-claim-gate.sh static_check; keep the two in step.
-CHECK='(^|[;&|(\n]\s*)(time\s+)?(\w+=\S*\s+)*((npm|pnpm|yarn|bun|npx|bunx)(\s+(run|exec|-{1,2}\w[\w-]*(=\S+)?(\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+[\w:.-]*(lint|tsc|typecheck|type-check|check:types?|ts:check|verify|test)[\w:.-]*|(\S*/)?(eslint|oxlint|tsc|vue-tsc|vitest|jest)(@\S+)?(?=\s|$|[;&|)])|node\s+--test\b)'
+CHECK='(^|[;&|(\n]\s*)(time\s+)?(\w+=\S*\s+)*((npm|pnpm|yarn|bun|npx|bunx)(\s+(run|exec|-{1,2}\w[\w-]*(=\S+)?(\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+[\w:.-]*(lint|tsc|typecheck|type-check|check:types?|ts:check|verify|test|jest|vitest)[\w:.-]*|(\S*/)?(eslint|oxlint|tsc|vue-tsc|vitest|jest)(@\S+)?(?=\s|$|[;&|)])|node\s+--test\b)'
 COMMIT='\bgit(\s+-C\s+\S+)?\s+(commit|commit-tree)\b|\bupdate-ref\b'
 SKIP='step gate: skip[[:space:]]*(—|–|-)+[[:space:]]*(check|commit|step):[[:space:]]*[^[:space:]]'
 
