@@ -101,10 +101,10 @@ web=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte)\b')
 harness=os.path.expanduser('~/.claude/')
 # Command position only: a bare word match passes on `grep eslint package.json` or `git log --grep verify`.
 # Each token must parse one way (a flag value is never `run`/`exec`; `--f` splits one way), or backtracking outlives the Stop timeout and the gate fails open.
-# Twin detector: hooks/step-gate.sh CHECK (jq port, with test runners added); keep the two in step.
-static_check=re.compile(r'(?:^|[;&|(]\s*)(?:time\s+)?(?:\w+=\S*\s+)*(?:'
+# Twin: hooks/step-gate.sh CHECK is a superset (test runners, mobile analyzers); change the shared core in both, never copy its extras here.
+static_check=re.compile(r'(?:^|[;&|(]\s*)(?:(?:command|time|env(?:\s+\w+=\S*)*|if|then|!)\s+)?(?:\w+=\S*\s+)*(?:'
     r'(?:pnpm|npm|yarn|bun|npx|bunx)(?:\s+(?:run|exec|-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+'
-    r'[\w:.-]*(?:lint|tsc|typecheck|type-check|check:types?|ts:check|verify)[\w:.-]*'
+    r'(?:(?:nx|turbo|ng|workspace\s+\S+)(?:\s+(?:run|exec|-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+)?[\w:.-]*(?:lint|tsc|typecheck|type-check|check:types?|ts:check|verify)[\w:.-]*'
     r'|(?:\S*/)?(?:eslint|oxlint|tsc|vue-tsc))(?:@\S+)?(?=\s|$|[;&|)])',re.I|re.M)
 if (claim or commit_ask or committed) and any(web.search(e) and not e.startswith(harness) for e in edits) and not any(static_check.search(c) for c in cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")

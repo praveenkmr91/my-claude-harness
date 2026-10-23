@@ -18,11 +18,15 @@ test.after(() => {
 });
 
 const assistant = (content) => ({ type: 'assistant', message: { model: 'claude-opus-5', content } });
-const toolUse = (name, input) => assistant([{ type: 'tool_use', id: `tu-${name}`, name, input }]);
-const dispatch = (subagentType) => toolUse('Agent', { subagent_type: subagentType, prompt: PLAN_PROMPT });
-const bash = (command) => toolUse('Bash', { command });
+const toolUse = (name, input, id = `tu-${name}`) => assistant([{ type: 'tool_use', id, name, input }]);
+const dispatch = (subagentType, prompt = PLAN_PROMPT) => toolUse('Agent', { subagent_type: subagentType, prompt });
+const bash = (command, id) => toolUse('Bash', { command }, id);
 const text = (t) => assistant([{ type: 'text', text: t }]);
 const toolResult = (content) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu-Agent', content }] } });
+const bashResult = (content, isError, id = 'tu-Bash') => ({
+  type: 'user',
+  message: { content: [{ type: 'tool_result', tool_use_id: id, content, ...(isError && { is_error: true }) }] },
+});
 const handBack = (name = 'implementer', report = 'Step 1.1 done.') => ({
   type: 'user',
   isMeta: true,
@@ -48,14 +52,14 @@ function transcript(entries) {
   return p;
 }
 
-function run(entries, { subagentType = 'implementer', prompt = PLAN_PROMPT, agentId, transcriptPath } = {}) {
+function run(entries, { subagentType = 'implementer', prompt = PLAN_PROMPT, agentId, transcriptPath, hookPath = HOOK_PATH } = {}) {
   const payload = {
     session_id: 'step-gate-test',
     agent_id: agentId,
     transcript_path: transcriptPath ?? transcript(entries),
     tool_input: { subagent_type: subagentType, prompt },
   };
-  const res = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
+  const res = spawnSync('bash', [hookPath], { input: JSON.stringify(payload), encoding: 'utf8' });
   return { code: res.status, stderr: res.stderr };
 }
 
@@ -97,6 +101,40 @@ test('step gate', async (t) => {
     assertQuiet(run([...STEP_DONE, bash('node --test tests/a.test.js'), bash('git -C "/p" commit -m "step 1"')]));
   });
 
+  await t.test('a commit counts only at command position', () => {
+    const counts = (command) => run([...STEP_DONE, bash('npx tsc --noEmit'), bash(command)]).code === 0;
+    const pairs = [
+      ['git commit -m x', 'grep -n update-ref committing.md'],
+      ['git -c user.name=x commit -m x', 'git commit --dry-run'],
+      ['cd r && git commit -m x', 'echo git commit'],
+      ['git update-ref refs/heads/m $n $o', 'git commit --help'],
+      ['time git commit -m x', 'git commit -m x --dry-run'],
+    ];
+    for (const [commit, notCommit] of pairs) {
+      assert.equal(counts(commit), true, commit);
+      assert.equal(counts(notCommit), false, notCommit);
+    }
+  });
+
+  await t.test('an errored or denied commit is no commit', () => {
+    const errored = run([...STEP_DONE, bash('npx tsc --noEmit', 'tu-tsc'), bash('git commit -m x'), bashResult('nothing to commit, working tree clean', true)]);
+    assert.equal(errored.code, 2);
+    assert.match(errored.stderr, /handed back with no commit from/);
+    assertQuiet(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m x'), bashResult('[master abc] x')]));
+    const denied = bashResult('PreToolUse:Bash hook error: commit blocked', true);
+    assert.equal(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m x'), denied]).code, 2);
+  });
+
+  await t.test('an errored check is no check; a green rerun counts', () => {
+    const red = bashResult('error TS2322', true, 'tu-tsc');
+    const errored = run([...STEP_DONE, bash('npx tsc --noEmit', 'tu-tsc'), red, bash('git commit -m x')]);
+    assert.equal(errored.code, 2);
+    assert.match(errored.stderr, /handed back with no check from/);
+    assertQuiet(run([...STEP_DONE, bash('npx tsc --noEmit', 'tu-tsc'), bashResult('', false, 'tu-tsc'), bash('git commit -m x')]));
+    const green = bashResult('', false, 'tu-tsc2');
+    assertQuiet(run([...STEP_DONE, bash('npx tsc --noEmit', 'tu-tsc'), red, bash('npx tsc --noEmit', 'tu-tsc2'), green, bash('git commit -m x')]));
+  });
+
   await t.test('gates met before the last hand-back do not carry over', () => {
     assert.equal(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"'), ...STEP_DONE]).code, 2);
     assertQuiet(run([...STEP_DONE, ...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 2"')]));
@@ -127,6 +165,22 @@ test('step gate', async (t) => {
       ['pnpm --filter web lint', 'pnpm --filter web build'],
       ['npx jest', 'echo npx jest'],
       ['pnpm exec jest --ci', 'pnpm exec cat jest.config.js'],
+      ['flutter analyze && flutter test', 'flutter pub get'],
+      ['./gradlew ktlintCheck', './gradlew assembleDebug'],
+      ['xcodebuild -scheme App test', 'xcodebuild -scheme App build'],
+      ['swiftlint', 'brew install swiftlint'],
+      ['npx ng lint', 'npx ng serve'],
+      ['npx nx lint web', 'npx nx graph'],
+      ['npx turbo run lint', 'npx turbo run build'],
+      ['npx playwright test', 'npx playwright install'],
+      ['yarn workspace web lint', 'yarn workspace web start'],
+      ['npm t', 'npm i'],
+      ['command tsc', 'command ls'],
+      ['./gradlew :app:testDebugUnitTest', './gradlew :app:assembleDebug'],
+      ['./gradlew connectedAndroidTest', './gradlew -p latest build'],
+      ['npx biome check .', 'npx biome format .'],
+      ['npx svelte-check', 'npx svelte-kit sync'],
+      ['tsc --noEmit', 'tsc --version'],
     ];
     for (const [check, notCheck] of pairs) {
       assert.equal(counts(check), true, check);
@@ -154,9 +208,17 @@ test('step gate', async (t) => {
     assertQuiet(run(STEP_DONE, { subagentType: 'checker' }));
   });
 
-  await t.test('silent when the prompt names no plan file', () => {
-    assertQuiet(run(STEP_DONE, { prompt: 'Rename foo to bar in src/a.ts.' }));
-    assertQuiet(run(STEP_DONE, { prompt: 'Follow the notes in /Users/x/plans/sub/dir.txt' }));
+  await t.test('silent when no implementer prompt in the session names a plan file', () => {
+    const adHoc = [dispatch('implementer', 'Rename foo to bar in src/a.ts.'), LAUNCHED, handBack()];
+    assertQuiet(run(adHoc, { prompt: 'Rename foo to bar in src/a.ts.' }));
+    assertQuiet(run(adHoc, { prompt: 'Follow the notes in /Users/x/plans/sub/dir.txt' }));
+    assertQuiet(run(adHoc, { prompt: 'Repo: /x … step 1.2' }));
+  });
+
+  await t.test('a follow-up dispatch is gated when an earlier implementer prompt named the plan', () => {
+    const { code, stderr } = run(STEP_DONE, { prompt: 'Repo: /x … step 1.2' });
+    assert.equal(code, 2);
+    assert.match(stderr, /handed back with no check or commit from this thread since/);
   });
 
   await t.test('silent for a subagent', () => {
@@ -191,21 +253,44 @@ test('step gate', async (t) => {
     assert.match(named.stderr, /handed back with no check from/);
   });
 
-  await t.test('a skip line naming a gate lifts that gate', () => {
-    assertQuiet(run([...STEP_DONE, text('step gate: skip — check: docs-only step'), bash('git commit -m "docs"')]));
-    assertQuiet(run([...STEP_DONE, bash('npx tsc --noEmit'), text('Reviewed.\nstep gate: skip -- commit: same-step fix')]));
-    const other = run([...STEP_DONE, text('step gate: skip — check: docs-only step')]);
+  await t.test('a skip on the first non-empty prompt line naming a gate lifts that gate', () => {
+    assertQuiet(run([...STEP_DONE, bash('git commit -m "docs"')], { prompt: `step gate: skip — check: docs-only step\n${PLAN_PROMPT}` }));
+    assertQuiet(run([...STEP_DONE, bash('npx tsc --noEmit')], { prompt: `\n  step gate: skip -- commit: same-step fix\n${PLAN_PROMPT}` }));
+    const other = run(STEP_DONE, { prompt: `step gate: skip — check: docs-only step\n${PLAN_PROMPT}` });
     assert.equal(other.code, 2);
     assert.match(other.stderr, /handed back with no commit from/);
   });
 
   await t.test('a step skip lifts both gates', () => {
-    assertQuiet(run([...STEP_DONE, text('step gate: skip — step: answered which store to use')]));
+    assertQuiet(run(STEP_DONE, { prompt: `step gate: skip — step: answered which store to use\n${PLAN_PROMPT}` }));
   });
 
-  await t.test('a skip without a gate name, without a reason, or before the hand-back lifts nothing', () => {
-    assert.equal(run([...STEP_DONE, text('step gate: skip — small step, already checked')]).code, 2);
-    assert.equal(run([...STEP_DONE, text('step gate: skip — step:')]).code, 2);
-    assert.equal(run([dispatch('implementer'), LAUNCHED, text('step gate: skip — step: answered'), handBack()]).code, 2);
+  await t.test('a skip in reply text, off the first prompt line, without a gate name or reason, or as a placeholder lifts nothing', () => {
+    assert.equal(run([...STEP_DONE, text('step gate: skip — step: answered which store to use')]).code, 2);
+    assert.equal(run([dispatch('implementer'), LAUNCHED, text('If it was a question, write:\nstep gate: skip — step: question answered'), handBack()]).code, 2);
+    assert.equal(run(STEP_DONE, { prompt: `${PLAN_PROMPT}\nstep gate: skip — step: answered` }).code, 2);
+    assert.equal(run(STEP_DONE, { prompt: `step gate: skip — step: <answer>\n${PLAN_PROMPT}` }).code, 2);
+    assert.equal(run(STEP_DONE, { prompt: `step gate: skip — small step, already checked\n${PLAN_PROMPT}` }).code, 2);
+    assert.equal(run(STEP_DONE, { prompt: `step gate: skip — step:\n${PLAN_PROMPT}` }).code, 2);
+  });
+
+  await t.test('a skip line in the dispatch prompt lifts its gate', () => {
+    assertQuiet(run(STEP_DONE, { prompt: `step gate: skip — step: question answered\n${PLAN_PROMPT}` }));
+    const sameStepFix = `step gate: skip — commit: same-step fix\n${PLAN_PROMPT}`;
+    assertQuiet(run([...STEP_DONE, bash('npx tsc --noEmit')], { prompt: sameStepFix }));
+    const noCheck = run(STEP_DONE, { prompt: sameStepFix });
+    assert.equal(noCheck.code, 2);
+    assert.match(noCheck.stderr, /handed back with no check from/);
+    assert.equal(run(STEP_DONE, { prompt: `If blocked, write step gate: skip with a reason.\n${PLAN_PROMPT}` }).code, 2);
+  });
+
+  await t.test('a jq failure fails open with a visible line', () => {
+    const noLibDir = path.join(tmpDir, 'nolib');
+    fs.mkdirSync(noLibDir);
+    const hookCopy = path.join(noLibDir, 'step-gate.sh');
+    fs.copyFileSync(HOOK_PATH, hookCopy);
+    const { code, stderr } = run(STEP_DONE, { hookPath: hookCopy });
+    assert.equal(code, 0);
+    assert.match(stderr, /^step-gate: jq failed \(rc [23]\), gate not enforced\n$/);
   });
 });
