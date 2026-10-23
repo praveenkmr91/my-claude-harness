@@ -114,6 +114,7 @@ if [ "$DANGER" = "--no-verify" ]; then
   exit 2
 elif [ -n "$DANGER" ]; then
   echo "BLOCKED: '$COMMAND' runs '$DANGER'. The user has prevented you from doing this." >&2
+  [ "$DANGER" = "git push" ] && echo "A whitelisted backup remote pushes as plain 'git -C <repo> push …'; a cd, subshell or wrapper word at command position is denied regardless." >&2
   exit 2
 fi
 
