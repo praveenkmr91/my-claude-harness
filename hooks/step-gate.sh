@@ -14,13 +14,15 @@ jq -e '.tool_input.subagent_type == "implementer" and (.tool_input.prompt // "" 
 
 # Quoted spans are blanked to underscores with the quotes kept, so `git -C "/p" commit` still matches and a commit message naming tsc is no check.
 QUOTED='(?<q>'\''[^'\'']*'\''|"[^"\\]*(\\.[^"\\]*)*")'
-CHECK='\b(eslint|tsc|vitest|jest|typecheck|type-check|ts:check)\b|--noEmit|\bnode --test\b|\b(npm|pnpm|yarn|bun|npx) (run )?(test|verify|lint|typecheck)\b'
+# Twin detector: hooks/done-claim-gate.sh static_check; keep the two in step.
+CHECK='(^|[;&|(\n]\s*)(time\s+)?(\w+=\S*\s+)*((npm|pnpm|yarn|bun|npx|bunx)(\s+(run|exec|-{1,2}\w[\w-]*(=\S+)?(\s+(?!(?:run|exec)\s)[^\s;&|-]\S*)?))*\s+[\w:.-]*(lint|tsc|typecheck|type-check|check:types?|ts:check|verify|test)[\w:.-]*|(\S*/)?(eslint|oxlint|tsc|vue-tsc|vitest|jest)(@\S+)?(?=\s|$|[;&|)])|node\s+--test\b)'
 COMMIT='\bgit(\s+-C\s+\S+)?\s+(commit|commit-tree)\b|\bupdate-ref\b'
 SKIP='step gate: skip[[:space:]]*(—|–|-)+[[:space:]]*(check|commit|step):[[:space:]]*[^[:space:]]'
 
 # Parsed, not grepped: tool_result text, hand-back bodies and harness sessions quote `git commit` and `tsc`.
 MISSING=$(tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg skip "$SKIP" 'include "turns"; fromjson? |
   (select(.type? == "user" and .origin.handback? == true and .origin.name? == "implementer") | "H"),
+  (select(.type? == "attachment" and .attachment.origin.handback? == true and .attachment.origin.name? == "implementer") | "H"),
   (select(.type? == "assistant") | .message.content[]? | select(.type? == "tool_use") |
     if .name == "Agent" then select(.input.subagent_type? == "checker") | "C"
     elif .name == "Bash" then .input.command? // "" | gsub($quoted; .q[:1] + (.q[1:-1] | gsub("."; "_")) + .q[-1:])

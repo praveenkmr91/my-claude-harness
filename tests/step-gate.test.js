@@ -29,6 +29,15 @@ const handBack = (name = 'implementer', report = 'Step 1.1 done.') => ({
   origin: { kind: 'peer', from: 'a1b2c3', senderTaskId: 'a1b2c3', name, body: `[Subagent hand-back] ${report}`, handback: true },
   message: { content: `Another Claude session sent a message:\n<agent-message from="a1b2c3">\n[Subagent hand-back] ${report}` },
 });
+const handBackAttachment = (name = 'implementer') => ({
+  type: 'attachment',
+  attachment: {
+    type: 'queued_command',
+    commandMode: 'prompt',
+    prompt: '<agent-message from="a1b2c3">\n[Subagent hand-back] Step 1.1 done.',
+    origin: { kind: 'peer', from: 'a1b2c3', senderTaskId: 'a1b2c3', name, body: '[Subagent hand-back] Step 1.1 done.', handback: true, handbackReportText: 'Step 1.1 done.' },
+  },
+});
 const LAUNCHED = toolResult('Async agent launched successfully. agentId: a1b2c3');
 const STEP_DONE = [dispatch('implementer'), LAUNCHED, handBack()];
 
@@ -91,6 +100,36 @@ test('step gate', async (t) => {
   await t.test('gates met before the last hand-back do not carry over', () => {
     assert.equal(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"'), ...STEP_DONE]).code, 2);
     assertQuiet(run([...STEP_DONE, ...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 2"')]));
+  });
+
+  await t.test('a hand-back queued as an attachment is an anchor', () => {
+    const { code, stderr } = run([dispatch('implementer'), LAUNCHED, handBackAttachment('implementer')]);
+    assert.equal(code, 2);
+    assert.match(stderr, /handed back with no check or commit from this thread since/);
+    assert.equal(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"'), dispatch('implementer'), LAUNCHED, handBackAttachment()]).code, 2);
+  });
+
+  await t.test('an attachment hand-back from another agent kind is no anchor', () => {
+    assertQuiet(run([dispatch('checker'), LAUNCHED, handBackAttachment('checker')]));
+  });
+
+  await t.test('a check counts only at command position', () => {
+    const counts = (command) => run([...STEP_DONE, bash(command), bash('git commit -m "step 1"')]).code === 0;
+    const pairs = [
+      ['eslint package.json', 'grep eslint package.json'],
+      ['git log; tsc', 'git log --grep tsc'],
+      ['npx oxlint .', 'echo npx oxlint .'],
+      ['pnpm run check:types', 'pnpm run build'],
+      ['cd x && npx tsc --noEmit', 'cd x && ls tsc'],
+      ['node --test tests/x.test.js', 'node tests/x.test.js'],
+      ['FOO=1 pnpm test', 'FOO=1 pnpm build'],
+      ['cd x\nnpx tsc --noEmit', 'cd x\necho "npx tsc"'],
+      ['pnpm --filter web lint', 'pnpm --filter web build'],
+    ];
+    for (const [check, notCheck] of pairs) {
+      assert.equal(counts(check), true, check);
+      assert.equal(counts(notCheck), false, notCheck);
+    }
   });
 
   await t.test('silent on the first dispatch', () => {
