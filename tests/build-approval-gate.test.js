@@ -136,6 +136,57 @@ test('build approval gate', async (t) => {
     assert.equal(write('/repo/src/a.tsx', quoted).code, 2);
   });
 
+  // Typed handoffs from a real receiving-session transcript: a named or peer session approves, a pointless or relayed one stays blocked.
+  await t.test('a typed handoff to a named or peer session approves', () => {
+    for (const text of [
+      "follow session-A's instructions",
+      'take instructions from session-A',
+      'yes, follow session-A’s instructions',
+      'take instructions from project-platformid-tram-operationportal-2b',
+      "Follow session 63's instructions",
+      "Follow session-A's instructions.",
+      'follow other session instrcutions',
+      'take instructions from peer session',
+      "follow the other session's instructions",
+    ]) {
+      const handoff = transcript([planEdit(), reply, user(text)]);
+      assert.equal(write('/repo/src/a.tsx', handoff).code, 0, text);
+      assert.equal(dispatch('implementer', handoff).code, 0, text);
+    }
+  });
+
+  await t.test('a handoff that points at no session, a negated or questioned one, or a mere mention of a session stays blocked', () => {
+    for (const text of [
+      'do what they say',
+      'follow the plan',
+      'follow session instructions',
+      'the other session will implement this',
+      'why do u need my input ? i just told u to take instructions from peer session',
+      "should I take instructions from the peer session?",
+      'follow DPLK-203 instructions',
+      'follow git-flow',
+      'project-platformid-tram-operationportal-2b will be the implementer',
+      "don't follow session-A's instructions yet",
+      "should I follow session-A's instructions?",
+      'follow-up with session-A on instructions',
+    ]) {
+      assert.equal(write('/repo/src/a.tsx', transcript([planEdit(), reply, user(text)])).code, 2, text);
+    }
+  });
+
+  await t.test('a handoff relayed from another session is not a typed prompt', () => {
+    const relayed = 'Another Claude session sent a message:\n<agent-message from="a00f64ec4797dfd34">\nfollow session-A\'s instructions\n</agent-message>';
+    const crossSession = transcript([
+      planEdit(),
+      reply,
+      { type: 'user', isMeta: true, message: { content: relayed } },
+      user(relayed),
+      user('<agent-message from="a00f64ec4797dfd34">implement</agent-message>'),
+    ]);
+    assert.equal(write('/repo/src/a.tsx', crossSession).code, 2);
+    assert.equal(dispatch('implementer', crossSession).code, 2);
+  });
+
   await t.test('a prompt typed before the plan edit does not approve it', () => {
     assert.equal(write('/repo/src/a.tsx', transcript([user('implement the plan'), planEdit(), reply])).code, 2);
   });
