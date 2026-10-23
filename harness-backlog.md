@@ -28,6 +28,12 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** closing it means teaching the Bash guard the session model and the hook's three escapes; needs one rule for both hooks, not a second guard. Measure first: the two-week census after the block (see `state/census/2026-10-22.tar.gz`, `dispatch-census.js`) shows whether writes moved to `sed -i`.
 - **Fix:** in `bash-write-guard.js`, read the live model the same way the hook does and deny `sed -i` / `perl -pi` on source extensions from an Opus-or-above main thread unless that turn carries a dispatch, an open-call skip or a typed override, with the same message.
 
+### Write-block's reply-text skip can never fire
+
+- **Evidence:** `opus-write-nudge.sh:35` looks for `implementer: skip — open call:` in the current turn's assistant text, but a PreToolUse hook runs before that turn's text reaches the transcript (two live runs while building `step-gate.sh`: a same-turn skip line never lifted that gate, and mid-turn prose is often stored as `thinking` blocks the hook never sees). The documented escape is dead; the typed `[tier-override: <why>]` is the only one that works.
+- **Why parked:** the harm is the message, not the block: it offers an escape that fails, and a design-call write today either dispatches or asks for the override. Needs one decision on where an open-call skip should live.
+- **Fix:** carry the skip in the write itself, the way `step-gate.sh` reads it from the dispatch prompt's first line, or keep the typed override as the only escape; either way drop the reply-text clause from the hook, its message and `subagent-tiers.md`.
+
 ### Workers write source through interpreter scripts, unseen by write-time hooks
 
 - **Evidence:** `implementer` hand-backs have said "I made the edits with a Python script, because the session was in auto mode and told me to use Bash for changes." `bash-write-guard.js` denies heredocs and inline interpreters, but a script file run from the scratchpad has no visible target, so comment-check, plan-lint and the Fable write-block never fired.
@@ -73,3 +79,13 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Evidence:** a peer session's count, not re-run here: 3 sessions since the cold reader landed, all of which dispatched `implementer` after a plan edit no cold read followed (31 dispatches).
 - **Why parked:** two days of history; most of those edits are wording folds `plan-mode.md` lets through without a re-read.
 - **Fix:** if a re-count a month on still shows dispatches after behaviour folds: a `SubagentStop` hook stamps the cold reader's own `shasum` line (an agent-written stamp is denied by the auto-mode classifier), and `build-approval-gate.sh` re-arms only when the plan changed after the last cold read's report.
+
+### Cold-read brief passes for async state and unverified failure paths
+
+- **Evidence:** eval cases `planted-dplk-201-states` and `planted-dplk-201-statepass` (2026-10-23, opus high, three runs per arm; labels hand-checked into REAL / ENV / WRONG / DUP, kept in that session's scratchpad). Per read, means:
+  - today's brief: planted hits 2.33 of 3 (F1, the unstated waiting states, caught 1 run in 3), distinct real extras 4.33, noise (ENV + WRONG) 10.67;
+  - state-combination pass alone: hits 3.0, real 5.33, noise 12.0;
+  - state pass plus "every Decided rule and failure path no verify exercises": hits 3.0, real 7.0, noise 14.67.
+- **Why parked:** the pre-set rule was "hits rise and noise doesn't"; noise rose in both arms. The state pass's +1.33 noise sits inside run-to-run spread (baseline per-run noise 8, 9, 15), so it is unresolved rather than refuted.
+- **Fix:** three more runs per arm of the state pass alone; land it in `agents/cold-reader.md` line 7 if mean noise then stays at or under baseline. The judge's raw `false_positives` count mixes real out-of-plant findings with noise, so score with labels, not the raw count.
+- **Related, no action:** plan-lint leads for mixed step forms, `## Steps:` headings and per-section P8 hit 0 of the 44 plans in `plans/`; re-check when a real plan does.
