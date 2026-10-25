@@ -9,7 +9,7 @@
 | Purely mechanical — run a named check, listing, grep census, file move | Haiku → the `checker` agent | No design decision, no interpretation of the result. A Haiku negative ("no matches", "no failures") is weak evidence — re-run a decisive one on Sonnet |
 | Worker fan-out | Haiku for low-tier slices (listings, grep sweeps, classification); Sonnet for parallel mechanical slices that write code; Opus for any slice that still carries a judgment call | Sonnet never *reviews* code — a worker's "looks fine" is not an oracle |
 | Explore | Haiku always | Hook injects it; in Workflow `agent()` (hook-blind) pass `model: "haiku"` — effort sharpens within a tier, never substitutes for one |
-| `effort` frontmatter | `high` on the Sonnet `implementer` and `dry-runner`; `medium` on the multi-hop battery lenses `reuse-analyzer` and `placement-analyzer` (a stated review effort raises them) | Single-pass lenses stay at session effort; off `checker` until a run proves Haiku accepts it |
+| `effort` frontmatter | Frontmatter is the default; `high` on `implementer`, `dry-runner`, `cold-reader`, `adversarial-reviewer`; `medium` on `reuse-analyzer`, `placement-analyzer`, `dfs-lookup`; every other agent, plugin agents and `Plan` included, inherits session effort | A dispatch `effort` overrides the default either way; a session pins one effort for its life, since a top-level effort change invalidates the messages cache (Claude API prompt-caching reference); effort varies through subagents; off `checker` until a run proves Haiku accepts it |
 
 ## Policy
 

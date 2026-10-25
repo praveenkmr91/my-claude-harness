@@ -1,6 +1,7 @@
 ---
 name: adversarial-reviewer
 model: opus
+effort: high
 description: Use when the harden verb or a HIGH-risk review join needs the adversarial lens: reviews the scope in the brief through three hostile personas (Saboteur, New Hire, Security Auditor) and reports scored leads.
 ---
 
