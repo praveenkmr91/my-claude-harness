@@ -102,14 +102,14 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### SendMessage header and length check
 
-- **Evidence:** peer census, not archived: 745 messages; 17 over 3,000 characters, and 36% of builder→planner messages are progress.
+- **Evidence:** `state/census/peer-census.md` (untracked): 745 messages; 17 over 3,000 characters, and 36% of builder→planner messages are progress.
 - **Why parked:** the rules in `peer-sessions.md` land first.
 - **Fix:** a PreToolUse SendMessage hook denying a message with no `[TYPE …]` header or over 1,200 characters.
 - **Worth doing when:** a re-census shows over 10% of peer messages break either rule.
 
 ### SendMessage prompts despite the allow list
 
-- **Evidence:** peer census, not archived: 8 SendMessage permission prompts in 4 sessions, with `SendMessage` in the allow list at `settings.json:12`.
+- **Evidence:** `state/census/peer-census.md` (untracked): 8 SendMessage permission prompts in 4 sessions, with `SendMessage` in the allow list at `settings.json:12`.
 - **Why parked:** cause unknown.
 - **Fix:** read the 8 prompts' tool inputs for a shared shape (socket-path address, cross-project target).
 - **Worth doing when:** it prompts again.
