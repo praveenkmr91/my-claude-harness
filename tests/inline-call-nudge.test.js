@@ -88,6 +88,18 @@ test('inline call nudge — fires', async (t) => {
     assertFiresAt(play([...repeat(3, () => read()), bash('cd /repo && grep foo src')]), [3]);
   });
 
+  await t.test('on the 4th when the 4th is a grep Bash after `cd <dir>;`', () => {
+    assertFiresAt(play([...repeat(3, () => read()), bash('cd /repo; grep foo src')]), [3]);
+  });
+
+  await t.test('on the 4th when the 4th is a for loop over grep', () => {
+    assertFiresAt(play([...repeat(3, () => read()), bash('cd /repo; for f in a.ts b.ts; do echo "== $f"; grep -n foo $f; done')]), [3]);
+  });
+
+  await t.test('on the 4th when the 4th is an echo-labelled grep count', () => {
+    assertFiresAt(play([...repeat(3, () => read()), bash('cd /repo; echo "files: $(grep -rl foo src | wc -l)"')]), [3]);
+  });
+
   await t.test('on the 4th when the 4th is a git status Bash', () => {
     assertFiresAt(play([...repeat(3, () => read()), bash('git -C ~/.claude status')]), [3]);
   });
@@ -145,6 +157,18 @@ test('inline call nudge — quiet', async (t) => {
 
   await t.test('three Reads then a build Bash piped to tail', () => {
     assertFiresAt(play([...repeat(3, () => read()), bash('pnpm lint 2>&1 | tail -20')]), []);
+  });
+
+  await t.test('three Reads then an install Bash after `cd <dir>;`', () => {
+    assertFiresAt(play([...repeat(3, () => read()), bash('cd /repo; pnpm install')]), []);
+  });
+
+  await t.test('three Reads then a for loop over node', () => {
+    assertFiresAt(play([...repeat(3, () => read()), bash('for f in a.js b.js; do node $f; done')]), []);
+  });
+
+  await t.test('three Reads then an echo-labelled lint Bash', () => {
+    assertFiresAt(play([...repeat(3, () => read()), bash('echo "== lint"; pnpm lint')]), []);
   });
 
   await t.test('three Reads then a test Bash piped to head', () => {
