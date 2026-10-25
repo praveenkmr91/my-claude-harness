@@ -62,7 +62,7 @@ Ways to build one, roughly in order:
 8. Bisection harness when the bug appeared between two known states, so `git bisect run` can drive it.
 9. Differential loop: same input through old vs new version (or two configs), diff the outputs.
 
-Then tighten it: faster (skip unrelated init, narrow scope), sharper (assert the exact symptom, not "didn't crash"), deterministic (pin time, seed RNG, freeze network). Flaky bug: raise the reproduction rate (loop 100x, parallelise, inject sleeps) until it is debuggable; 50% is workable, 1% is not.
+Then tighten it: faster (skip unrelated init, narrow scope), sharper (assert the exact symptom, not "didn't crash"), deterministic (pin time, seed RNG, freeze network). Flaky bug: raise the reproduction rate (loop 100x, inject sleeps at a suspected await) until it is debuggable; 50% is workable, 1% is not. A timeout that fails only under load is triaged before it is hunted. If it passes alone, and the failing tests differ from run to run, it is CPU contention, not a bug. Never reproduce it by saturating the machine (`yes`, stress, parallel suites): starvation fails any fixed timeout, so the repro proves nothing and slows every other session. A real hang shows as a specific await that never settles at normal load, found by instrumenting it.
 
 Done when you can name one command you have already run once that is red-capable, deterministic, fast (seconds) and agent-runnable. Cannot build one: stop, list what you tried, ask for a reproducing environment, a redacted captured artifact (HAR, log dump, recording) or temporary instrumentation. No loop, no hypotheses.
 
