@@ -1,4 +1,4 @@
-# Review battery — recipe (read only on the `battery` verb)
+# Review battery — recipe (read on the `battery` verb or a Big done bar)
 
 | Member | Tier |
 |---|---|

@@ -8,7 +8,7 @@
 | Verb | Members | Runs as |
 |---|---|---|
 | **review** — also "code review", "check this", "look over", or no verb | Me + reuse-analyzer and placement-analyzer lenses by hand | Main thread; every finding verified at source; never the battery |
-| **battery** — also "batteries", "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists (Read it only on this verb) | Agents; leads confirmed at source before relaying. "Which" → propose members, await yes; "relevant" → pick from the diff, name skips |
+| **battery** — also "batteries", "full review", "deep review", "thorough review", "agents" | The battery in `~/.claude/review-battery.md`: seven, plus pr-test-analyzer when a test runner exists | Agents; leads confirmed at source before relaying. "Which" → propose members, await yes; "relevant" → pick from the diff, name skips |
 | **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer agent + security-review skill | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
@@ -28,7 +28,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Explore locates code, never judges it.
 
-Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small → + affected specs + lens hand pass. Big (plan-driven or bulk) → two review rounds over fresh diffs + battery, trim, harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small → + affected specs + lens hand pass. Big (plan-driven or bulk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), trim, harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
