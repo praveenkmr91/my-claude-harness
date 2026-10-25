@@ -9,8 +9,11 @@ const { spawnSync } = require('node:child_process');
 
 const HOOK_PATH = path.resolve(__dirname, '..', 'hooks', 'block-dangerous-git.sh');
 
+// Under the pre-commit hook git exports GIT_INDEX_FILE etc.; inherited, they point the scratch repo at ~/.claude's index.
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+
 function run(command, cwd = '/Users/me/repo') {
-  const res = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ tool_input: { command }, cwd }), encoding: 'utf8' });
+  const res = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ tool_input: { command }, cwd }), encoding: 'utf8', env });
   return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
@@ -37,6 +40,7 @@ test('block dangerous git hook', async (t) => {
     const res = spawnSync('bash', [HOOK_PATH], {
       input: JSON.stringify({ tool_input: { command: 'grep -r x --include=*.md . && gh pr create --fill', description: 'd', timeout: 5 } }),
       encoding: 'utf8',
+      env,
     });
     const output = JSON.parse(res.stdout).hookSpecificOutput;
     assert.deepEqual(output.updatedInput, { command: "grep -r x --include='*.md' . && gh pr create --fill", description: 'd', timeout: 5 });
@@ -184,8 +188,8 @@ test('block dangerous git hook', async (t) => {
   await t.test('git push passes only when the repo origin is on the whitelist', () => {
     const mk = (origin) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'push-wl-'));
-      spawnSync('git', ['init', '-q', dir]);
-      spawnSync('git', ['-C', dir, 'remote', 'add', 'origin', origin]);
+      spawnSync('git', ['init', '-q', dir], { env });
+      spawnSync('git', ['-C', dir, 'remote', 'add', 'origin', origin], { env });
       return dir;
     };
     const backup = mk('https://github.com/praveenkmr91/my-claude-harness.git');
@@ -214,10 +218,10 @@ test('block dangerous git hook', async (t) => {
   await t.test('branch -D passes only for the branch of a worktree removed earlier in the same && chain', () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-del-'));
     const wt = `${repo}-wt`;
-    spawnSync('git', ['init', '-q', repo]);
-    spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init']);
-    spawnSync('git', ['-C', repo, 'branch', 'other']);
-    spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', wt, '-b', 'feat']);
+    spawnSync('git', ['init', '-q', repo], { env });
+    spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init'], { env });
+    spawnSync('git', ['-C', repo, 'branch', 'other'], { env });
+    spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', wt, '-b', 'feat'], { env });
     try {
       assert.equal(run(`git worktree remove ${wt} && git branch -D feat`, repo).status, 0, 'remove then delete its branch');
       assert.equal(run(`git -C ${repo} worktree remove ${wt} && git -C ${repo} branch -D feat`, '/Users/me/repo').status, 0, '-C form');
@@ -230,7 +234,7 @@ test('block dangerous git hook', async (t) => {
       assert.equal(run(`git worktree remove ${repo}-missing && git branch -D feat`, repo).status, 2, 'unknown worktree path');
       assert.equal(run(`git worktree remove ${wt} && git branch -D feat`, '/Users/me/not-a-repo').status, 2, 'no repo at cwd');
     } finally {
-      spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt]);
+      spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt], { env });
       fs.rmSync(repo, { recursive: true, force: true });
       fs.rmSync(wt, { recursive: true, force: true });
     }
