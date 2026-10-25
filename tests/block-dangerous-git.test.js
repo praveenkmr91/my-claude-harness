@@ -94,6 +94,7 @@ test('block dangerous git hook', async (t) => {
       'git checkout -- .',
       'git -C repo restore .',
       'echo "unbalanced; git push',
+      'git commit -m "x `git branch -D feat`"',
     ]) {
       assert.equal(run(command).status, 2, command);
     }
@@ -107,6 +108,8 @@ test('block dangerous git hook', async (t) => {
       'git log --grep "reset --hard"',
       "cat <<'EOF' > /tmp/msg.txt\nnever git push; don't reset --hard\nEOF",
       'git push-docs-check',
+      'grep -c "Chaining \\`&& git branch -D <branch>\\`" settings.json',
+      'git commit -m "allow \\`git branch -D feat\\` after removal"',
     ]) {
       assert.notEqual(run(command).status, 2, command);
     }
@@ -205,6 +208,31 @@ test('block dangerous git hook', async (t) => {
       assert.equal(run(`cd ${backup} && git push`, '/Users/me/repo').status, 2, 'cd hides the dir');
     } finally {
       for (const d of [backup, backupSsh, other, work]) fs.rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  await t.test('branch -D passes only for the branch of a worktree removed earlier in the same && chain', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-del-'));
+    const wt = `${repo}-wt`;
+    spawnSync('git', ['init', '-q', repo]);
+    spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init']);
+    spawnSync('git', ['-C', repo, 'branch', 'other']);
+    spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', wt, '-b', 'feat']);
+    try {
+      assert.equal(run(`git worktree remove ${wt} && git branch -D feat`, repo).status, 0, 'remove then delete its branch');
+      assert.equal(run(`git -C ${repo} worktree remove ${wt} && git -C ${repo} branch -D feat`, '/Users/me/repo').status, 0, '-C form');
+      assert.equal(run(`git worktree remove ${fs.realpathSync(wt)} && git branch -D feat`, repo).status, 0, 'resolved worktree path');
+      assert.equal(run(`git worktree remove ${wt}; git branch -D feat`, repo).status, 2, '; runs the delete even if removal fails');
+      assert.equal(run(`git worktree remove --force ${wt} && git branch -D feat`, repo).status, 2, 'forced removal');
+      assert.equal(run(`git worktree remove ${wt} && git branch -D other`, repo).status, 2, 'a branch the worktree did not hold');
+      assert.equal(run(`git worktree remove ${wt} && git branch -D feat other`, repo).status, 2, 'its branch plus another');
+      assert.equal(run('git branch -D feat', repo).status, 2, 'delete without a removal');
+      assert.equal(run(`git worktree remove ${repo}-missing && git branch -D feat`, repo).status, 2, 'unknown worktree path');
+      assert.equal(run(`git worktree remove ${wt} && git branch -D feat`, '/Users/me/not-a-repo').status, 2, 'no repo at cwd');
+    } finally {
+      spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt]);
+      fs.rmSync(repo, { recursive: true, force: true });
+      fs.rmSync(wt, { recursive: true, force: true });
     }
   });
 });
