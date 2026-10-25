@@ -291,6 +291,16 @@
         ]
       },
       {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh peer-sessions.md",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "mcp__chrome-devtools__.*",
         "hooks": [
           {

@@ -25,6 +25,7 @@ const RULE_DOCS = [
   'harness.md',
   'code-craft.md',
   'committing.md',
+  'peer-sessions.md',
 ];
 
 const HOOK_SCRIPTS = fs.readdirSync(path.join(ROOT, 'hooks')).filter((f) => /\.(sh|js)$/.test(f));
@@ -397,6 +398,7 @@ test.describe('rule and hook agree', () => {
     ['settings.json', /inject-once\.sh subagent-tiers\.md/, 'CLAUDE.md', /injected on the first Agent call/],
     ['settings.json', /inject-once\.sh browser-verify\.md/, 'CLAUDE.md', /injected on the first chrome-devtools call/],
     ['settings.json', /inject-once\.sh external-io\.md/, 'CLAUDE.md', /external-io\.md`, injected on the first MCP call/],
+    ['settings.json', /inject-once\.sh peer-sessions\.md/, 'CLAUDE.md', /injected on the first SendMessage/],
     ['settings.json', /inject-once\.sh code-craft\.md '\[\.\]\(tsx\?[^']*\|sh\|[^']*dart\)[$]'/, 'CLAUDE.md', /code-craft\.md`\*\*.*injected on the first Read, Write or Edit of a source file/],
     ['settings.json', /"if": "Bash\(git:\*\)",[^}]*inject-once\.sh committing\.md"|inject-once\.sh committing\.md",[^}]*"if": "Bash\(git:\*\)"/, 'CLAUDE.md', /committing\.md`\*\*, injected on the first git command/],
     ['hooks/new-dep-gate.js', /dependency ladder/, 'CLAUDE.md', /installs and new `package\.json` keys are hook-asked/],

@@ -99,3 +99,17 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Step 2 brief, eval skipped:** the eval was skipped for the `agents/cold-reader.md` confirmation rule: per-run noise spreads 8 to 15, wider than the change one brief line can make, and at least 4 per run is ENV the brief cannot move. Evidence is the two cold reads of `plan-gate-tiers`; reverting line 7 undoes it.
 - **Fix:** first re-baseline the pending state-pass runs against the step 2 brief (`plan-gate-tiers`); the means above are the old brief's. Then three more runs per arm of the state pass alone; land it in `agents/cold-reader.md` line 7 if mean noise then stays at or under baseline. The judge's raw `false_positives` count mixes real out-of-plant findings with noise, so score with labels, not the raw count.
 - **Related, no action:** plan-lint leads for mixed step forms, `## Steps:` headings and per-section P8 hit 0 of the 44 plans in `plans/`; re-check when a real plan does.
+
+### SendMessage header and length check
+
+- **Evidence:** peer census, not archived: 745 messages; 17 over 3,000 characters, and 36% of builder→planner messages are progress.
+- **Why parked:** the rules in `peer-sessions.md` land first.
+- **Fix:** a PreToolUse SendMessage hook denying a message with no `[TYPE …]` header or over 1,200 characters.
+- **Worth doing when:** a re-census shows over 10% of peer messages break either rule.
+
+### SendMessage prompts despite the allow list
+
+- **Evidence:** peer census, not archived: 8 SendMessage permission prompts in 4 sessions, with `SendMessage` in the allow list at `settings.json:12`.
+- **Why parked:** cause unknown.
+- **Fix:** read the 8 prompts' tool inputs for a shared shape (socket-path address, cross-project target).
+- **Worth doing when:** it prompts again.

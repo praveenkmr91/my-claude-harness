@@ -10,6 +10,7 @@ The hand-authored half of my `~/.claude` directory: the rules, hooks, agents, sk
 | `persona-core.md`, `output-styles/peer-engineer.md` | The voice: a principal engineer collaborating as a peer. The decay-prone subset is re-injected on every prompt. |
 | `code-craft.md` | How written code should read: placement, layering, lifecycle, fixtures, comments. Injected on the first source-file touch. |
 | `committing.md` | When to commit, what goes in one commit, squash and undo mechanics, worktrees, no attribution trailers. Injected on the first git command. |
+| `peer-sessions.md` | Roles, message types and turn rules for a planner and builder session. Injected on the first SendMessage. |
 | `plan-mode.md` | Plans are files: criteria → steps → `→ verify:` checks, tiered gates (dry-run, pre-mortem, cold read, consult), chunking, approval semantics. |
 | `review-routing.md`, `review-battery.md` | Which review depth a verb buys (review / battery / harden / trim / audit / verify) and the agent battery behind the heavy tier. |
 | `subagent-tiers.md` | Which model tier each kind of work runs on, enforced by a hook. |
