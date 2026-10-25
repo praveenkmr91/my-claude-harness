@@ -31,6 +31,7 @@
 !/output-styles/
 !/tests/
 !/skills/
+!/statusline/
 
 # skills/synced is vendored by the sync job, not authored here.
 /skills/synced/
