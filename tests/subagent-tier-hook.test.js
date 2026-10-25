@@ -253,8 +253,26 @@ test.describe('subagent tier hook', () => {
     assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.fable })), 'inject:opus');
   });
 
-  test('general-purpose, no model, opus session -> inherit', () => {
-    assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.opus })), 'inherit');
+  test('general-purpose, no model, opus session -> deny', () => {
+    assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.opus })), 'deny');
+  });
+
+  test('general-purpose + model opus, opus session -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'general-purpose', model: 'opus', transcriptPath: transcripts.opus })),
+      'inherit',
+    );
+  });
+
+  test('general-purpose, no model, opus session, tier-override prompt -> inherit', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'general-purpose', prompt: '[tier-override: y]', transcriptPath: transcripts.opus })),
+      'inherit',
+    );
+  });
+
+  test('general-purpose, no model, sonnet session -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'general-purpose', transcriptPath: transcripts.sonnet })), 'inherit');
   });
 
   test('no subagent_type, no model, opus session -> deny', () => {

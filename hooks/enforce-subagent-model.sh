@@ -137,6 +137,12 @@ if [ -z "$child_model" ]; then
   if [ "$is_brain_agent" != true ] && [ "$session_rank" -eq 4 ]; then
     inject "opus"
   fi
+  # A bare general-purpose dispatch from an Opus session inherited Opus for a settled-design
+  # spike and its mechanical reruns (2026-10-25, ~158k tokens). Naming the model forces the
+  # choice; opus stays allowed when named, for work whose design is still open.
+  if [ "$subagent_type" = "general-purpose" ] && [ "$session_rank" -eq 3 ] && [ "$override" != "true" ]; then
+    deny 'A `general-purpose` dispatch with no `model` inherits Opus from this session (~/.claude/subagent-tiers.md). Settled edits, rebases and spikes on a decided design go to `implementer` (Sonnet); reruns, counts and named checks to `checker` (Haiku). Pass `model: "opus"` only when the brief carries a design call that is still open, and name that call in the prompt.'
+  fi
   exit 0
 fi
 
