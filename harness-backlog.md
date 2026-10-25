@@ -62,10 +62,17 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Write-guard sweep fallback still over-blocks
 
-- **Evidence:** a write call whose destination is a plain variable or function parameter (not `process.argv`/`sys.argv`) falls back to sweeping every path-like token in the command, so mentioning source files blocks a scratch-only write. Seen once after the argv fix.
-- **Why parked:** loosening the fallback risks letting a real source write through; one sighting is not enough to pick the rule.
+- **Evidence:** a write call whose destination is a plain variable or function parameter (not `process.argv`/`sys.argv`) falls back to sweeping every path-like token in the command, so mentioning source files blocks a scratch-only write. Seen once after the argv fix, and again on 2026-10-25: a `node -e` with `const p=process.argv[1]` wrote only a scratchpad file, but the same command's `git hash-object` / `update-index` named `subagent-tiers.md` and `plan-mode.md`, so a temp-index commit of selected hunks was denied.
+- **Why parked:** loosening the fallback risks letting a real source write through; two sightings, one short of the trigger below.
 - **Fix:** resolve simple same-script assignments (`const out = process.argv[2]`, `out = sys.argv[1]`) the way `PY_STRING_ASSIGN` resolves literals.
-- **Worth doing when:** it blocks a legitimate command twice more.
+- **Worth doing when:** it blocks a legitimate command once more.
+
+### Write-guard reads an interpreter call inside quoted text
+
+- **Evidence:** a read-only `grep -n "…node -e\|writeFileSync…" hooks/bash-write-guard.js harness-backlog.md` was denied as a shell write to both files (2026-10-25). `interpreterTargets` runs `INTERPRETER` and `INTERPRETER_WRITE` on the unmasked command, so a quoted grep pattern reads as a `node -e` that writes, and the sweep fallback then blocks every path in the command.
+- **Why parked:** one sighting, and reading the files with Read is a cheap way around it. Same false-positive class as the secrets-hook entry below.
+- **Fix:** locate the invocation with `INTERPRETER` on `maskQuoted(executed)`, which keeps a real `node -e '…'` (the command word is unquoted) and drops one inside a quoted argument; keep `INTERPRETER_WRITE` and the write-call scan on the raw text. Add the grep as a quiet twin in `tests/bash-write-guard.test.js`.
+- **Worth doing when:** it denies a legitimate command twice more.
 
 ### Secrets hook matches words inside quoted text
 
