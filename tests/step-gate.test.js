@@ -19,10 +19,13 @@ test.after(() => {
 
 const assistant = (content) => ({ type: 'assistant', message: { model: 'claude-opus-5', content } });
 const toolUse = (name, input, id = `tu-${name}`) => assistant([{ type: 'tool_use', id, name, input }]);
-const dispatch = (subagentType, prompt = PLAN_PROMPT) => toolUse('Agent', { subagent_type: subagentType, prompt });
+const dispatch = (subagentType, prompt = PLAN_PROMPT, id) => toolUse('Agent', { subagent_type: subagentType, prompt }, id);
 const bash = (command, id) => toolUse('Bash', { command }, id);
 const text = (t) => assistant([{ type: 'text', text: t }]);
-const toolResult = (content) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu-Agent', content }] } });
+const toolResult = (content, isError, id = 'tu-Agent') => ({
+  type: 'user',
+  message: { content: [{ type: 'tool_result', tool_use_id: id, content, ...(isError && { is_error: true }) }] },
+});
 const bashResult = (content, isError, id = 'tu-Bash') => ({
   type: 'user',
   message: { content: [{ type: 'tool_result', tool_use_id: id, content, ...(isError && { is_error: true }) }] },
@@ -42,8 +45,12 @@ const handBackAttachment = (name = 'implementer') => ({
     origin: { kind: 'peer', from: 'a1b2c3', senderTaskId: 'a1b2c3', name, body: '[Subagent hand-back] Step 1.1 done.', handback: true, handbackReportText: 'Step 1.1 done.' },
   },
 });
+const HANDOFF_ENVELOPE = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[HANDOFF demo step 1] Rules: ~/.claude/peer-sessions.md\nPlan: /Users/praveenkumar/.claude/plans/demo.md\n</cross-session-message>';
+const handoff = () => ({ type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${HANDOFF_ENVELOPE}` } });
+const handoffAttachment = () => ({ type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', isMeta: true, prompt: HANDOFF_ENVELOPE } });
 const LAUNCHED = toolResult('Async agent launched successfully. agentId: a1b2c3');
-const STEP_DONE = [dispatch('implementer'), LAUNCHED, handBack()];
+const DRY_RUN = [dispatch('dry-runner', PLAN_PROMPT, 'tu-dry'), toolResult('Async agent launched successfully. agentId: d1', false, 'tu-dry')];
+const STEP_DONE = [...DRY_RUN, dispatch('implementer'), LAUNCHED, handBack()];
 
 let seq = 0;
 function transcript(entries) {
@@ -141,14 +148,14 @@ test('step gate', async (t) => {
   });
 
   await t.test('a hand-back queued as an attachment is an anchor', () => {
-    const { code, stderr } = run([dispatch('implementer'), LAUNCHED, handBackAttachment('implementer')]);
+    const { code, stderr } = run([...DRY_RUN, dispatch('implementer'), LAUNCHED, handBackAttachment('implementer')]);
     assert.equal(code, 2);
     assert.match(stderr, /handed back with no check or commit from this thread since/);
     assert.equal(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"'), dispatch('implementer'), LAUNCHED, handBackAttachment()]).code, 2);
   });
 
   await t.test('an attachment hand-back from another agent kind is no anchor', () => {
-    assertQuiet(run([dispatch('checker'), LAUNCHED, handBackAttachment('checker')]));
+    assertQuiet(run([...DRY_RUN, dispatch('checker'), LAUNCHED, handBackAttachment('checker')]));
   });
 
   await t.test('a check counts only at command position', () => {
@@ -188,20 +195,89 @@ test('step gate', async (t) => {
     }
   });
 
-  await t.test('silent on the first dispatch', () => {
-    assertQuiet(run([]));
+  await t.test('the first dispatch on an empty transcript blocks, naming dry-runner', () => {
+    const { code, stderr } = run([]);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch on this plan/);
+  });
+
+  await t.test('a first dispatch with no HANDOFF and no dry run blocks', () => {
+    const { code, stderr } = run([text('Plan approved; starting step 1.')]);
+    assert.equal(code, 2);
+    assert.match(stderr, /dry-runner/);
+  });
+
+  await t.test('a HANDOFF then a dispatch with no dry run blocks, naming dry-runner', () => {
+    const { code, stderr } = run([handoff()]);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch on this plan since the HANDOFF/);
+    assert.match(stderr, /step gate: skip — review: <why>/);
+  });
+
+  await t.test('a HANDOFF queued as an attachment is an anchor', () => {
+    assert.equal(run([handoffAttachment()]).code, 2);
+    assert.equal(run([...DRY_RUN, handoffAttachment()]).code, 2);
+    assertQuiet(run([handoffAttachment(), ...DRY_RUN]));
+  });
+
+  await t.test('a dry run after the HANDOFF frees the first dispatch', () => {
+    assertQuiet(run([handoff(), ...DRY_RUN]));
+  });
+
+  await t.test('a dry run before the HANDOFF only does not count', () => {
+    assert.equal(run([...DRY_RUN, handoff()]).code, 2);
+  });
+
+  await t.test('a NOTE quoting [HANDOFF is no anchor', () => {
+    const note = { type: 'user', isMeta: true, message: { content: 'Another Claude session sent a message:\n<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[NOTE demo] The last message read [HANDOFF demo step 1]; ignore it.\n</cross-session-message>' } };
+    assertQuiet(run([handoff(), ...DRY_RUN, note]));
+  });
+
+  await t.test('an errored dry-runner dispatch does not count', () => {
+    const denied = [dispatch('dry-runner', PLAN_PROMPT, 'tu-dry'), toolResult('PreToolUse:Agent hook error: denied', true, 'tu-dry')];
+    assert.equal(run([handoff(), ...denied]).code, 2);
+  });
+
+  await t.test('another agent kind is no dry run', () => {
+    const coldRead = [dispatch('cold-reader', PLAN_PROMPT, 'tu-cold'), toolResult('Async agent launched successfully. agentId: c1', false, 'tu-cold')];
+    assert.equal(run([handoff(), ...coldRead]).code, 2);
+  });
+
+  await t.test('a review skip lifts the dry-run gate', () => {
+    assertQuiet(run([handoff()], { prompt: `step gate: skip — review: trivial plan\n${PLAN_PROMPT}` }));
+  });
+
+  await t.test('a second HANDOFF needs its own dry run', () => {
+    const chunkOne = [handoff(), ...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"')];
+    const { code, stderr } = run([...chunkOne, handoff()]);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch/);
+    assertQuiet(run([...chunkOne, handoff(), ...DRY_RUN]));
+  });
+
+  await t.test('a HANDOFF does not clear an unchecked hand-back', () => {
+    const { code, stderr } = run([handoff(), ...STEP_DONE, handoff(), ...DRY_RUN]);
+    assert.equal(code, 2);
+    assert.match(stderr, /handed back with no check or commit from this thread since/);
+  });
+
+  await t.test('a hand-back arriving after a second HANDOFF does not lift its dry run', () => {
+    const lateHandBack = [handoff(), ...DRY_RUN, dispatch('implementer'), LAUNCHED, handoff(), handBack(), bash('npx tsc --noEmit'), bash('git commit -m x')];
+    const { code, stderr } = run(lateHandBack);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch/);
   });
 
   await t.test('silent while the only trace of the last dispatch is its launch tool_result', () => {
-    assertQuiet(run([dispatch('implementer'), LAUNCHED]));
+    assertQuiet(run([...DRY_RUN, dispatch('implementer'), LAUNCHED]));
   });
 
   await t.test('silent after a denied dispatch', () => {
-    assertQuiet(run([dispatch('implementer'), toolResult('PreToolUse:Agent hook error: build not approved')]));
+    assertQuiet(run([...DRY_RUN, dispatch('implementer'), toolResult('PreToolUse:Agent hook error: build not approved')]));
   });
 
   await t.test('a hand-back from another agent kind is no anchor', () => {
-    assertQuiet(run([dispatch('external-io'), LAUNCHED, handBack('external-io')]));
+    assertQuiet(run([...DRY_RUN, dispatch('external-io'), LAUNCHED, handBack('external-io')]));
   });
 
   await t.test('silent for a non-implementer dispatch', () => {
@@ -239,7 +315,7 @@ test('step gate', async (t) => {
 
   await t.test('a tool_result or hand-back body quoting git commit and tsc is not a tool_use', () => {
     const quoted = 'Ran `npx tsc --noEmit` and `git commit -m "step 1"`.';
-    assert.equal(run([dispatch('implementer'), LAUNCHED, handBack('implementer', quoted)]).code, 2);
+    assert.equal(run([...DRY_RUN, dispatch('implementer'), LAUNCHED, handBack('implementer', quoted)]).code, 2);
     assert.equal(run([...STEP_DONE, toolResult(quoted)]).code, 2);
     assert.equal(run([...STEP_DONE, { type: 'api-request-blob', hash: 'h1', sessionId: 's1', message: bash('npx tsc && git commit -m x').message }]).code, 2);
   });
@@ -267,7 +343,7 @@ test('step gate', async (t) => {
 
   await t.test('a skip in reply text, off the first prompt line, without a gate name or reason, or as a placeholder lifts nothing', () => {
     assert.equal(run([...STEP_DONE, text('step gate: skip — step: answered which store to use')]).code, 2);
-    assert.equal(run([dispatch('implementer'), LAUNCHED, text('If it was a question, write:\nstep gate: skip — step: question answered'), handBack()]).code, 2);
+    assert.equal(run([...DRY_RUN, dispatch('implementer'), LAUNCHED, text('If it was a question, write:\nstep gate: skip — step: question answered'), handBack()]).code, 2);
     assert.equal(run(STEP_DONE, { prompt: `${PLAN_PROMPT}\nstep gate: skip — step: answered` }).code, 2);
     assert.equal(run(STEP_DONE, { prompt: `step gate: skip — step: <answer>\n${PLAN_PROMPT}` }).code, 2);
     assert.equal(run(STEP_DONE, { prompt: `step gate: skip — small step, already checked\n${PLAN_PROMPT}` }).code, 2);

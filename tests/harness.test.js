@@ -429,6 +429,12 @@ test.describe('rule and hook agree', () => {
     ['hooks/opus-write-nudge.sh', /about to write source/, 'subagent-tiers.md', /first source write of every turn/],
     ['hooks/step-gate.sh', /handed back with no/, 'plan-mode.md', /step-gate\.sh/],
     ['hooks/step-gate.sh', /handed back with no/, 'README.md', /step-gate\.sh/],
+    ['hooks/done-claim-gate.sh', /REPORT WITHOUT RAW OUTPUT/, 'peer-sessions.md', /done-claim-gate\.sh refuses the send/],
+    ['hooks/done-claim-gate.sh', /the lens lines go in the message itself/, 'README.md', /refuses a REPORT send/],
+    ['hooks/done-claim-gate.sh', /a hand pass does not count/, 'review-routing.md', /hand-written findings line does not count/],
+    ['hooks/step-gate.sh', /No dry-runner dispatch/, 'peer-sessions.md', /step-gate\.sh enforces/],
+    ['hooks/step-gate.sh', /No dry-runner dispatch/, 'plan-mode.md', /first implementer dispatch until a dry-runner/],
+    ['hooks/step-gate.sh', /No dry-runner dispatch/, 'README.md', /first dispatch until its dry run/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {
@@ -436,6 +442,12 @@ test.describe('rule and hook agree', () => {
       assert.match(read(doc), docPattern, `${doc} no longer states the rule the hook enforces`);
     });
   }
+
+  test('settings.json: the SendMessage PreToolUse group runs done-claim-gate.sh', () => {
+    const group = JSON.parse(read('settings.json')).hooks.PreToolUse.find((g) => g.matcher === 'SendMessage');
+    assert.ok(group, 'no PreToolUse group matches SendMessage');
+    assert.ok(group.hooks.some((h) => h.command.endsWith('hooks/done-claim-gate.sh')), 'a REPORT send is never gated: done-claim-gate.sh is not wired on SendMessage');
+  });
 });
 
 test('eval-run.sh: the cold-read brief grep yields the brief without the dispatch-prompt rule', () => {

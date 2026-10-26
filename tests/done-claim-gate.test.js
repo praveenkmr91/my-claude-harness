@@ -14,39 +14,69 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'done-claim-gate-'));
 test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
 const BASE_VERDICTS = 'reuse-analyzer: 0 findings\nplacement-analyzer: skip — single-file change';
+const LENS_SKIPS = 'reuse-analyzer: skip — rename only\nplacement-analyzer: skip — nothing moved';
+const RAW_OUTPUT = 'Raw output: /private/tmp/s/scratchpad/step1-checks.txt';
+const LENS_AGENTS = ['reuse-analyzer', 'placement-analyzer'].map((subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } }));
+
+const handBack = (name) => ({
+  type: 'user',
+  isMeta: true,
+  origin: { kind: 'peer', from: 'a1b2c3', senderTaskId: 'a1b2c3', name, body: '[Subagent hand-back] Step 1 done.', handback: true },
+  message: { content: 'Another Claude session sent a message:\n<agent-message from="a1b2c3">\n[Subagent hand-back] Step 1 done.' },
+});
+const handBackAttachment = (name) => ({
+  type: 'attachment',
+  attachment: {
+    type: 'queued_command',
+    commandMode: 'prompt',
+    prompt: '<agent-message from="a1b2c3">\n[Subagent hand-back] Step 1 done.',
+    origin: { kind: 'peer', from: 'a1b2c3', senderTaskId: 'a1b2c3', name, body: '[Subagent hand-back] Step 1 done.', handback: true, handbackReportText: 'Step 1 done.' },
+  },
+});
+const reportSend = (message, id) => ({ type: 'tool_use', id, name: 'SendMessage', input: { to: 'planner-1', message } });
+const sendPayload = (transcriptPath, message, cwd) => ({ transcript_path: transcriptPath, cwd, tool_name: 'SendMessage', tool_input: { to: 'planner-1', message } });
 
 let seq = 0;
-function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, prompt = 'go' } = {}) {
-  const content = [...reviews, { type: 'text', text: reply }];
+// `send: true` replays the reply as a pending SendMessage (its tool_use already in the transcript) through the PreToolUse arm.
+function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, prompt = 'go', handback, send = false } = {}) {
+  const content = [...reviews, send ? reportSend(reply, 'send') : { type: 'text', text: reply }];
   if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
   if (lint) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
   fs.writeFileSync(transcriptPath, [
-    JSON.stringify({ type: 'user', message: { content: prompt } }),
-    JSON.stringify({ type: 'assistant', message: { content } }),
-  ].join('\n'));
-  const payload = { transcript_path: transcriptPath, stop_hook_active: stopHookActive, cwd };
+    { type: 'user', message: { content: prompt } },
+    ...(handback ? [handback] : []),
+    { type: 'assistant', message: { content } },
+  ].map((r) => JSON.stringify(r)).join('\n'));
+  const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, stop_hook_active: stopHookActive, cwd };
   return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
 }
 const run = (reply, opts) => runFull(reply, opts).status;
 
-function runWithResults(reply, runs) {
-  const lines = [
-    { type: 'user', message: { content: 'go' } },
-    { type: 'assistant', message: { content: [
-      { type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } },
-      { type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: '/repo/src/app.ts' } },
-    ] } },
-  ];
-  runs.forEach(({ command, isError = false, output }, i) => {
-    lines.push({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `run${i}`, name: 'Bash', input: { command } }] } });
-    lines.push({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `run${i}`, is_error: isError, content: output }] } });
+// `send: true` replays the reply as a SendMessage whose tool_use is not yet in the transcript.
+function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false } = {}) {
+  const lines = [{ type: 'user', message: { content: 'go' } }];
+  const prelude = [];
+  if (lint) prelude.push({ type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
+  if (editedFile) prelude.push({ type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: editedFile } });
+  if (prelude.length) lines.push({ type: 'assistant', message: { content: prelude } });
+  runs.forEach(({ command, sent, handback, prompt, isError = false, output }, i) => {
+    if (handback) {
+      lines.push(handback);
+    } else if (prompt) {
+      lines.push({ type: 'user', message: { content: prompt } });
+    } else {
+      const toolUse = sent ? reportSend(sent, `run${i}`) : { type: 'tool_use', id: `run${i}`, name: 'Bash', input: { command } };
+      lines.push({ type: 'assistant', message: { content: [toolUse] } });
+      lines.push({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `run${i}`, is_error: isError, content: output }] } });
+    }
   });
-  lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: `${reply}\n${BASE_VERDICTS}` }] } });
+  if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: `${reply}\n${BASE_VERDICTS}` }] } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
   fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath }), encoding: 'utf8' });
+  const payload = send ? sendPayload(transcriptPath, reply) : { transcript_path: transcriptPath };
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
 }
 
 test('done-claim gate', async (t) => {
@@ -403,6 +433,109 @@ test('done-claim gate', async (t) => {
     const payload = (extra) => JSON.stringify({ transcript_path: transcriptPath, ...extra });
     assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({}), encoding: 'utf8' }).status, 2);
     assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({ last_assistant_message: `Done: edits landed.\n${BASE_VERDICTS}` }), encoding: 'utf8' }).status, 0);
+  });
+
+  await t.test('an implementer hand-back counts as a code change: the claim needs evidence and every lens', () => {
+    for (const handback of [handBack('implementer'), handBackAttachment('implementer')]) {
+      const { status, stderr } = runFull('Done: step 1 landed.', { editedFile: null, handback });
+      assert.equal(status, 2);
+      assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    }
+    assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', reviews: LENS_AGENTS }), 0);
+    assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBack('checker') }), 0);
+  });
+
+  await t.test('in a plan build a hand-written findings line does not pass a lens; a skip with a reason does', () => {
+    const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js' };
+    const { status, stderr } = runFull('Done: step 1 landed.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', built);
+    assert.equal(status, 2);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*a hand pass does not count/);
+    assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}`, built), 0);
+  });
+
+  await t.test('a hand-back needs lint and type check only outside the harness', () => {
+    const opts = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', lint: false };
+    const reply = `Done: step 1 landed.\n${LENS_SKIPS}`;
+    assert.match(runFull(reply, { ...opts, cwd: '/repo' }).stderr, /LINT\/TSC NOT RUN/);
+    assert.doesNotMatch(runFull(reply, { ...opts, cwd: path.join(os.homedir(), '.claude') }).stderr, /LINT\/TSC/);
+    const harnessPlan = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'implementer', prompt: 'Implement step 1 of ~/.claude/plans/demo.md' } };
+    assert.doesNotMatch(runFull(reply, { ...opts, cwd: '/repo', reviews: [harnessPlan] }).stderr, /LINT\/TSC/);
+  });
+
+  await t.test('a harness plan dispatched before a typed prompt still waives lint for its hand-back', () => {
+    const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
+    fs.writeFileSync(transcriptPath, [
+      { type: 'user', message: { content: 'implement' } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Agent', input: { subagent_type: 'implementer', prompt: 'Implement step 1 of ~/.claude/plans/x.md' } }] } },
+      { type: 'user', message: { content: 'how is it going?' } },
+      handBack('implementer'),
+      { type: 'assistant', message: { content: [
+        { type: 'tool_use', name: 'Bash', input: { command: 'node --test tests/*.test.js' } },
+        { type: 'text', text: `Done: step 1 landed.\n${LENS_SKIPS}` },
+      ] } },
+    ].map((r) => JSON.stringify(r)).join('\n'));
+    const { status, stderr } = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, cwd: '/repo' }), encoding: 'utf8' });
+    assert.doesNotMatch(stderr, /LINT\/TSC/);
+    assert.equal(status, 0, stderr);
+  });
+
+  await t.test('the claim comes from the final reply, not the first text of the turn', () => {
+    const { status, stderr } = runFull('Done: the edits landed.', { reviews: [{ type: 'text', text: 'Working on it.' }] });
+    assert.equal(status, 2);
+    assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    assert.equal(run('Still red: two tests fail.', { reviews: [{ type: 'text', text: 'Done: the edits landed.' }] }), 0);
+  });
+
+  await t.test('a REPORT send is a done claim, checked before it leaves', () => {
+    const built = { editedFile: null, handback: handBack('implementer'), send: true };
+    const bare = runFull('[REPORT demo step 1] Step 1 built.', { ...built, lint: false });
+    assert.equal(bare.status, 2);
+    assert.match(bare.stderr, /REPORT WITHOUT RAW OUTPUT/);
+    assert.match(bare.stderr, /DONE-CLAIM WITHOUT EVIDENCE: the first line claims 'REPORT'[^\n]*cite their output; for a REPORT, the lens lines go in the message itself\./);
+    assert.match(bare.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[^\n]*the lens lines go in the message itself\./);
+    assert.equal(run(`[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`, { ...built, bashCommand: 'node --test tests/*.test.js' }), 0);
+    assert.equal(run('[ASK demo step 1] Which file owns the type?', { ...built, lint: false }), 0);
+  });
+
+  await t.test('a REPORT counts a lint or type-check run as evidence; a Stop claim does not', () => {
+    const opts = { editedFile: null, handback: handBack('implementer'), lint: false, bashCommand: 'pnpm lint && pnpm typecheck' };
+    assert.equal(run(`[REPORT demo step 1] Step 1 renamed.\n${LENS_SKIPS}\n${RAW_OUTPUT}`, { ...opts, send: true }), 0);
+    assert.match(runFull(`Done: step 1 renamed.\n${LENS_SKIPS}`, opts).stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+  });
+
+  await t.test('the REPORT window runs from the previous sent REPORT, not the typed prompt', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const opts = { send: true, lint: false, editedFile: null };
+    const granted = runWithResults(report, [{ handback: handBack('implementer') }, { prompt: 'granted' }], opts);
+    assert.equal(granted.status, 2);
+    assert.match(granted.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    const blocked = { sent: report, isError: true, output: 'PreToolUse:SendMessage hook error: DONE-CLAIM WITHOUT EVIDENCE' };
+    assert.equal(runWithResults(report, [{ handback: handBack('implementer') }, blocked], opts).status, 2);
+    const checked = [{ handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }, blocked];
+    const reworded = runWithResults(`[REPORT demo step 1] Step 1 built and checked.\n${RAW_OUTPUT}`, checked, { ...opts, lint: true });
+    assert.equal(reworded.status, 2);
+    assert.match(reworded.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
+    const delivered = { sent: report, output: 'Message sent to planner-1' };
+    assert.equal(runWithResults(`[REPORT demo step 2] Nothing built since step 1.\n${RAW_OUTPUT}`, [{ handback: handBack('implementer') }, delivered], opts).status, 0);
+  });
+
+  await t.test('at Stop, the skip lines of a sent REPORT count as lens verdicts', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const runs = [
+      { handback: handBack('implementer') },
+      { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' },
+      { sent: report, output: 'Message sent to planner-1' },
+      { command: 'git commit -m x', output: '' },
+    ];
+    assert.equal(runWithResults('Committed as abc1234.', runs).status, 0);
+    const unreported = runWithResults('Committed as abc1234.', runs.filter((r) => !r.sent));
+    assert.equal(unreported.status, 2);
+    assert.match(unreported.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
+  });
+
+  await t.test('an empty payload or an empty SendMessage passes', () => {
+    assert.equal(spawnSync('bash', [HOOK_PATH], { input: '{}', encoding: 'utf8' }).status, 0);
+    assert.equal(spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ tool_name: 'SendMessage', tool_input: {} }), encoding: 'utf8' }).status, 0);
   });
 
   await t.test('skips the retry after a block', () => {

@@ -24,7 +24,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Main-thread write-block is blind to shell writes
 
-- **Evidence:** `opus-write-nudge.sh` blocks the first Write|Edit of a source file per turn from an Opus-or-above main thread, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so the same thread can still edit source from Bash.
+- **Evidence:** `opus-write-nudge.sh` blocks the first Write|Edit of a source file per turn from an Opus-or-above main thread, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so the same thread can still edit source from Bash. The products-widget builder landed step 1 through `git rm -r` and `sed -i` on the main thread with no dispatch.
 - **Why parked:** closing it means teaching the Bash guard the session model and the hook's three escapes; needs one rule for both hooks, not a second guard. Measure first: the two-week census after the block (see `state/census/2026-10-22.tar.gz`, `dispatch-census.js`) shows whether writes moved to `sed -i`.
 - **Fix:** in `bash-write-guard.js`, read the live model the same way the hook does and deny `sed -i` / `perl -pi` on source extensions from an Opus-or-above main thread unless that turn carries a dispatch, an open-call skip or a typed override, with the same message.
 
