@@ -32,6 +32,7 @@
 - The builder sends its REPORT without waiting, then starts the next step only on GO; an ANSWER at step end starts nothing unless it says GO. A STOP lands only between turns, so it cannot catch a step chained inside one.
 - On HANDOFF, before step 1, the builder dispatches dry-runner with the plan path and the chunk in scope and judges its output against the tree: a verify that cannot pass, a census that differs or a cited line that reads differently → ASK or PROPOSE, then wait; hooks/step-gate.sh enforces.
 - The planner reads each REPORT on arrival and accepts a step only on its raw output or the diff, never on a chat claim. Findings in it are verified as `CLAUDE.md` "A reviewer's finding is a claim" says; a problem → STOP.
+- A chunk's last step is accepted only once the Big done bar's trim (`/delete-list` over the whole chunk's diff) has run and its cuts are listed; a skip line for it is a finding, never an accepted lens line.
 - A peer session stops its own process: STOP is a message, never a kill. The builder answers STOP with a REPORT naming where it stopped.
 - A peer's handoff reports back to that peer too, unasked, even when it says "report to Praveen".
 
