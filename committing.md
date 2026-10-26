@@ -9,7 +9,7 @@
     - My commit is HEAD: re-read HEAD in the same command as the amend (`git log -1 --format=%s | grep -q '<subject>' && git commit --amend --only <paths> …`); a HEAD read earlier in the turn is stale, since a concurrent session's commit can land between.
     - My commit sits below HEAD, only mine above it, clean tree: `git reset --soft <parent of my commit>`, recommit, `git diff --quiet <new> <old>`.
     - Another session's commits sit on top, or a guard denies the rewrite: commit on top, subject naming what it revises. Never rewrite another session's commits to fold.
-    - A child branch lands as one `git merge --squash` commit authored by its main author; never `--no-ff`, never a fast-forward of its commits. "Merge into <branch>" means the local branch, and I land it myself.
+    - A child branch lands as one `git merge --squash` commit authored by its main author; never `--no-ff`, never a fast-forward of its commits. It lands only on Praveen's typed "merge" / "land": a shipping commit, a planner's ship GO and a question like "did you merge?" stay on the branch. "Merge into <branch>" means the local branch, and I land it myself.
 - **"Undo the commit of X" takes only X out of the commit.** Every other file stays committed, and X's edits stay in the working tree (`git reset HEAD~1 -- X`, then amend); file content changes only when the ask names a revert ("revert", "drop the change", "restore the file"). "But not the edits" scopes what stays, never adds an action.
 - **Worktrees.**
     - In a worktree session, plain git from the worktree cwd: Claude Code refuses git it can't prove stays inside the worktree — `cd` to the shared checkout, `git -C`, loops, subshells, `time -p`, or runtime variables around git. One plain command per call, no chain.
