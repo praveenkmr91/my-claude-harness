@@ -138,6 +138,53 @@ test('review-classify comment-only exit', async (t) => {
   });
 });
 
+test('review-classify review_base', async (t) => {
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' }).trim();
+  const commit = (file, source = 'export const a = 1;\n') => {
+    fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+    fs.writeFileSync(path.join(repo, file), source);
+    git('add', '.');
+    git('commit', '-q', '-m', file);
+    return git('rev-parse', '--short', 'HEAD');
+  };
+  git('init', '-q');
+  const root = commit('README.md');
+  commit('src/c.ts', 'p.catch(() => null);\n');
+  const step1 = commit('src/a.tsx');
+  commit('docs/b.md');
+  commit('src/d.ts');
+  const transcript = path.join(tmpDir, 'since.jsonl');
+  fs.writeFileSync(transcript, `${JSON.stringify({ type: 'user', timestamp: '2020-01-01T00:00:00.000Z' })}\n`);
+  const lensesFrom = (review_base, transcript_path = transcript) => execFileSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path, review_base }), cwd: repo, encoding: 'utf8', env }).match(/lenses=(\S+)/)[1].split(',');
+
+  await t.test('lenses come from the delta after the base only', () => {
+    assert.ok(!lensesFrom(step1).includes('react-best-practices'));
+    assert.ok(lensesFrom(root).includes('react-best-practices'));
+  });
+
+  await t.test('content signals come from the delta after the base only', () => {
+    assert.ok(!lensesFrom(step1).includes('silent-failure-hunter'));
+    assert.ok(lensesFrom(undefined).includes('silent-failure-hunter'));
+  });
+
+  await t.test('an unresolvable base falls back to the session scope', () => {
+    assert.ok(lensesFrom('deadbee').includes('react-best-practices'));
+  });
+
+  const editTranscript = path.join(tmpDir, 'edit.jsonl');
+  const editEntry = { type: 'assistant', timestamp: '2020-01-01T00:00:00.000Z', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(repo, 'docs/x.md') } }] } };
+  fs.writeFileSync(editTranscript, `${JSON.stringify(editEntry)}\n`);
+
+  await t.test('the base outranks a session edit', () => {
+    assert.ok(lensesFrom(root, editTranscript).includes('react-best-practices'));
+  });
+
+  await t.test('without a base the session edit scopes the review', () => {
+    assert.ok(!lensesFrom(undefined, editTranscript).includes('react-best-practices'));
+  });
+});
+
 test('review-classify effort level', async (t) => {
   const source = 'export const a = 1;';
   const stated = [

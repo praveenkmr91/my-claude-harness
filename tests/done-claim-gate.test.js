@@ -36,6 +36,15 @@ const handBackAttachment = (name) => ({
 const reportSend = (message, id) => ({ type: 'tool_use', id, name: 'SendMessage', input: { to: 'planner-1', message } });
 const sendPayload = (transcriptPath, message, cwd) => ({ transcript_path: transcriptPath, cwd, tool_name: 'SendMessage', tool_input: { to: 'planner-1', message } });
 
+const repoWith = (scripts) => {
+  const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts }));
+  return repo;
+};
+
+// Under the pre-commit hook git exports GIT_INDEX_FILE etc.; inherited, they point a scratch repo at ~/.claude's index.
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+
 let seq = 0;
 // `send: true` replays the reply as a pending SendMessage (its tool_use already in the transcript) through the PreToolUse arm.
 function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, prompt = 'go', handback, send = false } = {}) {
@@ -55,15 +64,17 @@ function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = t
 const run = (reply, opts) => runFull(reply, opts).status;
 
 // `send: true` replays the reply as a SendMessage whose tool_use is not yet in the transcript.
-function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false } = {}) {
-  const lines = [{ type: 'user', message: { content: 'go' } }];
+function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since } = {}) {
+  const lines = [{ type: 'user', timestamp: since, message: { content: 'go' } }];
   const prelude = [];
   if (lint) prelude.push({ type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
   if (editedFile) prelude.push({ type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: editedFile } });
   if (prelude.length) lines.push({ type: 'assistant', message: { content: prelude } });
-  runs.forEach(({ command, sent, handback, prompt, isError = false, output }, i) => {
-    if (handback) {
-      lines.push(handback);
+  runs.forEach(({ command, sent, handback, record, prompt, blocks, isError = false, output }, i) => {
+    if (handback || record) {
+      lines.push(handback ?? record);
+    } else if (blocks) {
+      lines.push({ type: 'assistant', message: { content: blocks } });
     } else if (prompt) {
       lines.push({ type: 'user', message: { content: prompt } });
     } else {
@@ -75,8 +86,8 @@ function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.
   if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: `${reply}\n${BASE_VERDICTS}` }] } });
   const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
   fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
-  const payload = send ? sendPayload(transcriptPath, reply) : { transcript_path: transcriptPath };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
+  const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, cwd };
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env });
 }
 
 test('done-claim gate', async (t) => {
@@ -443,6 +454,7 @@ test('done-claim gate', async (t) => {
     }
     assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', reviews: LENS_AGENTS }), 0);
     assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBack('checker') }), 0);
+    assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBackAttachment('checker') }), 0);
   });
 
   await t.test('in a plan build a hand-written findings line does not pass a lens; a skip with a reason does', () => {
@@ -453,16 +465,23 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}`, built), 0);
   });
 
-  await t.test('a hand-back needs lint and type check only outside the harness', () => {
+  await t.test('a hand-back needs lint and type check only where the repo defines a lint or type-check script', () => {
     const opts = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', lint: false };
     const reply = `Done: step 1 landed.\n${LENS_SKIPS}`;
-    assert.match(runFull(reply, { ...opts, cwd: '/repo' }).stderr, /LINT\/TSC NOT RUN/);
+    const scripted = repoWith({ 'check:lint': 'eslint .' });
+    assert.match(runFull(reply, { ...opts, cwd: scripted }).stderr, /LINT\/TSC NOT RUN/);
+    assert.doesNotMatch(runFull(reply, { ...opts, cwd: repoWith({ build: 'vite build' }) }).stderr, /LINT\/TSC/);
     assert.doesNotMatch(runFull(reply, { ...opts, cwd: path.join(os.homedir(), '.claude') }).stderr, /LINT\/TSC/);
-    const harnessPlan = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'implementer', prompt: 'Implement step 1 of ~/.claude/plans/demo.md' } };
-    assert.doesNotMatch(runFull(reply, { ...opts, cwd: '/repo', reviews: [harnessPlan] }).stderr, /LINT\/TSC/);
+    assert.doesNotMatch(runFull(reply, { ...opts, cwd: scripted, bashCommand: 'node --test tests/*.test.js && pnpm lint' }).stderr, /LINT\/TSC/);
+    spawnSync('git', ['init', '-q'], { cwd: scripted });
+    const nested = path.join(scripted, 'packages', 'web');
+    fs.mkdirSync(nested, { recursive: true });
+    assert.match(runFull(reply, { ...opts, cwd: nested }).stderr, /LINT\/TSC NOT RUN/);
+    const repoPlan = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'implementer', prompt: `Implement step 1 of ${scripted}/plans/x.md` } };
+    assert.match(runFull(reply, { ...opts, cwd: scripted, reviews: [repoPlan] }).stderr, /LINT\/TSC NOT RUN/);
   });
 
-  await t.test('a harness plan dispatched before a typed prompt still waives lint for its hand-back', () => {
+  await t.test('a harness plan dispatched before a typed prompt does not waive lint in a repo that defines it', () => {
     const transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`);
     fs.writeFileSync(transcriptPath, [
       { type: 'user', message: { content: 'implement' } },
@@ -474,9 +493,13 @@ test('done-claim gate', async (t) => {
         { type: 'text', text: `Done: step 1 landed.\n${LENS_SKIPS}` },
       ] } },
     ].map((r) => JSON.stringify(r)).join('\n'));
-    const { status, stderr } = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, cwd: '/repo' }), encoding: 'utf8' });
-    assert.doesNotMatch(stderr, /LINT\/TSC/);
-    assert.equal(status, 0, stderr);
+    const stop = (cwd) => spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, cwd }), encoding: 'utf8' });
+    const scripted = stop(repoWith({ lint: 'eslint .' }));
+    assert.equal(scripted.status, 2);
+    assert.match(scripted.stderr, /LINT\/TSC NOT RUN/);
+    const unscripted = stop(repoWith({ build: 'vite build' }));
+    assert.doesNotMatch(unscripted.stderr, /LINT\/TSC/);
+    assert.equal(unscripted.status, 0, unscripted.stderr);
   });
 
   await t.test('the claim comes from the final reply, not the first text of the turn', () => {
@@ -503,6 +526,113 @@ test('done-claim gate', async (t) => {
     assert.match(runFull(`Done: step 1 renamed.\n${LENS_SKIPS}`, opts).stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
   });
 
+  await t.test('a REPORT over a red test run is blocked even when a green lint came after it', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const red = { command: 'node --test tests/*.test.js', isError: true, output: 'Exit code 1\nℹ fail 2' };
+    const green = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
+    const lint = { command: 'pnpm lint', output: 'ok' };
+    const opts = { send: true, lint: false, editedFile: null };
+    const masked = runWithResults(report, [{ handback: handBack('implementer') }, red, lint], opts);
+    assert.equal(masked.status, 2);
+    assert.match(masked.stderr, /DONE-CLAIM OVER A FAILED RUN/);
+    assert.equal(runWithResults(report, [{ handback: handBack('implementer') }, red, green, lint], opts).status, 0);
+    assert.equal(runWithResults(report, [{ handback: handBack('implementer') }, green, lint], opts).status, 0);
+  });
+
+  await t.test('a REPORT reads its lens lines from the message, not from earlier chat text', () => {
+    const body = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
+    const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
+    const chat = { blocks: [{ type: 'text', text: LENS_SKIPS }] };
+    const opts = { send: true, lint: false, editedFile: null };
+    const chatOnly = runWithResults(body, [{ handback: handBack('implementer') }, tested, chat], opts);
+    assert.equal(chatOnly.status, 2);
+    assert.match(chatOnly.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
+    assert.equal(runWithResults(`${body}\n${LENS_SKIPS}`, [{ handback: handBack('implementer') }, tested, chat], opts).status, 0);
+  });
+
+  await t.test('on a built window a lens run needs its findings line in the REPORT; a skip line alone does', () => {
+    const body = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
+    const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
+    const lensRuns = { blocks: LENS_AGENTS };
+    const opts = { send: true, lint: false, editedFile: null };
+    const runOnly = runWithResults(body, [{ handback: handBack('implementer') }, tested, lensRuns], opts);
+    assert.equal(runOnly.status, 2);
+    assert.match(runOnly.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
+    assert.equal(runWithResults(`${body}\nreuse-analyzer: 0 findings\nplacement-analyzer: 2 findings`, [{ handback: handBack('implementer') }, tested, lensRuns], opts).status, 0);
+    assert.equal(runWithResults(`${body}\n${LENS_SKIPS}`, [{ handback: handBack('implementer') }, tested], opts).status, 0);
+  });
+
+  await t.test('a REPORT with no build and no scratchpad path is blocked for the missing raw output alone', () => {
+    const opts = { send: true, editedFile: null, bashCommand: 'node --test tests/*.test.js' };
+    const bare = runFull(`[REPORT demo step 1] Step 1 checked.\n${LENS_SKIPS}`, opts);
+    assert.equal(bare.status, 2);
+    assert.match(bare.stderr, /REPORT WITHOUT RAW OUTPUT/);
+    assert.doesNotMatch(bare.stderr, /DONE-CLAIM|REVIEW NOT RUN|LINT\/TSC/);
+    assert.equal(run(`[REPORT demo step 1] Step 1 checked.\n${LENS_SKIPS}\n${RAW_OUTPUT}`, opts), 0);
+  });
+
+  await t.test('a NOTE quoting a REPORT header is not a REPORT', () => {
+    const note = '[NOTE demo step 1] The last message read [REPORT demo step 1]; ignore it.';
+    assert.equal(run(note, { send: true, editedFile: null, handback: handBack('implementer'), lint: false }), 0);
+  });
+
+  await t.test('a REPORT header is the first line minus markdown and quote marks, case-insensitive', () => {
+    const opts = { send: true, editedFile: null, handback: handBack('implementer'), lint: false };
+    for (const message of ['**[REPORT demo step 1]** Step 1 built.', '[Report demo step 1] Step 1 built.', '> `[REPORT demo step 1]` Step 1 built.', '\n## [ REPORT demo step 1] Step 1 built.']) {
+      assert.equal(run(message, opts), 2, message);
+    }
+    assert.equal(run('FYI the planner wants a [REPORT demo step 1] soon.', opts), 0);
+    assert.equal(run('[REPORTS demo] not a header.', opts), 0);
+  });
+
+  await t.test('a REPORT with no hand-back and no code edit is quiet', () => {
+    assert.equal(run(`[REPORT demo step 1] Nothing to build.\n${RAW_OUTPUT}`, { send: true, editedFile: null, lint: false }), 0);
+  });
+
+  await t.test('a REPORT after a main-thread in-place code edit is a claim', () => {
+    const body = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
+    const opts = { send: true, editedFile: null, lint: false, bashCommand: "sed -i '' s/a/b/ src/app.ts" };
+    const { status, stderr } = runFull(body, opts);
+    assert.equal(status, 2);
+    assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
+  });
+
+  await t.test('a REPORT answering a STOP, with nothing built since the last REPORT, is quiet but still needs its raw output', () => {
+    const opts = { send: true, editedFile: null, lint: false };
+    const stop = '[REPORT demo step 2] Stopped before step 2 started; nothing built since step 1.';
+    assert.equal(run(`${stop}\n${RAW_OUTPUT}`, opts), 0);
+    const bare = runFull(stop, opts);
+    assert.equal(bare.status, 2);
+    assert.match(bare.stderr, /REPORT WITHOUT RAW OUTPUT/);
+    assert.doesNotMatch(bare.stderr, /DONE-CLAIM|REVIEW NOT RUN/);
+  });
+
+  await t.test('a REPORT counts only the checks that ran after the last implementer hand-back', () => {
+    const report = `[REPORT demo step 2] Step 2 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
+    const opts = { send: true, lint: false, editedFile: null };
+    const stale = runWithResults(report, [tested, { handback: handBack('implementer') }], opts);
+    assert.equal(stale.status, 2);
+    assert.match(stale.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    assert.equal(runWithResults(report, [{ handback: handBack('implementer') }, tested], opts).status, 0);
+    const redBefore = { command: 'node --test tests/*.test.js', isError: true, output: 'Exit code 1\nℹ fail 2' };
+    assert.equal(runWithResults(report, [redBefore, { handback: handBack('implementer') }, tested], opts).status, 0);
+  });
+
+  await t.test('a REPORT needs its lint and type check after the last hand-back', () => {
+    const report = `[REPORT demo step 2] Step 2 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const linted = { command: 'pnpm lint && npx tsc --noEmit', output: 'ok' };
+    const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
+    const opts = { send: true, lint: false, editedFile: null, cwd: repoWith({ lint: 'eslint .' }) };
+    const stale = runWithResults(report, [{ handback: handBack('implementer') }, linted, { handback: handBack('implementer') }, tested], opts);
+    assert.equal(stale.status, 2);
+    assert.match(stale.stderr, /LINT\/TSC NOT RUN/);
+    const fresh = runWithResults(report, [{ handback: handBack('implementer') }, { handback: handBack('implementer') }, tested, linted], opts);
+    assert.equal(fresh.status, 0, fresh.stderr);
+    assert.doesNotMatch(fresh.stderr, /LINT\/TSC/);
+  });
+
   await t.test('the REPORT window runs from the previous sent REPORT, not the typed prompt', () => {
     const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
     const opts = { send: true, lint: false, editedFile: null };
@@ -516,7 +646,41 @@ test('done-claim gate', async (t) => {
     assert.equal(reworded.status, 2);
     assert.match(reworded.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
     const delivered = { sent: report, output: 'Message sent to planner-1' };
-    assert.equal(runWithResults(`[REPORT demo step 2] Nothing built since step 1.\n${RAW_OUTPUT}`, [{ handback: handBack('implementer') }, delivered], opts).status, 0);
+    const afterDelivery = runWithResults(`[REPORT demo step 2] Nothing built since step 1.\n${RAW_OUTPUT}`, [{ handback: handBack('implementer') }, delivered], opts);
+    assert.equal(afterDelivery.status, 0, afterDelivery.stderr);
+  });
+
+  await t.test('a REPORT is reviewed by the lenses of the files changed since the previous REPORT commit, not the branch', () => {
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+    const git = (...args) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' }).stdout.trim();
+    const commit = (file, subject) => {
+      fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+      fs.writeFileSync(path.join(repo, file), 'export const a = 1;\n');
+      git('add', '.');
+      git('commit', '-q', '-m', subject);
+      return `[master ${git('rev-parse', '--short', 'HEAD')}] ${subject}`;
+    };
+    git('init', '-q');
+    const step1Output = commit('src/a.tsx', 'step 1');
+    const step2Output = commit('docs/b.md', 'step 2');
+    const report = `[REPORT demo step 2] Step 2 built.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings\n${RAW_OUTPUT}`;
+    const delivered = { sent: '[REPORT demo step 1] Step 1 built.', output: 'Message sent to planner-1' };
+    const step2 = [
+      { handback: handBack('implementer') },
+      { blocks: LENS_AGENTS },
+      { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' },
+      { command: 'git commit -m "step 2"', output: step2Output },
+    ];
+    const opts = { send: true, lint: false, editedFile: null, cwd: repo, since: '2020-01-01T00:00:00.000Z' };
+    const step1 = (output) => ({ command: 'git commit -m "step 1"', output });
+    const branchWide = runWithResults(report, [step1(step1Output), ...step2], opts);
+    assert.equal(branchWide.status, 2);
+    assert.match(branchWide.stderr, /REVIEW NOT RUN for react-best-practices, impeccable:/);
+    const stepOnly = runWithResults(report, [step1(step1Output), delivered, ...step2], opts);
+    assert.equal(stepOnly.status, 0, stepOnly.stderr);
+    const unresolvable = runWithResults(report, [step1('[master deadbee] step 1'), delivered, ...step2], opts);
+    assert.equal(unresolvable.status, 2);
+    assert.match(unresolvable.stderr, /REVIEW NOT RUN for react-best-practices, impeccable:/);
   });
 
   await t.test('at Stop, the skip lines of a sent REPORT count as lens verdicts', () => {
@@ -531,6 +695,48 @@ test('done-claim gate', async (t) => {
     const unreported = runWithResults('Committed as abc1234.', runs.filter((r) => !r.sent));
     assert.equal(unreported.status, 2);
     assert.match(unreported.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
+  });
+
+  await t.test('at Stop, a delivered REPORT closes the window and a blocked one keeps it', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
+    const base = [{ handback: handBack('implementer') }, { command: 'git commit -m x', output: '' }];
+    const opts = { lint: false, editedFile: null };
+    const blocked = runWithResults('Committed as abc1234.', [...base, { sent: report, isError: true, output: 'PreToolUse:SendMessage hook error: REVIEW NOT RUN' }], opts);
+    assert.equal(blocked.status, 2);
+    assert.match(blocked.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
+    const delivered = runWithResults('Committed as abc1234.', [...base, { sent: report, output: 'Message sent to planner-1' }], opts);
+    assert.equal(delivered.status, 0, delivered.stderr);
+  });
+
+  await t.test('a REPORT answering a STOP is checked for its raw output alone', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const stopEnvelope = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[STOP demo] Stop after this step and report.\n</cross-session-message>';
+    const stopMsg = { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${stopEnvelope}` } };
+    const stopAttachment = { type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', isMeta: true, prompt: stopEnvelope } };
+    const redCheck = { command: 'pnpm verify', isError: true, output: 'Exit code 1\nℹ fail 1' };
+    const opts = { send: true, lint: false, editedFile: null };
+    const build = [{ handback: handBack('implementer') }, redCheck];
+    const unstopped = runWithResults(report, build, opts);
+    assert.equal(unstopped.status, 2);
+    assert.match(unstopped.stderr, /DONE-CLAIM OVER A FAILED RUN/);
+    const stopped = runWithResults(report, [...build, { record: stopMsg }], opts);
+    assert.equal(stopped.status, 0, stopped.stderr);
+    assert.equal(runWithResults(report, [...build, { record: stopAttachment }], opts).status, 0);
+    const noRawOutput = runWithResults(`[REPORT demo step 1] Stopped mid-step.\n${LENS_SKIPS}`, [...build, { record: stopMsg }], opts);
+    assert.equal(noRawOutput.status, 2);
+    assert.match(noRawOutput.stderr, /REPORT WITHOUT RAW OUTPUT/);
+  });
+
+  await t.test('a compaction summary is not a typed prompt, so it keeps the lens dispatches', () => {
+    const compaction = { type: 'user', isCompactSummary: true, message: { content: 'This session is being continued from a previous conversation.' } };
+    const built = (between) => [{ blocks: LENS_AGENTS }, between, { handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }];
+    const opts = { lint: false, editedFile: null };
+    const typed = runWithResults('Done: step built.', built({ prompt: 'next' }), opts);
+    assert.equal(typed.status, 2);
+    assert.match(typed.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
+    const compacted = runWithResults('Done: step built.', built({ record: compaction }), opts);
+    assert.doesNotMatch(compacted.stderr, /REVIEW NOT RUN/);
+    assert.equal(compacted.status, 0, compacted.stderr);
   });
 
   await t.test('an empty payload or an empty SendMessage passes', () => {

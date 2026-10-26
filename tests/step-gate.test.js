@@ -9,9 +9,17 @@ const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const HOOK_PATH = path.join(ROOT, 'hooks', 'step-gate.sh');
-const PLAN_PROMPT = 'Implement step 1.2 only of the approved plan /Users/praveenkumar/.claude/plans/demo.md.';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'step-gate-'));
+const writePlan = (...segments) => {
+  const file = path.join(tmpDir, ...segments);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '# plan\n');
+  return file;
+};
+const PLAN_FILE = writePlan('plans', 'demo.md');
+const GHOST_PLAN = path.join(tmpDir, 'plans', 'ghost.md');
+const PLAN_PROMPT = `Implement step 1.2 only of the approved plan ${PLAN_FILE}.`;
 
 test.after(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -45,7 +53,7 @@ const handBackAttachment = (name = 'implementer') => ({
     origin: { kind: 'peer', from: 'a1b2c3', senderTaskId: 'a1b2c3', name, body: '[Subagent hand-back] Step 1.1 done.', handback: true, handbackReportText: 'Step 1.1 done.' },
   },
 });
-const HANDOFF_ENVELOPE = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[HANDOFF demo step 1] Rules: ~/.claude/peer-sessions.md\nPlan: /Users/praveenkumar/.claude/plans/demo.md\n</cross-session-message>';
+const HANDOFF_ENVELOPE = `<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[HANDOFF demo step 1] Rules: ~/.claude/peer-sessions.md\nPlan: ${PLAN_FILE}\n</cross-session-message>`;
 const handoff = () => ({ type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${HANDOFF_ENVELOPE}` } });
 const handoffAttachment = () => ({ type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', isMeta: true, prompt: HANDOFF_ENVELOPE } });
 const LAUNCHED = toolResult('Async agent launched successfully. agentId: a1b2c3');
@@ -59,14 +67,15 @@ function transcript(entries) {
   return p;
 }
 
-function run(entries, { subagentType = 'implementer', prompt = PLAN_PROMPT, agentId, transcriptPath, hookPath = HOOK_PATH } = {}) {
+function run(entries, { subagentType = 'implementer', prompt = PLAN_PROMPT, agentId, transcriptPath, hookPath = HOOK_PATH, cwd, env } = {}) {
   const payload = {
     session_id: 'step-gate-test',
     agent_id: agentId,
+    cwd,
     transcript_path: transcriptPath ?? transcript(entries),
     tool_input: { subagent_type: subagentType, prompt },
   };
-  const res = spawnSync('bash', [hookPath], { input: JSON.stringify(payload), encoding: 'utf8' });
+  const res = spawnSync('bash', [hookPath], { input: JSON.stringify(payload), encoding: 'utf8', env: { ...process.env, ...env } });
   return { code: res.status, stderr: res.stderr };
 }
 
@@ -247,12 +256,65 @@ test('step gate', async (t) => {
     assertQuiet(run([handoff()], { prompt: `step gate: skip — review: trivial plan\n${PLAN_PROMPT}` }));
   });
 
+  await t.test('a review-skip dispatch counts as the dry run for the rest of the HANDOFF window', () => {
+    const skipDispatch = [dispatch('implementer', `step gate: skip — review: trivial plan\n${PLAN_PROMPT}`, 'tu-skip'), toolResult('launched', false, 'tu-skip')];
+    const stepOne = [...skipDispatch, handBack(), bash('npx tsc --noEmit'), bash('git commit -m x')];
+    assertQuiet(run(stepOne));
+    assertQuiet(run([handoff(), ...stepOne]));
+    const { code, stderr } = run([...stepOne, handoff()]);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch/);
+    const plainFirst = [dispatch('implementer', PLAN_PROMPT, 'tu-plain'), toolResult('launched', false, 'tu-plain'), handBack(), bash('npx tsc --noEmit'), bash('git commit -m x')];
+    assert.equal(run(plainFirst).code, 2);
+  });
+
+  await t.test('a denied implementer review-skip dispatch is no dry run', () => {
+    const denied = [dispatch('implementer', `step gate: skip — review: trivial plan\n${PLAN_PROMPT}`, 'tu-skip'), toolResult('PreToolUse:Agent hook error: denied', true, 'tu-skip')];
+    assert.equal(run([handoff(), ...denied]).code, 2);
+  });
+
+  await t.test('a denied dry run is not laundered by a later hand-back', () => {
+    const deniedDry = [dispatch('dry-runner', PLAN_PROMPT, 'tu-dry2'), toolResult('PreToolUse:Agent hook error: denied', true, 'tu-dry2')];
+    const chunkOne = [handoff(), ...DRY_RUN, dispatch('implementer'), LAUNCHED];
+    const tail = [handBack(), bash('npx tsc --noEmit'), bash('git commit -m x')];
+    const { code, stderr } = run([...chunkOne, handoff(), ...deniedDry, ...tail]);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch/);
+    const okDry = [dispatch('dry-runner', PLAN_PROMPT, 'tu-dry2'), toolResult('Async agent launched successfully. agentId: d2', false, 'tu-dry2')];
+    assertQuiet(run([...chunkOne, handoff(), ...okDry, ...tail]));
+  });
+
+  await t.test('a review skip does not lift the check and commit gate; a step skip does not lift the dry-run gate', () => {
+    const afterHandBack = run(STEP_DONE, { prompt: `step gate: skip — review: plan reviewed in another session\n${PLAN_PROMPT}` });
+    assert.equal(afterHandBack.code, 2);
+    assert.match(afterHandBack.stderr, /handed back with no check or commit from this thread since/);
+    const noDryRun = run([handoff()], { prompt: `step gate: skip — step: question answered\n${PLAN_PROMPT}` });
+    assert.equal(noDryRun.code, 2);
+    assert.match(noDryRun.stderr, /No dry-runner dispatch on this plan since the HANDOFF/);
+  });
+
+  await t.test('a dry-runner dispatch whose prompt names no plan path is no dry run', () => {
+    const noPlan = [dispatch('dry-runner', 'Run the verify lines of the approved plan.', 'tu-dry'), toolResult('Async agent launched successfully. agentId: d1', false, 'tu-dry')];
+    assert.equal(run([handoff(), ...noPlan]).code, 2);
+    assertQuiet(run([handoff(), ...DRY_RUN]));
+  });
+
   await t.test('a second HANDOFF needs its own dry run', () => {
     const chunkOne = [handoff(), ...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"')];
     const { code, stderr } = run([...chunkOne, handoff()]);
     assert.equal(code, 2);
     assert.match(stderr, /No dry-runner dispatch/);
     assertQuiet(run([...chunkOne, handoff(), ...DRY_RUN]));
+  });
+
+  await t.test('a HANDOFF starts a new build, so an earlier plan dispatch no longer latches the dry-run gate', () => {
+    const named = { prompt: `Implement step 1 of ${PLAN_FILE}.` };
+    const { code, stderr } = run([handoff()], named);
+    assert.equal(code, 2);
+    assert.match(stderr, /No dry-runner dispatch on this plan since the HANDOFF/);
+    const earlier = [dispatch('implementer', PLAN_PROMPT, 'tu-first'), toolResult('launched', false, 'tu-first')];
+    assertQuiet(run([...earlier, handoff()], { prompt: 'Fix the typo in a.ts.' }));
+    assert.equal(run([...earlier, handoff()], named).code, 2);
   });
 
   await t.test('a HANDOFF does not clear an unchecked hand-back', () => {
@@ -295,6 +357,36 @@ test('step gate', async (t) => {
     const { code, stderr } = run(STEP_DONE, { prompt: 'Repo: /x … step 1.2' });
     assert.equal(code, 2);
     assert.match(stderr, /handed back with no check or commit from this thread since/);
+  });
+
+  await t.test('an implementer prompt quoting a plans-dir path that does not exist latches nothing; an existing plan file does', () => {
+    const followUp = { prompt: 'Fix the typo in a.ts.' };
+    const quotedGhost = [...DRY_RUN, dispatch('implementer', `Mirror the fixture at ${GHOST_PLAN}.`), LAUNCHED, handBack()];
+    assertQuiet(run(quotedGhost, followUp));
+    assertQuiet(run([], { prompt: `Mirror the fixture at ${GHOST_PLAN}.` }));
+    const namedPlan = [...DRY_RUN, dispatch('implementer', `Implement step 1 of ${PLAN_FILE}.`), LAUNCHED, handBack()];
+    const { code, stderr } = run(namedPlan, followUp);
+    assert.equal(code, 2);
+    assert.match(stderr, /handed back with no check or commit from this thread since/);
+  });
+
+  await t.test('a relative plans-dir path latches when it exists under the hook input cwd', () => {
+    const workDir = path.join(tmpDir, 'work');
+    writePlan('work', 'docs', 'plans', 'rel.md');
+    const relative = [...DRY_RUN, dispatch('implementer', 'Implement step 1 of docs/plans/rel.md.'), LAUNCHED, handBack()];
+    const followUp = { prompt: 'Fix the typo in a.ts.' };
+    const { code, stderr } = run(relative, { ...followUp, cwd: workDir });
+    assert.equal(code, 2);
+    assert.match(stderr, /handed back with no check or commit from this thread since/);
+    assertQuiet(run(relative, { ...followUp, cwd: tmpDir }));
+  });
+
+  await t.test('a leading ~ in a plans-dir path expands to HOME', () => {
+    const home = path.join(tmpDir, 'home');
+    writePlan('home', 'plans', 'tilde.md');
+    const tilde = [...DRY_RUN, dispatch('implementer', 'Implement step 1 of ~/plans/tilde.md.'), LAUNCHED, handBack()];
+    assert.equal(run(tilde, { prompt: 'Fix the typo in a.ts.', env: { HOME: home } }).code, 2);
+    assertQuiet(run(tilde, { prompt: 'Fix the typo in a.ts.', env: { HOME: tmpDir } }));
   });
 
   await t.test('silent for a subagent', () => {

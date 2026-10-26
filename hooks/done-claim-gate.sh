@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stop hook, and PreToolUse SendMessage on a `[REPORT` send (window = since the previous sent REPORT, not the typed prompt, so a typed "granted" cannot empty it).
 # Claim = first line of the final reply (or the REPORT) only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
-# One-shot: stop_hook_active passes the retry unchecked, so the block message must carry the exact verdict format.
+# One-shot on Stop: stop_hook_active passes the retry unchecked, so the block message must carry the exact verdict format; a blocked REPORT re-blocks until it changes.
 # Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. A `Pass: <verb>` line in the reply is checked on every turn.
 
 INPUT=$(cat)
@@ -9,9 +9,13 @@ python3 - "$INPUT" <<'PY'
 import json,sys,re,subprocess,os
 inp=json.loads(sys.argv[1])
 report=inp.get('tool_name')=='SendMessage'
+# The header is the first line minus markdown and quote marks, so `**[REPORT d step 1]**` and `[Report …]` are gated; a NOTE that quotes a header later in its text is not.
+def is_report(m):
+    first=next((l for l in m.split('\n') if l.strip()),'')
+    return bool(re.match(r'\[\s*REPORT\b',first.lstrip('*_>#` \t'),re.I))
 if report:
     final=inp.get('tool_input',{}).get('message')
-    if not (isinstance(final,str) and final.lstrip().startswith('[REPORT')): sys.exit(0)
+    if not (isinstance(final,str) and is_report(final)): sys.exit(0)
 elif inp.get('stop_hook_active'): sys.exit(0)
 path=inp.get('transcript_path')
 if not path: sys.exit(0)
@@ -26,11 +30,14 @@ def lens_ran(b):
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset():
-    global texts,cmds,cmd_ids,results,edits,ran,tools,handbacks,verifier_calls,nudged,built
-    texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False
+    global texts,cmds,cmd_ids,results,edits,ran,tools,handbacks,verifier_calls,nudged,built,hb_at,stopped
+    texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; hb_at=0; stopped=False
+stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
-harness_plan=re.compile(r'(?:'+re.escape(harness)+r'|~/\.claude/)plans/[^/\s]+\.md')
-reset(); report_ids=set(); harness_build=False
+reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
+commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
+commit_line=re.compile(r'^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]',re.M)
+# Twin of the implementer hand-back selects (user and attachment) in hooks/step-gate.sh EVENTS.
 for line in open(path):
     try: r=json.loads(line)
     except: continue
@@ -39,20 +46,23 @@ for line in open(path):
         c=r.get('message',{}).get('content')
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
-        if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta'): reset()
-        # Twin of hooks/step-gate.sh:26-27.
-        if r.get('origin',{}).get('handback') and r['origin'].get('name')=='implementer': built=True
+        if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta') and not r.get('isCompactSummary'): reset(); base=None
+        if isinstance(c,str) and stop_msg.search(c): stopped=True
+        if r.get('origin',{}).get('handback') and r['origin'].get('name')=='implementer': built=True; hb_at=len(cmds)
         if isinstance(c,str) and '<agent-message from=' in c: handbacks.append(c)
         if not isinstance(c,str):
             for b in c or []:
-                if isinstance(b,dict) and b.get('type')=='tool_result': results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
+                if isinstance(b,dict) and b.get('type')=='tool_result':
+                    results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
+                    if b.get('tool_use_id') in commit_ids and not b.get('is_error') and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]
         # A blocked REPORT lands as an errored result and keeps the window, so an unchanged resend blocks again; a pending send has no result yet.
-        if report and not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('tool_use_id') in report_ids and not b.get('is_error') for b in c or []): reset()
+        if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('tool_use_id') in report_ids and not b.get('is_error') for b in c or []): reset(); base=last_sha
         # A PreToolUse block lands as an errored tool_result, not a hook_blocking_error attachment.
         if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'about to write source' in str(b.get('content','')) for b in c or []): nudged=True
     elif t=='attachment':
         origin=r.get('attachment',{}).get('origin',{})
-        if origin.get('handback') and origin.get('name')=='implementer': built=True
+        if stop_msg.search(r.get('attachment',{}).get('prompt') or ''): stopped=True
+        if origin.get('handback') and origin.get('name')=='implementer': built=True; hb_at=len(cmds)
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
             if not isinstance(b,dict): continue
@@ -60,15 +70,16 @@ for line in open(path):
             if b.get('type')!='tool_use': continue
             message=b.get('input',{}).get('message')
             # A REPORT's lens and skip lines satisfy the Stop arm after the send.
-            if b.get('name')=='SendMessage' and isinstance(message,str) and message.lstrip().startswith('[REPORT'):
+            if b.get('name')=='SendMessage' and isinstance(message,str) and is_report(message):
                 report_ids.add(b.get('id'))
                 if not report: texts.append(message)
-            if b.get('name')=='Bash': cmds.append(b.get('input',{}).get('command','')); cmd_ids.append(b.get('id'))
+            if b.get('name')=='Bash':
+                cmds.append(b.get('input',{}).get('command','')); cmd_ids.append(b.get('id'))
+                if commit_cmd.search(cmds[-1]): commit_ids.add(b.get('id'))
             elif b.get('name') in ('Write','Edit','NotebookEdit'): edits.append(b.get('input',{}).get('file_path',''))
             else:
                 ran.add(lens_ran(b)); tools.append((b.get('name',''),b.get('id')))
                 if lens_ran(b)=='browser-verifier': verifier_calls.append(b.get('id'))
-                if lens_ran(b)=='implementer' and harness_plan.search(b.get('input',{}).get('prompt','')): harness_build=True
 if not report:
     final=inp.get('last_assistant_message')
     if not isinstance(final,str): final=texts[-1] if texts else ''
@@ -94,12 +105,14 @@ inplace_write=re.compile(r'sed -i|write_text')
 def writes_code(c): return any(code.search(t) for t in redirect_target.findall(c)) or bool(inplace_write.search(c) and code.search(c))
 if report and '/scratchpad/' not in final:
     problems.append("REPORT WITHOUT RAW OUTPUT: a REPORT names the scratchpad file holding the last 20 lines of each check (peer-sessions.md); run the checks in this thread and cite it.")
-if not (built or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)):
+# A REPORT answering a STOP says where the builder stopped, so only its raw-output path is required.
+if (report and stopped) or not (built or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)):
     if problems:
         print('\n'.join(problems),file=sys.stderr)
         sys.exit(2)
     sys.exit(0)
-all_lines=[l for l in '\n'.join(texts).split('\n') if l.strip()]
+# A REPORT's lens lines come from the message being sent: chat text earlier in the window is not what the planner reads.
+all_lines=[l for l in '\n'.join([final] if report else texts).split('\n') if l.strip()]
 verdicts={m.group(1) for l in all_lines if (m:=verdict.match(l))}
 skipped={m.group(1) for l in all_lines if (m:=verdict.match(l)) and m.group(2)}
 lines=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
@@ -108,7 +121,7 @@ last=lines[-1] if lines else ''
 claim=None if first.rstrip().endswith('?') else re.search(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
 claim_word=claim.group(0) if claim else 'REPORT' if report else None
 commit_ask=re.search(r'\bcommit(?!ted)',last,re.I) and re.search(r'\?|\bsay\b|approv|go ahead|want me',last,re.I)
-committed=any(re.search(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b',c) for c in cmds)
+committed=any(commit_cmd.search(c) for c in cmds)
 why='claims done' if claim_word else 'asks to commit' if commit_ask else 'ran git commit'
 # Command position only: a bare word match passes on `grep eslint package.json` or `git log --grep verify`.
 # Each token must parse one way (a flag value is never `run`/`exec`; `--f` splits one way), or backtracking outlives the Stop timeout and the gate fails open.
@@ -127,29 +140,48 @@ browser_run=any(n.startswith(('mcp__chrome-devtools__','mcp__playwright__')) and
 # A pipe into grep/tail exits 0 over a red suite, so the runner's own fail markers count as much as the exit code.
 fail_marker=re.compile(r'ℹ fail [1-9]|^# fail [1-9]|^not ok \d|^\s*(?:×\s*)?FAIL\s|\b[1-9]\d* failed\b',re.M)
 def failed(res): return bool(res) and ((res[0] and res[1].startswith('Exit code')) or bool(fail_marker.search(res[1])))
-evidence_ids=[i for i,c in zip(cmd_ids,cmds) if evidence.search(c) or (report and static_check.search(c))]
+# Runtime and static runs stay two lists: the last of either failing fails the claim, so a green lint cannot hide a red test.
+# A REPORT counts the commands after the last implementer hand-back; checks that ran before the build say nothing about it.
+fresh=list(zip(cmd_ids,cmds))[hb_at if report else 0:]
+runtime_ids=[i for i,c in fresh if evidence.search(c)]
+static_ids=[i for i,c in fresh if report and static_check.search(c)]
+evidence_ids=runtime_ids+static_ids
 report_tail='; for a REPORT, the lens lines go in the message itself' if report else ''
 no_evidence_close="run the step's → verify lines in this thread and cite their output" if report else 'or reword the first line as a status, not a claim'
 no_check='no check ran since the last REPORT' if report else 'no test or runtime command ran this turn — static-clean (lint + tsc) is not done'
 failed_run_close='; a REPORT cannot be reworded' if report else ', or reword the first line as a status that names what is still red'
 if claim_word and not browser_run and not evidence_ids:
     problems.append("DONE-CLAIM WITHOUT EVIDENCE: the first line claims "+repr(claim_word)+" but "+no_check+". Exercise the change (tests, Playwright, curl, browser) and report the output, "+no_evidence_close+report_tail+".")
-elif claim_word and evidence_ids and failed(results.get(evidence_ids[-1])):
+elif claim_word and any(failed(results.get(ids[-1])) for ids in (runtime_ids,static_ids) if ids):
     problems.append("DONE-CLAIM OVER A FAILED RUN: the first line claims "+repr(claim_word)+" but the last test or runtime command this turn failed (non-zero exit or a runner fail marker in its output). Fix the failures and rerun until green"+failed_run_close+report_tail+".")
 web=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte)\b')
 cwd=inp.get('cwd') or ''
-def in_harness(cwd): return cwd==harness.rstrip('/') or cwd.startswith(harness) or harness_build
-if (claim_word or commit_ask or committed) and ((built and not in_harness(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in cmds):
+def has_lint_script(d):
+    try: return any(re.search(r'lint|typecheck|type-check|tsc',k) for k in json.load(open(os.path.join(d,'package.json'))).get('scripts',{}))
+    except (OSError,ValueError): return False
+# A built window has no edit paths, so the repo decides: lint is required only where its package.json defines a lint or type-check script.
+def repo_lints(cwd):
+    if not (cwd and os.path.isdir(cwd)): return False
+    if has_lint_script(cwd): return True
+    try: top=subprocess.run(['git','rev-parse','--show-toplevel'],cwd=cwd,capture_output=True,text=True,timeout=3).stdout.strip()
+    except subprocess.TimeoutExpired: return False
+    return bool(top) and has_lint_script(top)
+# A REPORT reads the same post-hand-back slice as its evidence: a lint from before the last build says nothing about it.
+lint_cmds=[c for _,c in fresh] if report else cmds
+if (claim_word or commit_ask or committed) and ((built and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim_word or commit_ask or committed:
     verb,lenses='review','reuse-analyzer,placement-analyzer'
     if cwd and os.path.isdir(cwd):
         # Under the 10s Stop-hook timeout in settings.json; a killed hook blocks nothing.
-        try: joins=subprocess.run(['bash',os.path.expanduser('~/.claude/hooks/review-classify.sh')],input=json.dumps(inp),cwd=cwd,capture_output=True,text=True,timeout=6).stdout
+        try: joins=subprocess.run(['bash',os.path.expanduser('~/.claude/hooks/review-classify.sh')],input=json.dumps(dict(inp,review_base=base) if base else inp),cwd=cwd,capture_output=True,text=True,timeout=6).stdout
         except subprocess.TimeoutExpired: joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
-    missing=[l for l in lenses.split(',') if l not in ran and l not in (skipped if built else verdicts)]
+    def lens_done(l):
+        if report and built: return l in skipped or (l in ran and l in verdicts)
+        return l in ran or l in (skipped if built else verdicts)
+    missing=[l for l in lenses.split(',') if not lens_done(l)]
     hand_pass='; in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if built else ''
     if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md){hand_pass}{report_tail}.")
 if problems:

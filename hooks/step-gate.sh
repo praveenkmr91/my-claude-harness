@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Agent PreToolUse hook, enforcing arm of ~/.claude/plan-mode.md "The build carries the gates"; main thread only, subagents skipped.
-#   Blocks an implementer dispatch in a plan build (this or an earlier implementer prompt names a plan file) until this thread, since the last implementer hand-back,
-#   ran a check (lint, type check, tests, or a checker dispatch) and a commit, or the dispatch prompt opens with `step gate: skip — <check|commit|step|review>: <why>`.
-#   No hand-back yet → free once a `dry-runner` dispatch on a plan sits after the last HANDOFF (or anywhere, with no HANDOFF); a dispatch still running and a denied dispatch never gate the next.
+#   Blocks an implementer dispatch in a plan build (this or an earlier implementer prompt since the last HANDOFF names an existing plan file) until this thread, since the last implementer hand-back,
+#   ran a check (lint, type check, tests, or a checker dispatch) and a commit, or the dispatch prompt opens with `step gate: skip — <check|commit|step>: <why>`.
+#   Every plan-build implementer dispatch also needs a non-errored `dry-runner` dispatch on a plan, or a review-skip dispatch (`step gate: skip — review: <why>`), since the last HANDOFF (any time, with no HANDOFF); a dispatch still running and a denied dispatch never gate the next.
 #   A check or commit counts only when its tool_result is not an error; nothing downstream re-checks a red run, so this hook does.
 IN=$(cat)
 
@@ -20,10 +20,11 @@ COMMIT='(^|[;&|(\n]\s*)((command|time|env(\s+\w+=\S*)*|if|then|!)\s+)?(\w+=\S*\s
 NOOP='--(version|help|dry-run)\b'
 SKIP='^\s*step gate: skip[[:space:]]*(—|–|-)+[[:space:]]*(check|commit|step|review):[[:space:]]*[^[:space:]<]'
 PLAN='/plans/[^/\s]+\.md'
+PLAN_PATH='[^\s"'\''`]*/plans/[^/\s"'\''`]+\.md'
 HANDOFF='<cross-session-message[^>]*>\s*\[HANDOFF '
 
 # Parsed, not grepped: tool_result text, hand-back bodies and harness sessions quote `git commit` and `tsc`.
-EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg noop "$NOOP" --arg plan "$PLAN" --arg handoff "$HANDOFF" 'include "turns"; fromjson? |
+EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg noop "$NOOP" --arg plan "$PLAN" --arg planpath "$PLAN_PATH" --arg handoff "$HANDOFF" --arg skip "$SKIP" 'include "turns"; fromjson? |
   (select(.type? == "user" and .origin.handback? == true and .origin.name? == "implementer") | "H"),
   (select(.type? == "attachment" and .attachment.origin.handback? == true and .attachment.origin.name? == "implementer") | "H"),
   (select(.type? == "user") | .message.content | strings | select(test($handoff)) | "O"),
@@ -31,8 +32,9 @@ EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "
   (select(.type? == "user") | .message.content[]? | select(.type? == "tool_result" and .is_error? == true) | "E \(.tool_use_id)"),
   (select(.type? == "assistant") | .message.content[]? | select(.type? == "tool_use") |
     if .name == "Agent" then (select(.input.subagent_type? == "checker") | "C"),
-      (select(.input.subagent_type? == "implementer" and (.input.prompt? // "" | test($plan))) | "P"),
-      (select(.input.subagent_type? == "dry-runner" and (.input.prompt? // "" | test($plan))) | "R \(.id)")
+      (select(.input.subagent_type? == "implementer") | .input.prompt? // "" | match($planpath; "g") | "P " + .string),
+      (select(.input.subagent_type? == "dry-runner" and (.input.prompt? // "" | test($plan))) | "R \(.id)"),
+      (select(.input.subagent_type? == "implementer" and (.input.prompt? // "" | split("\n") | map(select(test("\\S"))) | first // "" | [match($skip).captures[1].string] | any(. == "review"))) | "R \(.id)")
     elif .name == "Bash" then .id as $id | .input.command? // "" | gsub($quoted; .q[:1] + (.q[1:-1] | gsub("."; "_")) + .q[-1:])
       | select(test($noop) | not) | (select(test($check)) | "C \($id)"), (select(test($commit)) | "K \($id)")
     else empty end)' 2>/dev/null)
@@ -40,12 +42,30 @@ JQ_RC=$?
 case $JQ_RC in 2|3) printf 'step-gate: jq failed (rc %s), gate not enforced\n' "$JQ_RC" >&2; exit 0 ;; esac
 
 # The skip goes in the dispatch prompt: reply text from the same turn reaches the transcript only after PreToolUse has run.
-PROMPT_EVENTS=$(jq -r --arg plan "$PLAN" --arg skip "$SKIP" '.tool_input.prompt // "" | (select(test($plan)) | "P"), (split("\n") | map(select(test("\\S"))) | first // "" | match($skip) | "S " + .captures[1].string)' <<<"$IN")
+PROMPT_EVENTS=$(jq -r --arg planpath "$PLAN_PATH" --arg skip "$SKIP" '.tool_input.prompt // "" | (match($planpath; "g") | "P " + .string), (split("\n") | map(select(test("\\S"))) | first // "" | match($skip) | "S " + .captures[1].string)' <<<"$IN")
+
+CWD=$(jq -r '.cwd // empty' <<<"$IN")
+
+# A prompt that merely quotes a plans-dir path must not latch the build: `P <path>` becomes a bare `P` only when the file exists.
+keep_existing_plans() {
+  local line plan
+  while IFS= read -r line; do
+    if [[ $line != "P "* ]]; then printf '%s\n' "$line"; continue; fi
+    plan=${line#P }
+    case $plan in
+      \~/*) plan=$HOME/${plan#\~/} ;;
+      /*) ;;
+      *) [ -n "$CWD" ] && plan=$CWD/$plan ;;
+    esac
+    [ -f "$plan" ] && echo P
+  done
+}
 
 MISSING=$(printf '%s\n' "$EVENTS" "$PROMPT_EVENTS" \
+  | keep_existing_plans \
   | awk '$0 == "H" { h = 1; c = sc = sk = ss = 0; delete cs; delete ks; delete es; next }
-    $0 == "O" { delete rs; next }
-    $0 == "P" { p = 1 } $0 == "C" { c = 1 } $1 == "C" && NF == 2 { cs[$2] = 1 } $1 == "K" { ks[$2] = 1 } $1 == "E" { es[$2] = 1 } $1 == "R" { rs[$2] = 1 }
+    $0 == "O" { delete rs; p = 0; next }
+    $0 == "P" { p = 1 } $0 == "C" { c = 1 } $1 == "C" && NF == 2 { cs[$2] = 1 } $1 == "K" { ks[$2] = 1 } $1 == "E" { es[$2] = 1; delete rs[$2] } $1 == "R" { rs[$2] = 1 }
     $0 == "S check" { sc = 1 } $0 == "S commit" { sk = 1 } $0 == "S step" { ss = 1 } $0 == "S review" { sr = 1 }
     END {
       review = sr

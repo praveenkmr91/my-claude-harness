@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hook JSON on stdin, <review-joins> line out. done-claim-gate.sh parses verb= and lenses= — keep those keys.
+# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb= and lenses= — keep those keys.
 IN=$(cat)
 # Scope is the task, not the tree — code is often committed before the review.
 TRANSCRIPT=$(jq -r '.transcript_path // empty' <<<"$IN")
@@ -12,6 +12,7 @@ fi
 EDITED=$(printf '%s\n%s' "$EDITED" "$(jq -r '.tool_input.file_path // empty' <<<"$IN")")
 # A named PR replaces session scope: a colleague's PR has no edits here and a clean tree.
 P=$(jq -r '.prompt // ""' <<<"$IN")
+BASE=$(jq -r '.review_base // empty' <<<"$IN"); REF=HEAD
 # Stated forms only: a bare level word also reads "high-risk", "low priority", "--max-findings".
 EFFORT=$(grep -oiE '\beffort[ =:]+(low|medium|x?high|max)\b|\b(low|medium|x?high|max)[ -]effort\b|\b(review|battery|harden|trim|audit|verify) (low|medium|x?high|max)([[:space:].,;:!?]|$)' <<<"$P" \
   | grep -oiE '(low|medium|x?high|max)' | head -1 | tr '[:upper:]' '[:lower:]')
@@ -28,13 +29,15 @@ if [ -n "$PR_DIFF" ]; then
 else
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || no_scope
   TOP=$(git rev-parse --show-toplevel)
+  # Steps amend into one commit, so --since cannot isolate a step, and the step window outranks session edits.
+  if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then REF=$BASE; SINCE=""; EDITED=""; fi
   # The dirty tree often carries another task's in-flight work; it is scope only when this session edited nothing here.
   SCOPED=$(printf '%s\n' "$EDITED" | sed -n "s#^$TOP/##p" | sort -u)
   if [ -n "$SCOPED" ]; then
     FILES=$SCOPED
   else
     COMMITTED=""; [ -n "$SINCE" ] && COMMITTED=$(git log --name-only --pretty=format: --since="$SINCE" 2>/dev/null)
-    FILES=$( { printf '%s\n' "$COMMITTED"; git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sed '/^$/d' | sort -u)
+    FILES=$( { printf '%s\n' "$COMMITTED"; git diff --name-only "$REF" 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } | sed '/^$/d' | sort -u)
   fi
 fi
 # Pathspecs for the git reads below. An empty pathspec means the whole tree, so a scoped run with no
@@ -61,8 +64,8 @@ if [ -n "$PR_DIFF" ]; then
   ADDED=$(grep -E '^\+' <<<"$PR_DIFF" | grep -vcE '^\+\+\+ (b/|/dev/null)')
   NEWFILES=$(grep -c '^new file mode' <<<"$PR_DIFF")
 else
-  ADDED=$( { [ -n "$SINCE" ] && git log --numstat --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff --numstat HEAD -- "${SCOPE[@]}" 2>/dev/null; git ls-files --others --exclude-standard -z -- "${SCOPE[@]}" 2>/dev/null | xargs -0 wc -l 2>/dev/null | awk '$2!="total"{print $1"\t0\t"$2}'; } | awk '$1~/^[0-9]+$/{a+=$1} END{print a+0}')
-  NEWFILES=$( { [ -n "$SINCE" ] && git log --diff-filter=A --name-only --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git ls-files --others --exclude-standard -- "${SCOPE[@]}" 2>/dev/null; } | sed '/^$/d' | sort -u | wc -l | tr -d ' ')
+  ADDED=$( { [ -n "$SINCE" ] && git log --numstat --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff --numstat "$REF" -- "${SCOPE[@]}" 2>/dev/null; git ls-files --others --exclude-standard -z -- "${SCOPE[@]}" 2>/dev/null | xargs -0 wc -l 2>/dev/null | awk '$2!="total"{print $1"\t0\t"$2}'; } | awk '$1~/^[0-9]+$/{a+=$1} END{print a+0}')
+  NEWFILES=$( { [ -n "$SINCE" ] && git log --diff-filter=A --name-only --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff --diff-filter=A --name-only "$REF" -- "${SCOPE[@]}" 2>/dev/null; git ls-files --others --exclude-standard -- "${SCOPE[@]}" 2>/dev/null; } | sed '/^$/d' | sort -u | wc -l | tr -d ' ')
 fi
 VERB=review; LENSES=reuse-analyzer,placement-analyzer
 [ "$REACT" = yes ] && LENSES="$LENSES,react-best-practices"
@@ -79,7 +82,7 @@ elif [ "$NO_CODE" = yes ]; then
   ADDED_TEXT=""
 else
   [ ${#SCOPE_CODE[@]} -gt 0 ] && CODE=("${SCOPE_CODE[@]}")
-  ADDED_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${CODE[@]}" 2>/dev/null; git diff HEAD -- "${CODE[@]}" 2>/dev/null; } | grep -E '^\+' | grep -vE '^\+\+\+' | cut -c2-; git ls-files --others --exclude-standard -z -- "${CODE[@]}" 2>/dev/null | xargs -0 cat 2>/dev/null)
+  ADDED_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${CODE[@]}" 2>/dev/null; git diff "$REF" -- "${CODE[@]}" 2>/dev/null; } | grep -E '^\+' | grep -vE '^\+\+\+' | cut -c2-; git ls-files --others --exclude-standard -z -- "${CODE[@]}" 2>/dev/null | xargs -0 cat 2>/dev/null)
 fi
 has() { grep -qE "$1" <<<"$ADDED_TEXT"; }
 has 'catch[[:space:]]*[({]|\.catch\(|\?\?|\|\|[[:space:]]*(null|undefined|\[\]|\{\}|0|false)([^[:alnum:]_]|$)' && lens silent-failure-hunter
@@ -94,7 +97,7 @@ fi
 if [ -n "$PR_DIFF" ]; then
   DIFF_TEXT=$PR_DIFF; UNTRACKED=""
 else
-  DIFF_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff HEAD -- "${SCOPE[@]}" 2>/dev/null; } )
+  DIFF_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${SCOPE[@]}" 2>/dev/null; git diff "$REF" -- "${SCOPE[@]}" 2>/dev/null; } )
   UNTRACKED=$(git ls-files --others --exclude-standard -- "${SCOPE[@]}" 2>/dev/null)
 fi
 if [ -z "$UNTRACKED" ] && grep -E '^[+-]' <<<"$DIFF_TEXT" | grep -vE '^(\+\+\+|---) ' | awk '
