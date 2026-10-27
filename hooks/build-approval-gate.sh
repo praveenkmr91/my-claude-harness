@@ -2,7 +2,7 @@
 # Write|Edit and Agent PreToolUse hook: after a plans/*.md edit, blocks source writes and `implementer` dispatches until a typed prompt says implement / build / start.
 # Once a plan is approved in this transcript, later edits to that same plan (as-built notes, review-fix folds) stay approved; a different plan needs its own word.
 # Plans match by file name, so an approval follows a plan moved from ~/.claude/plans/ to the repo's docs/plans/.
-# Hook files under ~/.claude/hooks/ are never gated, so a fix to this gate cannot deadlock behind it.
+# Hook and test files under ~/.claude/ are never gated, so a fix to this gate cannot deadlock behind it; nor is the session scratchpad, whose probes never ship.
 # Approval = a clause that opens with the word ("implement", "yes, build it", "review plan and implement"), outside a question, with no not / don't / why / later / yet / until in that clause.
 # A typed handoff to another session approves too: a named one ("follow session-A's instructions", "take instructions from project-x-2b"; the name is an identifier-shaped
 # token, hyphen, underscore or digit, never a Jira key) or a pointed one ("follow other session instructions", "take instructions from peer session"), since with two sessions
@@ -18,7 +18,7 @@ T=$(jq -r '.transcript_path // empty' <<<"$IN")
 [ -r "$T" ] || exit 0
 
 if [ -n "$F" ]; then
-  grep -q '/\.claude/hooks/' <<<"$F" && exit 0
+  grep -qE '/\.claude/(hooks|tests)/|^(/private)?/tmp/claude-[0-9]+/[^/]+/[^/]+/scratchpad/' <<<"$F" && exit 0
   grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py|csv)$|(^|/)package\.json$' <<<"$F" || exit 0
 else
   [ "$(jq -r '.tool_input.subagent_type // empty' <<<"$IN")" = implementer ] || exit 0

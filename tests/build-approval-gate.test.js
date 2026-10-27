@@ -223,9 +223,18 @@ test('build approval gate', async (t) => {
     assert.equal(write('/repo/src/a.tsx', renamed).code, 2);
   });
 
-  await t.test('hook files are never gated, other harness scripts are', () => {
+  await t.test('hook and test files are never gated, other harness scripts are', () => {
     assert.equal(write('/Users/me/.claude/hooks/build-approval-gate.sh', unapproved).code, 0);
+    assert.equal(write('/Users/me/.claude/tests/build-approval-gate.test.js', unapproved).code, 0);
     assert.equal(write('/Users/me/.claude/automation/weekly-audit.sh', unapproved).code, 2);
+  });
+
+  await t.test('the session scratchpad is never gated, a repo scratchpad folder is', () => {
+    const scratch = '/private/tmp/claude-501/-Users-p-repo/f503-session/scratchpad/probe.mjs';
+    assert.equal(write(scratch, unapproved).code, 0);
+    assert.equal(write(scratch.replace('/private', ''), unapproved).code, 0);
+    assert.equal(write('/Users/p/repo/scratchpad/probe.mjs', unapproved).code, 2);
+    assert.equal(write('/tmp/claude-501/scratchpad/probe.mjs', unapproved).code, 2);
   });
 
   await t.test('a plan research file is not a plan edit', () => {

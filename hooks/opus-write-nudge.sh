@@ -50,6 +50,8 @@ case "$MODEL" in *fable*)
   printf 'This thread runs Fable, and Fable never writes code (~/.claude/subagent-tiers.md). Dispatch `implementer` with the exact edit (file, old text, new text, acceptance check); docs, config and plan files stay direct. No skip line lifts this and a retry stays blocked; a typed prompt carrying `[tier-override: <why>]` lifts it for that turn.\n' >&2
   exit 2 ;;
 esac
+# Session scratchpad: throwaway probes never ship, so tier routing buys nothing (bash-write-guard.js passes temp-dir output too).
+grep -qE '^(/private)?/tmp/claude-[0-9]+/[^/]+/[^/]+/scratchpad/' <<<"$F" && exit 0
 overridden && exit 0
 [ -n "$(dispatched)" ] && exit 0
 skipped && exit 0

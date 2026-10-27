@@ -152,6 +152,21 @@ test('opus write nudge', async (t) => {
     assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.opusNoDispatch, file: '/tmp/settings.json' }).code, 0);
   });
 
+  await t.test('opus session writes a session scratchpad probe directly', () => {
+    const scratch = '/private/tmp/claude-501/-Users-p-repo/f503-session/scratchpad/probe.mjs';
+    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.opusNoDispatch, file: scratch }).code, 0);
+    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.opusNoDispatch, file: scratch.replace('/private', '') }).code, 0);
+  });
+
+  await t.test('a scratchpad folder outside the session temp dir still blocks', () => {
+    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.opusNoDispatch, file: '/Users/p/repo/scratchpad/probe.mjs' }).code, 2);
+    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.opusNoDispatch, file: '/tmp/claude-501/scratchpad/probe.mjs' }).code, 2);
+  });
+
+  await t.test('fable session stays blocked in the scratchpad', () => {
+    assert.equal(run({ sessionId: newSession(), tier: 'fable', file: '/private/tmp/claude-501/-Users-p-repo/f503-session/scratchpad/probe.mjs' }).code, 2);
+  });
+
   await t.test('a doc write is not gated — the next source write still blocks', () => {
     const sessionId = newSession();
     assert.equal(run({ sessionId, transcriptPath: transcripts.opusNoDispatch, file: '/tmp/notes.md' }).code, 0);
