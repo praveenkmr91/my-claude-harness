@@ -4,12 +4,12 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
-### Write and step gates fire on scratchpad work
+### Step gate counts non-plan implementer dispatches
 
-- **Evidence:** session `0c6dfb54`: `opus-write-nudge.sh` blocked a throwaway transcript-scan script in the session scratchpad twice, forcing an `implementer` dispatch. `step-gate.sh` then counted that dispatch as a plan step, so dispatching plan step 1 took three tries (a check plus a `step gate: skip` line).
-- **Why parked:** one session's evidence; the fix touches two hooks outside the review-by-size change.
-- **Fix:** `opus-write-nudge.sh` exempts paths under the session scratchpad; `step-gate.sh` counts only `implementer` dispatches whose prompt names a `plans/` file.
-- **Worth it when:** a census shows scratchpad writes or non-plan `implementer` dispatches in more than a handful of sessions a month.
+- **Evidence:** session `0c6dfb54`: an `implementer` dispatched to write a scratchpad scan script counted as a plan step, so dispatching plan step 1 took three tries (a check plus a `step gate: skip` line). The scratchpad write that forced the dispatch is exempt since `6e760f5`.
+- **Why parked:** one session's evidence, and with that exemption scratchpad scripts no longer need an `implementer`.
+- **Fix:** `step-gate.sh` counts only `implementer` dispatches whose prompt names a `plans/` file.
+- **Worth it when:** a census shows non-plan `implementer` dispatches tripping the gate in more than a handful of sessions a month.
 
 ### Direct-lookup nudge on a known target
 
@@ -61,12 +61,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Evidence:** `implementer` hand-backs have said "I made the edits with a Python script, because the session was in auto mode and told me to use Bash for changes." `bash-write-guard.js` denies heredocs and inline interpreters, but a script file run from the scratchpad has no visible target, so comment-check, plan-lint and the Fable write-block never fired.
 - **Why parked:** the agent definition now forbids it (`agents/implementer.md`), which fixes the common case; a mechanical guard needs a target-blind signal. `external-io` and `general-purpose` carry the same Bash-plus-Write shape.
 - **Fix:** a PostToolUse Bash hook for workers that diffs the tree before and after an interpreter invocation (`python|node|bun … <file>`) and flags source files that changed, pointing at the Edit tool; or deny running a script that lives under the scratchpad against a repo cwd.
-
-### Fable write-block catches scratchpad probe files
-
-- **Evidence:** writing a throwaway `vitest.nosetup.config.ts` into the session scratchpad was denied as a source write; an `implementer` had to create a measurement probe.
-- **Why parked:** the extension gate in `opus-write-nudge.sh` has no notion of where a file lives; exempting a path needs the scratchpad root, which only the session knows (`CLAUDE_SCRATCHPAD`-style env or the `/private/tmp/claude-<uid>/` prefix).
-- **Fix:** in the `pre` arm, exit 0 when `file_path` starts with the session scratchpad prefix; a probe is not shipped code.
 
 ### Stop-gate block chains run long
 
