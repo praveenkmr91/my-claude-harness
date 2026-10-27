@@ -179,10 +179,11 @@ if claim_word or commit_ask or committed:
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
     def lens_done(l):
-        if report and built: return l in skipped or (l in ran and l in verdicts)
-        return l in ran or l in (skipped if built else verdicts)
+        if built and claim and not report: return l in ran or l in skipped
+        if report and built: return l in verdicts
+        return l in ran or l in verdicts
     missing=[l for l in lenses.split(',') if not lens_done(l)]
-    hand_pass='; in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if built else ''
+    hand_pass='; on a done-claim in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if built and claim and not report else ''
     if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md){hand_pass}{report_tail}.")
 if problems:
     print('\n'.join(problems),file=sys.stderr)

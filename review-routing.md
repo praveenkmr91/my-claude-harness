@@ -12,7 +12,7 @@
 | **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer agent + security-review skill | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
-| **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor if irreversible (lint + tsc is the every-change gate in CLAUDE.md, not a verify member). On a build implementer wrote, each lens runs as an agent or skill or is declined with a reason; a hand-written findings line does not count. | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
+| **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor if irreversible (lint + tsc is the every-change gate in CLAUDE.md, not a verify member). On a done-claim for a build implementer wrote, each lens runs as an agent or skill or is declined with a reason; a hand-written findings line does not count. | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
 
 Hook joins (scope = files this session edited; dirty tree only when none):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
@@ -28,7 +28,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Explore locates code, never judges it.
 
-Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small → + affected specs + lens hand pass. Big (plan-driven or bulk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), trim, harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list, harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.

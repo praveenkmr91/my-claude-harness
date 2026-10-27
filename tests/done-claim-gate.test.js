@@ -457,12 +457,17 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBackAttachment('checker') }), 0);
   });
 
-  await t.test('in a plan build a hand-written findings line does not pass a lens; a skip with a reason does', () => {
+  await t.test('in a plan build a done-claim with hand-written findings lines stays blocked; a skip with a reason passes', () => {
     const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js' };
     const { status, stderr } = runFull('Done: step 1 landed.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', built);
     assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*a hand pass does not count/);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*on a done-claim in a plan build a hand pass does not count/);
     assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}`, built), 0);
+  });
+
+  await t.test('in a plan build a REPORT passes on hand-pass lens lines', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings\n${RAW_OUTPUT}`;
+    assert.equal(run(report, { editedFile: null, handback: handBack('implementer'), send: true, lint: false, bashCommand: 'node --test tests/*.test.js' }), 0);
   });
 
   await t.test('a hand-back needs lint and type check only where the repo defines a lint or type-check script', () => {
@@ -683,7 +688,7 @@ test('done-claim gate', async (t) => {
     assert.match(unresolvable.stderr, /REVIEW NOT RUN for react-best-practices, impeccable:/);
   });
 
-  await t.test('at Stop, the skip lines of a sent REPORT count as lens verdicts', () => {
+  await t.test('at Stop, a built step commit passes on a hand-pass lens line, with or without a sent REPORT, and blocks with no lens line', () => {
     const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
     const runs = [
       { handback: handBack('implementer') },
@@ -693,18 +698,20 @@ test('done-claim gate', async (t) => {
     ];
     assert.equal(runWithResults('Committed as abc1234.', runs).status, 0);
     const unreported = runWithResults('Committed as abc1234.', runs.filter((r) => !r.sent));
-    assert.equal(unreported.status, 2);
-    assert.match(unreported.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
+    assert.equal(unreported.status, 0, unreported.stderr);
+    const noLensLine = runFull('Committed as abc1234.', { editedFile: null, lint: false, handback: handBack('implementer'), bashCommand: 'git commit -m x' });
+    assert.equal(noLensLine.status, 2);
+    assert.match(noLensLine.stderr, /REVIEW NOT RUN for reuse-analyzer/);
   });
 
   await t.test('at Stop, a delivered REPORT closes the window and a blocked one keeps it', () => {
     const report = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
     const base = [{ handback: handBack('implementer') }, { command: 'git commit -m x', output: '' }];
     const opts = { lint: false, editedFile: null };
-    const blocked = runWithResults('Committed as abc1234.', [...base, { sent: report, isError: true, output: 'PreToolUse:SendMessage hook error: REVIEW NOT RUN' }], opts);
+    const blocked = runWithResults('Done: step 1 committed.', [...base, { sent: report, isError: true, output: 'PreToolUse:SendMessage hook error: REVIEW NOT RUN' }], opts);
     assert.equal(blocked.status, 2);
     assert.match(blocked.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
-    const delivered = runWithResults('Committed as abc1234.', [...base, { sent: report, output: 'Message sent to planner-1' }], opts);
+    const delivered = runWithResults('Done: step 1 committed.', [...base, { sent: report, output: 'Message sent to planner-1' }], opts);
     assert.equal(delivered.status, 0, delivered.stderr);
   });
 
