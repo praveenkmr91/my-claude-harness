@@ -18,6 +18,14 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** count distinct files looked up rather than calls, so repeated reads of one known target do not trip it.
 - **Worth it when:** a census shows `direct: continue` answering most of the nudge's firings.
 
+### Plan churn: decisions settle after steps are written
+
+- **Evidence:** census of 169 plan-file edits in three sessions (`plans/peer-plan-review.research.md`). Reviews (cold read, dry run, advisor) start 47%, but the rework came from decisions: in `0bdc42f6` the N/A-key decision flipped three times (Decided list edited 13 times), and one 8,155-char rewrite was then reworked by 16 edits, ending in a step retitled "Reverted".
+- **Why parked:** one session carries the flips; review-by-size (`7c68d52`, `77cffd4`) shipped the same day, and a second change now would confound its measurement.
+- **Fix:** before writing Steps, the planner puts each Decided candidate to Praveen as one short decision round; Steps are drafted only once Decided is settled. `persona-core.md` "plans lead with the minimal version" covers the over-built rewrite but nothing checks it.
+- **Alternative, drafted:** `plans/peer-plan-review.md` routes planning-time dry runs and cold reads to the bound builder via a REVIEW message. It saves planner context and the duplicate HANDOFF design review, not plan edits.
+- **Worth it when:** a re-run of the plan-churn scan over the next 2–3 plan builds still shows a Decided entry edited 5+ times or a step reverted.
+
 ### Same-file edit counter (thrash nudge)
 
 - **Evidence:** 30-day census of main-thread Edit/Write on source files (2026-10-22, `edit-census-filtered.py` in that session's scratchpad): 88 of 1,428 (turn, file) pairs carry 5+ edits, across 52 of 166 editing sessions; 14 pairs carry 10+. The top rows are new hook scripts and spec files being built up, not visible thrash.
