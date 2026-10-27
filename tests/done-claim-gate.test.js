@@ -461,8 +461,28 @@ test('done-claim gate', async (t) => {
     const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js' };
     const { status, stderr } = runFull('Done: step 1 landed.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', built);
     assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*on a done-claim in a plan build a hand pass does not count/);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*on a done-claim or shipping commit in a plan build a hand pass does not count/);
     assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}`, built), 0);
+  });
+
+  await t.test('in a plan build a first line opening "Step N" is a step claim and passes on hand-pass lens lines', () => {
+    const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js' };
+    const handPass = 'reuse-analyzer: 0 findings\nplacement-analyzer: 0 findings';
+    assert.equal(run(`Step 1 passes verify: 3,057 tests green.\n${handPass}`, built), 0);
+    assert.equal(run(`**Step 3** is built and passes the full verify.\n${handPass}`, built), 0);
+    const { status, stderr } = runFull('Step 2 passes verify.', built);
+    assert.equal(status, 2);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer/);
+    assert.doesNotMatch(stderr, /hand pass does not count/);
+  });
+
+  await t.test('a shipping commit that deletes the repo plan file needs each lens dispatched or skipped, with no hand-back', () => {
+    const ship = { editedFile: null, lint: false, bashCommand: 'git rm docs/plans/demo.md && git commit -m ship' };
+    const { status, stderr } = runFull('Shipped.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', ship);
+    assert.equal(status, 2);
+    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*shipping commit in a plan build a hand pass does not count/);
+    assert.equal(run('Shipped.', { ...ship, reviews: LENS_AGENTS }), 0);
+    assert.equal(run('Shipped.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', { ...ship, bashCommand: 'git rm docs/notes.md && git commit -m x' }), 0);
   });
 
   await t.test('in a plan build a REPORT passes on hand-pass lens lines', () => {

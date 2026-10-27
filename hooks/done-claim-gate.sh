@@ -27,7 +27,7 @@ def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
-# shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check; upgrade = scope to edits since the last commit.
+# shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check, and a plan-file `rm` in one turn with its commit in the next escapes the shipping check; upgrade = scope to edits since the last commit.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset():
     global texts,cmds,cmd_ids,results,edits,ran,tools,handbacks,verifier_calls,nudged,built,hb_at,stopped
@@ -36,6 +36,8 @@ stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
+# The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
+plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
 commit_line=re.compile(r'^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]',re.M)
 # Twin of the implementer hand-back selects (user and attachment) in hooks/step-gate.sh EVENTS.
 for line in open(path):
@@ -106,7 +108,9 @@ def writes_code(c): return any(code.search(t) for t in redirect_target.findall(c
 if report and '/scratchpad/' not in final:
     problems.append("REPORT WITHOUT RAW OUTPUT: a REPORT names the scratchpad file holding the last 20 lines of each check (peer-sessions.md); run the checks in this thread and cite it.")
 # A REPORT answering a STOP says where the builder stopped, so only its raw-output path is required.
-if (report and stopped) or not (built or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)):
+committed=any(commit_cmd.search(c) for c in cmds)
+ship=committed and any(plan_rm.search(c) for c in cmds)
+if (report and stopped) or not (built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)):
     if problems:
         print('\n'.join(problems),file=sys.stderr)
         sys.exit(2)
@@ -121,7 +125,6 @@ last=lines[-1] if lines else ''
 claim=None if first.rstrip().endswith('?') else re.search(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
 claim_word=claim.group(0) if claim else 'REPORT' if report else None
 commit_ask=re.search(r'\bcommit(?!ted)',last,re.I) and re.search(r'\?|\bsay\b|approv|go ahead|want me',last,re.I)
-committed=any(commit_cmd.search(c) for c in cmds)
 why='claims done' if claim_word else 'asks to commit' if commit_ask else 'ran git commit'
 # Command position only: a bare word match passes on `grep eslint package.json` or `git log --grep verify`.
 # Each token must parse one way (a flag value is never `run`/`exec`; `--f` splits one way), or backtracking outlives the Stop timeout and the gate fails open.
@@ -178,12 +181,15 @@ if claim_word or commit_ask or committed:
         except subprocess.TimeoutExpired: joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
+    # A first line opening "Step N" claims one plan step, whose done bar is a hand pass (review-routing.md); the whole build's claim and the shipping commit need real lenses.
+    step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
+    strict=(built and claim and not step_claim and not report) or ship
     def lens_done(l):
-        if built and claim and not report: return l in ran or l in skipped
+        if strict: return l in ran or l in skipped
         if report and built: return l in verdicts
         return l in ran or l in verdicts
     missing=[l for l in lenses.split(',') if not lens_done(l)]
-    hand_pass='; on a done-claim in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if built and claim and not report else ''
+    hand_pass='; on a done-claim or shipping commit in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if strict else ''
     if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md){hand_pass}{report_tail}.")
 if problems:
     print('\n'.join(problems),file=sys.stderr)
