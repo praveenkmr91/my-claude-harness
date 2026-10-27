@@ -28,7 +28,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Explore locates code, never judges it.
 
-Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list, harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list (never /simplify: the battery covers it), harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
