@@ -4,6 +4,27 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Write and step gates fire on scratchpad work
+
+- **Evidence:** session `0c6dfb54`: `opus-write-nudge.sh` blocked a throwaway transcript-scan script in the session scratchpad twice, forcing an `implementer` dispatch. `step-gate.sh` then counted that dispatch as a plan step, so dispatching plan step 1 took three tries (a check plus a `step gate: skip` line).
+- **Why parked:** one session's evidence; the fix touches two hooks outside the review-by-size change.
+- **Fix:** `opus-write-nudge.sh` exempts paths under the session scratchpad; `step-gate.sh` counts only `implementer` dispatches whose prompt names a `plans/` file.
+- **Worth it when:** a census shows scratchpad writes or non-plan `implementer` dispatches in more than a handful of sessions a month.
+
+### Direct-lookup nudge on a known target
+
+- **Evidence:** session `0c6dfb54`: `inline-call-nudge.sh` fired twice mid-investigation while every lookup read one known hook and its test file; each answer was `direct: continue`.
+- **Why parked:** one session; the nudge's ≤3-call rule is deliberate.
+- **Fix:** count distinct files looked up rather than calls, so repeated reads of one known target do not trip it.
+- **Worth it when:** a census shows `direct: continue` answering most of the nudge's firings.
+
+### Single-session plan build: "Step N done" reads as a done-claim
+
+- **Evidence:** `done-claim-gate.sh:121` matches `done` on a reply's first line, so a single-session build's step reply opening "Step 3 done" still needs each lens dispatched (`:182`). Derived from the code; no transcript count yet.
+- **Why parked:** the measured bloat came from two-session builds, which end steps on a REPORT and already get the hand-pass path.
+- **Fix:** in a built window, a first line naming a plan step (`step \d+`) is a step claim, not a done-claim.
+- **Worth it when:** a census of single-session plan builds shows per-step lens agents.
+
 ### Same-file edit counter (thrash nudge)
 
 - **Evidence:** 30-day census of main-thread Edit/Write on source files (2026-10-22, `edit-census-filtered.py` in that session's scratchpad): 88 of 1,428 (turn, file) pairs carry 5+ edits, across 52 of 166 editing sessions; 14 pairs carry 10+. The top rows are new hook scripts and spec files being built up, not visible thrash.
