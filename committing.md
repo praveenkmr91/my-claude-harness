@@ -25,7 +25,7 @@
 - **"Undo the commit of X" takes only X out of the commit.** Every other file stays committed and X's edits stay in the working tree (`git reset HEAD~1 -- X`, then amend). File content changes only when the ask names a revert ("revert", "drop the change", "restore the file"). "But not the edits" scopes what stays, never adds an action.
 
 ## Push and PR need a yes
-- **`git push` is hook-denied** except to the harness backup remote (`PUSH_WHITELIST` in `hooks/block-dangerous-git.sh`). There Praveen's "push" runs as plain `git -C ~/.claude push origin master`; a `cd … &&`, subshell or wrapper word at command position re-denies it, and that denial is my command shape, not Praveen's rule. `gh pr create` hook-asked.
+- **`git push` is hook-denied** except to the harness backup remote (`PUSH_WHITELIST` in `hooks/block-dangerous-git.sh`). There Praveen's "push" runs as plain `git -C ~/.claude push origin master`; a denial of another shape is my command shape, not Praveen's rule, so the plain form is retried. `gh pr create` hook-asked.
 - **Never offer a push as the next step.** Where a hook says to push, push in that turn; a summary never lists a push as pending. Status, "what now" and done replies included: local-only state is reported as a fact ("develop is 3 commits ahead of origin"), never as an action for Praveen, a push order or a warning about what happens before a push.
 
 ## Worktrees
