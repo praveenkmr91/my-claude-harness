@@ -535,6 +535,72 @@ test('check P8', async (t) => {
   });
 });
 
+test('check P9', async (t) => {
+  const P9_HINT = 'keep the draft chunk to its title, criteria and files; detail it once the previous chunk lands';
+  const FIRST_CHUNK = [
+    '## Criteria',
+    '',
+    '- A1: first',
+    '- A2: second',
+    '',
+    '## Chunk 1: wire it',
+    '',
+    '1. **Wire it.** Serves A1.',
+    '→ verify: run it',
+    '',
+  ];
+  const withDraft = (...body) => [...FIRST_CHUNK, '## Chunk 2 (draft)', '', ...body].join('\n');
+
+  await t.test('fires on a verify line in a draft chunk', () => {
+    assert.deepEqual(check(withDraft('Serves A2.', '→ verify: run it')).findings, ['14 P9 → verify: run it']);
+  });
+
+  await t.test('fires on a bulleted verify line in a draft chunk', () => {
+    assert.deepEqual(check(withDraft('Serves A2.', '- → verify: run it')).findings, ['14 P9 - → verify: run it']);
+  });
+
+  await t.test('fires on a backticked line cite in a draft chunk', () => {
+    assert.deepEqual(check(withDraft('Serves A2 in `src/app.ts:42`.')).findings, ['13 P9 Serves A2 in `src/app.ts:42`.']);
+  });
+
+  await t.test('fires on a bare line cite in a draft chunk', () => {
+    assert.deepEqual(check(withDraft('Serves A2 in app.ts:42.')).findings, ['13 P9 Serves A2 in app.ts:42.']);
+  });
+
+  await t.test('stays quiet for a draft chunk that names its criteria and files', () => {
+    const text = withDraft('Serves A2.', '', 'Touches `hooks/plan-lint.js` and `tests/plan-lint.test.js`.');
+    assert.deepEqual(check(text).findings, []);
+  });
+
+  await t.test('stays quiet for a host and port in backticks in a draft chunk', () => {
+    assert.deepEqual(check(withDraft('Serves A2 against `localhost:3002`.')).findings, []);
+  });
+
+  await t.test('stays quiet for a detailed chunk without the draft label', () => {
+    const text = [
+      ...FIRST_CHUNK,
+      '## Chunk 2: detail it',
+      '',
+      '2. **Detail it.** Serves A2 in `src/app.ts:42` and app.ts:42.',
+      '- → verify: run it',
+      '→ verify: run it',
+    ].join('\n');
+    assert.deepEqual(check(text).findings, []);
+  });
+
+  await t.test('counts a criterion named only in a draft chunk as covered for P7', () => {
+    assert.deepEqual(check(withDraft('Serves A2.')).findings, []);
+    assert.deepEqual(check(withDraft('Touches the hook.')).findings, ['4 P7 criterion A2 has no step']);
+  });
+
+  await t.test('prints the P9 hint and not the rephrase hint', () => {
+    const res = check(withDraft('Serves A2.', '→ verify: run it'));
+    assert.equal(res.code, 1);
+    assert.equal(res.stderr.trimEnd().split('\n').at(-1), P9_HINT);
+    assert.doesNotMatch(res.stderr, /rephrase/);
+  });
+});
+
 test('check CLI', async (t) => {
   await t.test('exits 0 silently on a clean file', () => {
     const res = check('Add the key.\n');

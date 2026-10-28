@@ -9,6 +9,7 @@ const REPHRASE =
   'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
 const NAME_CRITERIA = 'name each criterion in the step that delivers it';
 const WRITE_PARSEABLE = 'write steps as `1. **`, `1.1 **`, `### 1.` or `## Step 1`, and criteria as `- A1` bullets';
+const DRAFT_TITLE_ONLY = 'keep the draft chunk to its title, criteria and files; detail it once the previous chunk lands';
 
 const FIRST_PERSON = /\bI\b/;
 const JOURNAL_MARKER =
@@ -33,6 +34,10 @@ const HEADING_STEP = /^## (?:Step \d+\b|S\d+(?=\s*(?:[:.—–-]|$)))/;
 const STEPS_HEADING = /^## Steps\b/i;
 const PLAIN_STEP = /^\d+\. /;
 const TOP_LEVEL_BULLET = /^- /;
+const DRAFT_HEADING = /^## .*\(draft\)/i;
+const BACKTICKED_SPAN = /`([^`\n]*)`/g;
+const BARE_CITE = /[\w-]+\.[A-Za-z][A-Za-z0-9]*:\d+/;
+const TICKED_CITE = /(?:\.[A-Za-z][A-Za-z0-9]*|^):\d+/;
 
 const CRITERIA_HEADING = /^## (Criteria|Acceptance criteria|Acceptance)\s*$/i;
 const CRITERION = /^- (?:\*\*|`)?([A-Z])(\d+)\b/;
@@ -219,6 +224,28 @@ function longOpenBullets(lines) {
   return findings;
 }
 
+function hasLineCite(line) {
+  if (BARE_CITE.test(line)) return true;
+  return [...line.matchAll(BACKTICKED_SPAN)].some((span) => TICKED_CITE.test(span[1]));
+}
+
+function detailedDraftLines(lines) {
+  const findings = [];
+
+  lines.forEach((heading, start) => {
+    if (!DRAFT_HEADING.test(heading)) return;
+
+    const end = sectionEnd(lines, start);
+    for (let index = start + 1; index < end; index++) {
+      if (lines[index].includes('→ verify:') || hasLineCite(lines[index])) {
+        findings.push({ line: index + 1, rule: 'P9', text: lines[index].trim() });
+      }
+    }
+  });
+
+  return findings;
+}
+
 function namedCriteria(line) {
   const single = [...line.matchAll(CRITERION_NAME)].map((match) => `${match[1]}${Number(match[2])}`);
   const ranged = [...line.matchAll(CRITERION_RANGE)].flatMap((match) => {
@@ -298,6 +325,7 @@ function lintPlan(text, { fragment }) {
       ...longOpenBullets(outsideFences),
       ...criteriaWithoutStep(outsideFences),
       ...unparsedShapes(outsideFences),
+      ...detailedDraftLines(outsideFences),
       ...researchHeadings(outsideFences, masked),
       ...datedLines(outsideFences, masked),
     );
@@ -312,7 +340,8 @@ function hintLines(rules) {
   const hints = [];
   if (rules.includes('P7')) hints.push(NAME_CRITERIA);
   if (rules.includes('P8')) hints.push(WRITE_PARSEABLE);
-  if (rules.some((rule) => rule !== 'P7' && rule !== 'P8')) hints.push(REPHRASE);
+  if (rules.includes('P9')) hints.push(DRAFT_TITLE_ONLY);
+  if (rules.some((rule) => rule !== 'P7' && rule !== 'P8' && rule !== 'P9')) hints.push(REPHRASE);
   return hints;
 }
 
