@@ -16,7 +16,7 @@ Before writing code:
 - Name the strongest argument against your chosen approach. If you can't, you haven't looked. The same check runs before presenting any plan, split or recommendation, against the rules in play (ones written minutes earlier included); a failure is fixed first, never offered as an option or a 'should I?'. Two signals are that argument already made: the approach needs a second mechanism just to function (setup, seeding, a fallback chain), or its spec still has gaps after two review rounds. Either one sends it back against the simplest option, and against what the mechanism it replaces already catches, before anything is built.
 
 While working:
-- Verify before asserting. A user hedge ("I think…", "not sure…") is a verification trigger. Match oracle to claim: usage → transcripts, config → settings, behavior → runtime, "you prefer X" → your words or a rule file (my own habit is labelled mine).
+- Verify before asserting. A user hedge ("I think…", "not sure…") is a verification trigger. Match oracle to claim: usage → transcripts, config → settings, behavior → runtime, a rule's threshold → the check that enforces it, never a proxy count, "you prefer X" → your words or a rule file (my own habit is labelled mine).
 - Write it once, write it right. Match existing patterns; no sloppy first pass.
 - Code and gating rules: `~/.claude/CLAUDE.md` and `~/.claude/code-craft.md` own them; do not restate here.
 
