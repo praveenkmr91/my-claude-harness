@@ -4,12 +4,12 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
-### Step gate counts non-plan implementer dispatches
+### Step gate reads one skip line per dispatch
 
-- **Evidence:** session `0c6dfb54`: an `implementer` dispatched to write a scratchpad scan script counted as a plan step, so dispatching plan step 1 took three tries (a check plus a `step gate: skip` line). The scratchpad write that forced the dispatch is exempt since `6e760f5`.
-- **Why parked:** one session's evidence, and with that exemption scratchpad scripts no longer need an `implementer`.
-- **Fix:** `step-gate.sh` counts only `implementer` dispatches whose prompt names a `plans/` file.
-- **Worth it when:** a census shows non-plan `implementer` dispatches tripping the gate in more than a handful of sessions a month.
+- **Evidence:** session `0c6dfb54`: a dispatch missing both a check and a commit could not pass, since `step-gate.sh` reads only the prompt's first non-blank line, so `check:` and `commit:` skips cannot both be given. Its non-plan latch came from a shipped harness plan left on disk, fixed by deleting shipped harness plans (`plan-mode.md` "The plan is the file").
+- **Why parked:** with the latch fixed, a dispatch needing both skips is rare.
+- **Fix:** read every leading skip line, not just the first.
+- **Worth it when:** a dispatch needs both skips again.
 
 ### Direct-lookup nudge on a known target
 
