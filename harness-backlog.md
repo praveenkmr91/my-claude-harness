@@ -25,6 +25,35 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** before writing Steps, the planner puts each Decided candidate to Praveen as one short decision round; Steps are drafted only once Decided is settled. `persona-core.md` "plans lead with the minimal version" covers the over-built rewrite but nothing checks it.
 - **Alternative, drafted:** `plans/peer-plan-review.md` routes planning-time dry runs and cold reads to the bound builder via a REVIEW message. It saves planner context and the duplicate HANDOFF design review, not plan edits.
 - **Worth it when:** a re-run of the plan-churn scan over the next 2–3 plan builds still shows a Decided entry edited 5+ times or a step reverted.
+- **Measure first:** plan-lint P9 (`1621f66`) and review-by-size both landed before that scan; add no further planning or review-tier rule until it runs, so the scan can tell which change moved the numbers.
+
+### High-risk path flag keys on the file name, not the change
+
+- **Evidence:** the query stale-time build (`0a05507a`): a 140-line chunk turned Big because `use-order-portfolio.ts` matched `review-classify.sh`'s risk pattern on "order", for a 3-line `staleTime` removal; 19 review agents ran at chunk end.
+- **Why parked:** one sample, and "order portfolio" may be a real money path, so the flag may have been right and only the hunk trivial. A policy change for every HIGH-risk path was tried and reverted for that reason.
+- **Fix:** score risk on the hunks, not the path: a risky path whose diff only deletes or renames options does not raise the range to Big.
+- **Worth it when:** a second build turns Big on a risky path whose hunks are trivial.
+
+### Planner names the done bar before the diff exists
+
+- **Evidence:** the same build: the planner's HANDOFF asked for "the full Big done bar" at step 1, and its GO repeated it, so the builder ran Big whatever the chunk diff earned (`peer-sessions.md` "the done bar its chunk diff earns").
+- **Why parked:** one sample; that planner's context still held the pre-review-by-size rule text, so it may be stale context, not a rule gap.
+- **Fix:** a HANDOFF or GO never names a tier; the builder classifies the chunk diff with `review-classify.sh` at chunk end.
+- **Worth it when:** a planner started after review-by-size shipped still names a tier up front.
+
+### Draft-chunk lint is dodged by dropping the label
+
+- **Evidence:** P9 in `plan-lint.js` reads only `## … (draft)` sections, so a later chunk written without the label is never checked.
+- **Why parked:** lint cannot tell which chunk is next; no dodge seen yet.
+- **Fix:** in a plan with 2+ `## Chunk` headings, flag line cites in every chunk after the first one that carries none of its own commits; needs a commit-aware check.
+- **Worth it when:** a plan census shows unlabelled later chunks carrying line cites.
+
+### Build gate needs the typed word, not a yes to the proposal
+
+- **Evidence:** `build-approval-gate.sh` refused an `implementer` dispatch after Praveen answered "yes" to "Should I build it?"; only a typed `build` passed. `harness.md` says opt-in gates key on the proposal plus his yes, never on him naming the action.
+- **Why parked:** one occurrence, and the gate guards source writes, so loosening it needs a reserved proposal phrase the hook can key on.
+- **Fix:** accept a yes to a reply whose last line asks "Should I build it?", the way `enforce-subagent-model.sh` keys on `Fable review?`.
+- **Worth it when:** it blocks an approved build again.
 
 ### Same-file edit counter (thrash nudge)
 
