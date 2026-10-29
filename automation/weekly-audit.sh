@@ -45,5 +45,7 @@ if [ ${#failed[@]} -gt 0 ]; then
 else
   msg="Reports ready for ${reports[*]}; they land in docs/audits/audit.md at the next session there."
 fi
+census="$HOME/.claude/state/census/review-by-size/run.js"
+[ -f "$census" ] && line=$(node "$census" 2>/dev/null) && [ -n "$line" ] && msg="$msg · $line"
 osascript -e "display notification \"$msg\" with title \"Weekly audit\""
 [ ${#failed[@]} -eq 0 ]
