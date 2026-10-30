@@ -77,13 +77,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 - **Evidence:** `opus-write-nudge.sh` blocks the first Write|Edit of a source file per turn from an Opus-or-above main thread, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so the same thread can still edit source from Bash. The products-widget builder landed step 1 through `git rm -r` and `sed -i` on the main thread with no dispatch.
 - **Why parked:** closing it means teaching the Bash guard the session model and the hook's three escapes; needs one rule for both hooks, not a second guard. Measure first: the two-week census after the block (see `state/census/2026-10-22.tar.gz`, `dispatch-census.js`) shows whether writes moved to `sed -i`.
-- **Fix:** in `bash-write-guard.js`, read the live model the same way the hook does and deny `sed -i` / `perl -pi` on source extensions from an Opus-or-above main thread unless that turn carries a dispatch, an open-call skip or a typed override, with the same message.
-
-### Write-block's reply-text skip can never fire
-
-- **Evidence:** `opus-write-nudge.sh:35` looks for `implementer: skip — open call:` in the current turn's assistant text, but a PreToolUse hook runs before that turn's text reaches the transcript (two live runs while building `step-gate.sh`: a same-turn skip line never lifted that gate, and mid-turn prose is often stored as `thinking` blocks the hook never sees). The documented escape is dead; the typed `[tier-override: <why>]` is the only one that works.
-- **Why parked:** the harm is the message, not the block: it offers an escape that fails, and a design-call write today either dispatches or asks for the override. Needs one decision on where an open-call skip should live.
-- **Fix:** carry the skip in the write itself, the way `step-gate.sh` reads it from the dispatch prompt's first line, or keep the typed override as the only escape; either way drop the reply-text clause from the hook, its message and `subagent-tiers.md`.
+- **Fix:** in `bash-write-guard.js`, read the live model the same way the hook does and deny `sed -i` / `perl -pi` on source extensions from an Opus-or-above main thread unless that turn carries a dispatch or a typed override, with the same message.
 
 ### Workers write source through interpreter scripts, unseen by write-time hooks
 

@@ -30,9 +30,6 @@ for (const [name, entries] of Object.entries({
   opusDispatchedThisTurn: [userLine('go'), { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { subagent_type: 'implementer' } }] } }, OPUS_LINE],
   opusDispatchedPriorTurn: [{ type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { subagent_type: 'implementer' } }] } }, userLine('next'), OPUS_LINE],
   sonnetTyped: [userLine('go'), { type: 'assistant', message: { model: 'claude-sonnet-5' } }],
-  skipGeneric: [userLine('go'), { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'implementer: skip — step 1 is small and already in context.' }] } }],
-  skipOpenCall: [userLine('go'), { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'implementer: skip — open call: how a failed upload is tracked' }] } }],
-  skipPriorTurn: [userLine('go'), { type: 'assistant', message: { model: 'claude-opus-5', content: [{ type: 'text', text: 'implementer: skip — open call: how a failed upload is tracked' }] } }, userLine('now do step 2'), OPUS_LINE],
 })) {
   transcripts[name] = path.join(tmpDir, `${name}.jsonl`);
   fs.writeFileSync(transcripts[name], entries.map((e) => JSON.stringify(e)).join('\n'));
@@ -96,7 +93,7 @@ test('opus write nudge', async (t) => {
     const { code, stderr } = run({ sessionId: newSession(), transcriptPath: transcripts.opusNoDispatch, file: '/tmp/a.tsx' });
     assert.equal(code, 2);
     assert.match(stderr, /implementer/);
-    assert.match(stderr, /implementer: skip — open call:/);
+    assert.match(stderr, /Do not retry this write/);
     assert.match(stderr, /tier-override/);
   });
 
@@ -104,18 +101,6 @@ test('opus write nudge', async (t) => {
     const sessionId = newSession();
     assert.equal(run({ sessionId, transcriptPath: transcripts.opusNoDispatch, file: '/tmp/a.tsx' }).code, 2);
     assert.equal(run({ sessionId, transcriptPath: transcripts.opusNoDispatch, file: '/tmp/b.tsx' }).code, 2);
-  });
-
-  await t.test('a skip with a generic reason stays blocked', () => {
-    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.skipGeneric, file: '/tmp/a.tsx' }).code, 2);
-  });
-
-  await t.test('a skip naming an open call passes', () => {
-    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.skipOpenCall, file: '/tmp/a.tsx' }).code, 0);
-  });
-
-  await t.test('a skip from an earlier turn does not carry over', () => {
-    assert.equal(run({ sessionId: newSession(), transcriptPath: transcripts.skipPriorTurn, file: '/tmp/a.tsx' }).code, 2);
   });
 
   await t.test('silent once implementer was dispatched this turn', () => {

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Write|Edit PreToolUse hook, enforcing arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
 #   From a Fable session, blocks every source write outright — Fable never writes code unless the last typed prompt carries [tier-override: <why>].
-#   From Opus, blocks every source write of a turn until implementer was dispatched since the last typed prompt, this turn
-#   states `implementer: skip — open call: <item>`, or the last typed prompt carries [tier-override: <why>].
+#   From Opus, blocks every source write of a turn until implementer was dispatched since the last typed prompt, or the last typed prompt carries [tier-override: <why>].
 #   No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
 IN=$(cat)
 
@@ -27,14 +26,6 @@ dispatched() {
     | grep D | head -1
 }
 
-# Assistant text since the last typed prompt names an open call; a generic reason does not match.
-skipped() {
-  jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? |
-    (typed_text | "U"), (assistant_text | "A " + gsub("\n"; " "))' "$T" 2>/dev/null \
-    | awk '$0 == "U" { buf = ""; next } { buf = buf "\n" $0 } END { print buf }' \
-    | grep -qE 'implementer: skip[[:space:]]*(—|–|-)+[[:space:]]*open call:[[:space:]]*[^[:space:]]'
-}
-
 # Typed prompts only: tool_result blocks, isMeta records, compaction summaries and `<`-prefixed harness wrappers (except pasted blocks) quote override tags too.
 typed_prompts() {
   jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? | typed_text | gsub("\n"; " ")' 2>/dev/null
@@ -47,13 +38,12 @@ overridden() {
 
 case "$MODEL" in *fable*)
   overridden && exit 0
-  printf 'This thread runs Fable, and Fable never writes code (~/.claude/subagent-tiers.md). Dispatch `implementer` with the exact edit (file, old text, new text, acceptance check); docs, config and plan files stay direct. No skip line lifts this and a retry stays blocked; a typed prompt carrying `[tier-override: <why>]` lifts it for that turn.\n' >&2
+  printf 'Do not retry this write: the harness blocks it and the same call gets the same denial. This thread runs Fable, and Fable never writes code; dispatch `implementer` with this exact edit, or ask the user to type `[tier-override: <why>]` (~/.claude/subagent-tiers.md).\n' >&2
   exit 2 ;;
 esac
 # Session scratchpad: throwaway probes never ship, so tier routing buys nothing (bash-write-guard.js passes temp-dir output too).
 grep -qE '^(/private)?/tmp/claude-[0-9]+/[^/]+/[^/]+/scratchpad/' <<<"$F" && exit 0
 overridden && exit 0
 [ -n "$(dispatched)" ] && exit 0
-skipped && exit 0
-printf 'This Opus thread is about to write source (%s) with no `implementer` dispatch this turn. Per ~/.claude/subagent-tiers.md a settled edit goes to `implementer`, one step per dispatch. Dispatch it, state `implementer: skip — open call: <the design call still undecided>`, or carry `[tier-override: <why>]` in the typed prompt. Size, urgency and loaded context are not open calls; a plain retry stays blocked.\n' "$F" >&2
+printf 'Do not retry this write: the harness blocks it and the same call gets the same denial. This Opus thread is about to write source (%s) with no `implementer` dispatch this turn; dispatch `implementer` with this exact edit, or ask the user to type `[tier-override: <why>]`. Size, urgency and loaded context never lift it (~/.claude/subagent-tiers.md).\n' "$F" >&2
 exit 2
