@@ -338,6 +338,18 @@
             "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh committing.md",
             "if": "Bash(git:*)",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md",
+            "if": "Bash(gh:*)",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md",
+            "if": "Bash(curl:*)",
+            "timeout": 5
           }
         ]
       },
@@ -590,7 +602,7 @@
   "effortLevel": "medium",
   "modelSettings": {
     "claude-fable-5-1": {
-      "effortLevel": "medium"
+      "effortLevel": "high"
     },
     "claude-opus-5-5": {
       "effortLevel": "medium"
