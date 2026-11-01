@@ -25,17 +25,10 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | Plugin | Why |
 |---|---|
 | `modern-web-guidance@googlechrome` | ~0 real invocations in 29 days always-on; "MANDATORY execute FIRST" description cost ~1k tok/session. Dependency-ladder rule + context7 cover it. `googlechrome` marketplace kept — re-enable via `/plugin` if a native-platform task shows it'd have helped. |
-| `code-simplifier@claude-plugins-official` | Duplicate of `pr-review-toolkit:code-simplifier`; `trim` verb uses `/simplify`. |
 | `superpowers@superpowers-dev` | Its SessionStart hook injected ~1.4KB regardless of `skillOverrides`; used skills localized (below). |
-| `superpowers@claude-plugins-official` | Duplicate build. |
-| `explanatory-output-style@claude-plugins-official` | Injects via SessionStart regardless of `outputStyle` — fights the peer-engineer persona. |
-| `caveman@caveman` | 1 use ever; third competing persona injection. |
 | `figma@claude-plugins-official` | Read-only Figma use; only `figma-design-to-code` needed (localized below). Connector is separate, heavily used. |
 | `chrome-devtools-mcp@claude-plugins-official` | Browser-stack triplication; user-scope `chrome-devtools` server is the workhorse. Re-enable for its debugging skills (memory-leak, LCP, a11y). |
 | `playwright@claude-plugins-official` | Same triplication. |
-| `atomic-agents@claude-plugins-official` | Python framework, off-stack. |
-| `skill-creator@claude-plugins-official` | Unused; account-side `anthropic-skills:skill-creator` covers it. |
-| `firecrawl@claude-plugins-official` | Unused. |
 | `swift-lsp@claude-plugins-official` | Enable per-repo when a Swift repo is active. Also disabled in ATRAM via `.claude/settings.local.json`. |
 | `kotlin-lsp@claude-plugins-official` | Enable per-repo when a Kotlin repo is active. |
 
@@ -48,6 +41,8 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | warp@claude-code-warp | `/plugin marketplace add warpdotdev/claude-code-warp` |
 | GSD suite (local skills/agents/hooks, not a plugin) | reinstall from upstream |
 | investment-banking@claude-for-financial-services (0 invocations in 3,531 transcripts, 2026-11-01) | `/plugin marketplace add anthropics/financial-services` |
+| caveman@caveman (1 use ever; competing persona injection; purged 2026-11-01) | `/plugin marketplace add JuliusBrussee/caveman` |
+| code-simplifier, superpowers, explanatory-output-style, atomic-agents, skill-creator, firecrawl @claude-plugins-official (duplicates or unused; purged 2026-11-01) | `/plugin install <name>@claude-plugins-official`, then tombstone again if it is only being parked |
 
 A key-deleted-but-still-installed plugin is an untested enablement state — tombstone (`false`) or purge fully, never in between.
 
