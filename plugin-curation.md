@@ -33,7 +33,6 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `figma@claude-plugins-official` | Read-only Figma use; only `figma-design-to-code` needed (localized below). Connector is separate, heavily used. |
 | `chrome-devtools-mcp@claude-plugins-official` | Browser-stack triplication; user-scope `chrome-devtools` server is the workhorse. Re-enable for its debugging skills (memory-leak, LCP, a11y). |
 | `playwright@claude-plugins-official` | Same triplication. |
-| `investment-banking@claude-for-financial-services` | 0 uses, 16 skills. |
 | `atomic-agents@claude-plugins-official` | Python framework, off-stack. |
 | `skill-creator@claude-plugins-official` | Unused; account-side `anthropic-skills:skill-creator` covers it. |
 | `firecrawl@claude-plugins-official` | Unused. |
@@ -48,6 +47,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | ralph-loop | `/plugin` (native `/loop` covers it) |
 | warp@claude-code-warp | `/plugin marketplace add warpdotdev/claude-code-warp` |
 | GSD suite (local skills/agents/hooks, not a plugin) | reinstall from upstream |
+| investment-banking@claude-for-financial-services (0 invocations in 3,531 transcripts, 2026-11-01) | `/plugin marketplace add anthropics/financial-services` |
 
 A key-deleted-but-still-installed plugin is an untested enablement state — tombstone (`false`) or purge fully, never in between.
 
