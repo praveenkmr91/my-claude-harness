@@ -17,7 +17,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `impeccable@impeccable` | Review lens: `/impeccable audit` on styled diffs; detector hook stays. |
 | `security-guidance@claude-plugins-official` | Pattern-only: `env.ENABLE_CODE_SECURITY_REVIEW="0"` disables its Opus Stop/commit review (secret-leak bug `anthropics/claude-code#90010`). Verify after restart: `~/.claude/security/log.txt` gains no `Stop hook:` lines. Revert when #90010 closes. Narrower: `ENABLE_STOP_REVIEW=0` (keeps commit review, same leak surface); kill switch `SECURITY_GUIDANCE_DISABLE=1`. |
 | `commit-commands@claude-plugins-official` | Only `/clean_gone` earns it; `/commit` conflicts with never-commit-without-approval. Revisit if it misfires. |
-| `claude-hud@claude-hud` | Pure `statusLine`, zero context/network cost. Rollback = disable + write a new `statusLine`. Subagent effort comes from upstream `display.showAgentEffort` (0.12.0+, #815), on in `plugins/claude-hud/config.json`. |
+| `claude-hud@claude-hud` | Pure `statusLine`, zero context cost. Rollback = disable + write a new `statusLine`. Subagent effort comes from upstream `display.showAgentEffort` (0.12.0+, #815), on in `plugins/claude-hud/config.json`. |
 | `cc-plugin-you-should-know@builtin` | Added by a Claude Code update. Kept for its "Heads up" risk notices. |
 
 ## Tombstones (`false`, kept installed) — deliberate, do NOT "clean up"
@@ -40,9 +40,9 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | ralph-loop | `/plugin` (native `/loop` covers it) |
 | warp@claude-code-warp | `/plugin marketplace add warpdotdev/claude-code-warp` |
 | GSD suite (local skills/agents/hooks, not a plugin) | reinstall from upstream |
-| investment-banking@claude-for-financial-services (0 invocations in 3,531 transcripts, 2026-11-01) | `/plugin marketplace add anthropics/financial-services` |
-| caveman@caveman (1 use ever; competing persona injection; purged 2026-11-01) | `/plugin marketplace add JuliusBrussee/caveman` |
-| code-simplifier, superpowers, explanatory-output-style, atomic-agents, skill-creator, firecrawl @claude-plugins-official (duplicates or unused; purged 2026-11-01) | `/plugin install <name>@claude-plugins-official`, then tombstone again if it is only being parked |
+| investment-banking@claude-for-financial-services (0 invocations in 3,531 transcripts) | `/plugin marketplace add anthropics/financial-services` |
+| caveman@caveman | `/plugin marketplace add JuliusBrussee/caveman` |
+| code-simplifier, superpowers, explanatory-output-style, atomic-agents, skill-creator, firecrawl @claude-plugins-official | `/plugin install <name>@claude-plugins-official` |
 
 A key-deleted-but-still-installed plugin is an untested enablement state — tombstone (`false`) or purge fully, never in between.
 
@@ -62,6 +62,7 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 ## Mechanics
 - **Drift is machine-guarded:** `hooks/plugin-drift-guard.sh` (SessionStart) diffs `enabledPlugins` against `plugin-curation.expected.json` — silent when clean, banner on drift. Deliberate change → `--accept`, then update the tables here. Snapshot is script-written only; never hand-edit.
 - **Curation decays on plugin updates AND reinstalls** (voltagent pruning reverted on update; figma flipped by reinstall). Oracle for "why did this flip": `installed_plugins.json` timestamps.
+- **Auto-update: on only for `claude-hud` and `impeccable`.** impeccable ships hooks and 4 agents: a misbehaving lens → check its cache version first.
 - **Why tombstones are protected:** this record moved here from ATRAM project memory, where other projects couldn't see it — that caused a near-miss cleanup of deliberate `false` entries.
 - Settings precedence user < project < local: a global `false` is a default, not a lock.
 - Plugin changes need a Claude Code **restart**. Disabling does not evict `~/.claude/plugins/cache/`.
