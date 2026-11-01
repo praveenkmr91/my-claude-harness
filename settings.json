@@ -335,19 +335,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh committing.md",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh committing.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)'",
             "if": "Bash(git:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md '(^|[^[:alnum:]_./-])(gh|curl)([[:space:]]|$)'",
             "if": "Bash(gh:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md",
+            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md '(^|[^[:alnum:]_./-])(gh|curl)([[:space:]]|$)'",
             "if": "Bash(curl:*)",
             "timeout": 5
           }
