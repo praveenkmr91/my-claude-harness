@@ -434,6 +434,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/done-claim-gate.sh', /REPORT WITHOUT RAW OUTPUT/, 'peer-sessions.md', /done-claim-gate\.sh refuses the send/],
     ['hooks/done-claim-gate.sh', /the lens lines go in the message itself/, 'README.md', /refuses a REPORT send/],
     ['hooks/done-claim-gate.sh', /a hand pass does not count/, 'review-routing.md', /hand-written findings line does not count/],
+    ['hooks/done-claim-gate.sh', /IMPECCABLE NOT RUN/, 'review-routing.md', /\/impeccable audit <files>/],
     ['hooks/step-gate.sh', /No dry-runner dispatch/, 'peer-sessions.md', /step-gate\.sh enforces/],
     ['hooks/step-gate.sh', /No dry-runner dispatch/, 'plan-mode.md', /first implementer dispatch until a dry-runner/],
     ['hooks/step-gate.sh', /No dry-runner dispatch/, 'README.md', /first dispatch until its dry run/],

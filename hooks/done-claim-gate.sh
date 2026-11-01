@@ -185,10 +185,14 @@ if claim_word or commit_ask or committed:
     step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
     strict=(built and claim and not step_claim and not report) or ship
     def lens_done(l):
+        if l=='impeccable': return l in ran
         if strict: return l in ran or l in skipped
         if report and built: return l in verdicts
         return l in ran or l in verdicts
     missing=[l for l in lenses.split(',') if not lens_done(l)]
+    if 'impeccable' in missing:
+        missing.remove('impeccable')
+        problems.append("IMPECCABLE NOT RUN: this turn changed styling; run the `impeccable:impeccable` skill with `audit <changed files>` — a hand-written findings or skip line never satisfies it (review-routing.md).")
     hand_pass='; on a done-claim or shipping commit in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if strict else ''
     if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md){hand_pass}{report_tail}.")
 if problems:

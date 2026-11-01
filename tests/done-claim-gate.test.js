@@ -700,12 +700,34 @@ test('done-claim gate', async (t) => {
     const step1 = (output) => ({ command: 'git commit -m "step 1"', output });
     const branchWide = runWithResults(report, [step1(step1Output), ...step2], opts);
     assert.equal(branchWide.status, 2);
-    assert.match(branchWide.stderr, /REVIEW NOT RUN for react-best-practices, impeccable:/);
+    assert.match(branchWide.stderr, /REVIEW NOT RUN for react-best-practices:/);
     const stepOnly = runWithResults(report, [step1(step1Output), delivered, ...step2], opts);
     assert.equal(stepOnly.status, 0, stepOnly.stderr);
     const unresolvable = runWithResults(report, [step1('[master deadbee] step 1'), delivered, ...step2], opts);
     assert.equal(unresolvable.status, 2);
-    assert.match(unresolvable.stderr, /REVIEW NOT RUN for react-best-practices, impeccable:/);
+    assert.match(unresolvable.stderr, /REVIEW NOT RUN for react-best-practices:/);
+  });
+
+  const styledTurn = (runs) => {
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+    spawnSync('git', ['init', '-q'], { cwd: repo, env });
+    fs.mkdirSync(path.join(repo, 'src'));
+    fs.writeFileSync(path.join(repo, 'src/a.tsx'), 'export const A = () => <div className="p-4" />;\n');
+    const reply = 'Done: the card is styled.\nreact-best-practices: 0 findings\nimpeccable: 0 findings';
+    return runWithResults(reply, [{ command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }, ...runs], { editedFile: path.join(repo, 'src/a.tsx'), cwd: repo });
+  };
+
+  await t.test('a styled change blocks on a hand-written impeccable line', () => {
+    const { status, stderr } = styledTurn([]);
+    assert.equal(status, 2);
+    assert.match(stderr, /IMPECCABLE NOT RUN/);
+  });
+
+  await t.test('a styled change passes once the impeccable audit skill ran', () => {
+    const audit = { type: 'tool_use', name: 'Skill', input: { skill: 'impeccable:impeccable', args: 'audit src/a.tsx' } };
+    const { status, stderr } = styledTurn([{ blocks: [audit] }]);
+    assert.doesNotMatch(stderr, /IMPECCABLE NOT RUN/);
+    assert.equal(status, 0, stderr);
   });
 
   await t.test('at Stop, a built step commit passes on a hand-pass lens line, with or without a sent REPORT, and blocks with no lens line', () => {

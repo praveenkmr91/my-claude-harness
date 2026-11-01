@@ -42,6 +42,7 @@ const cases = [
   ['type-design-analyzer', 'export type Foo = { a: string };\ninterface Bar {}', 'const type = 1;'],
   ['comment-analyzer', '// one\n// two\n/** three */\nconst a = 1;', '// one\n// two\nconst a = 1;'],
   ['modern-ts-analyzer', 'var x = 1; if (a.indexOf(b) !== -1) {}', 'const isVar = 1; const avar = 2;'],
+  ['impeccable', 'const c = <div className="p-4 flex">{x}</div>;', 'const c = <div>{x}</div>;'],
 ];
 
 test('review-classify content signals', async (t) => {
@@ -54,6 +55,10 @@ test('review-classify content signals', async (t) => {
 
   await t.test('ignores signal text inside test files', () => {
     assert.ok(!lensesFor('p.catch(() => null);', { file: 'api.test.ts' }).includes('silent-failure-hunter'));
+  });
+
+  await t.test('impeccable joins on a stylesheet change', () => {
+    assert.ok(lensesFor('.a { color: red; }', { file: 'a.css' }).includes('impeccable'));
   });
 
   await t.test('auto-bundles carry only their own members', () => {

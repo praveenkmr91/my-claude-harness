@@ -16,7 +16,7 @@
 
 Hook joins (scope = files this session edited; dirty tree only when none):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
-- Styled files → /impeccable pass, named in the plan line.
+- Styled diff → `/impeccable audit <files>`; hand lines never count.
 - Comment-only scope → comment-analyzer alone.
 - HIGH-risk source path (no specs, mocks, docs) or an ask naming shared state / public API / money-moving mutation → adversarial-reviewer + security-review; with bulk, + code-reviewer.
 - Bulk (≥200 added lines or ≥3 new files) → /delete-list (report, never auto-apply).

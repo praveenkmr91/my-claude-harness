@@ -13,9 +13,8 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `context7@claude-plugins-official` | — |
 | `remember@claude-plugins-official` | — |
 | `pr-review-toolkit@claude-plugins-official` | `review-pr`, `code-simplifier` unrouted; battery/trim supersede. |
-| `frontend-design@claude-plugins-official` | — |
 | `claude-md-management@claude-plugins-official` | — |
-| `impeccable@impeccable` | — |
+| `impeccable@impeccable` | Review lens: `/impeccable audit` on styled diffs; detector hook stays. |
 | `security-guidance@claude-plugins-official` | Pattern-only: `env.ENABLE_CODE_SECURITY_REVIEW="0"` disables its Opus Stop/commit review (secret-leak bug `anthropics/claude-code#90010`). Verify after restart: `~/.claude/security/log.txt` gains no `Stop hook:` lines. Revert when #90010 closes. Narrower: `ENABLE_STOP_REVIEW=0` (keeps commit review, same leak surface); kill switch `SECURITY_GUIDANCE_DISABLE=1`. |
 | `commit-commands@claude-plugins-official` | Only `/clean_gone` earns it; `/commit` conflicts with never-commit-without-approval. Revisit if it misfires. |
 | `claude-hud@claude-hud` | Pure `statusLine`, zero context/network cost. Rollback = disable + write a new `statusLine`. Subagent effort comes from upstream `display.showAgentEffort` (0.12.0+, #815), on in `plugins/claude-hud/config.json`. |
@@ -31,6 +30,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `playwright@claude-plugins-official` | Same triplication. |
 | `swift-lsp@claude-plugins-official` | Enable per-repo when a Swift repo is active. Also disabled in ATRAM via `.claude/settings.local.json`. |
 | `kotlin-lsp@claude-plugins-official` | Enable per-repo when a Kotlin repo is active. |
+| `frontend-design@claude-plugins-official` | 0 Skill calls in 3,695 transcripts; overlaps impeccable's design guidance. Re-enable for Figma-less UI. |
 
 ## Fully purged (settings key, `installed_plugins.json`, cache, and marketplace where it had its own)
 | Plugin | Re-add |

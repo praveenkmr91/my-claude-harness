@@ -51,7 +51,6 @@ if [ -n "$SCOPED" ]; then
 fi
 [ -n "$FILES" ] || no_scope
 REACT=no; grep -qE '\.(tsx|jsx)$|/use-[a-z0-9-]+\.ts$' <<<"$FILES" && REACT=yes
-STYLED=no; grep -qE '\.(tsx|jsx|vue|css|scss|less)$' <<<"$FILES" && STYLED=yes
 # Repo-agnostic on purpose; this runs in every repo. Whole-word match after a camelCase split —
 # bare substrings flag author/, recorder.ts and design tokens, silently upgrading review to harden.
 # Risk reads source paths only: docs, manifests, specs and mocks never carry it, and a tokens/ directory is no credential.
@@ -69,7 +68,6 @@ else
 fi
 VERB=review; LENSES=reuse-analyzer,placement-analyzer
 [ "$REACT" = yes ] && LENSES="$LENSES,react-best-practices"
-[ "$STYLED" = yes ] && LENSES="$LENSES,impeccable"
 [ -n "$RISK" ] && { VERB=harden; LENSES="$LENSES,adversarial-reviewer,security-review"; }
 BULK=no; { [ "$ADDED" -ge 200 ] || [ "$NEWFILES" -ge 3 ]; } && { BULK=yes; LENSES="$LENSES,delete-list"; }
 lens() { case ",$LENSES," in *",$1,"*) ;; *) LENSES="$LENSES,$1";; esac; }
@@ -85,10 +83,12 @@ else
   ADDED_TEXT=$( { [ -n "$SINCE" ] && git log -p --pretty=format: --since="$SINCE" -- "${CODE[@]}" 2>/dev/null; git diff "$REF" -- "${CODE[@]}" 2>/dev/null; } | grep -E '^\+' | grep -vE '^\+\+\+' | cut -c2-; git ls-files --others --exclude-standard -z -- "${CODE[@]}" 2>/dev/null | xargs -0 cat 2>/dev/null)
 fi
 has() { grep -qE "$1" <<<"$ADDED_TEXT"; }
+STYLED=no; { grep -qE '\.(css|scss|less|sass)$' <<<"$FILES" || has 'className=|[[:space:]:]class=|[[:space:]:]style=|@apply|css`|[[:space:]]sx='; } && STYLED=yes
 has 'catch[[:space:]]*[({]|\.catch\(|\?\?|\|\|[[:space:]]*(null|undefined|\[\]|\{\}|0|false)([^[:alnum:]_]|$)' && lens silent-failure-hunter
 has '^[[:space:]]*(export[[:space:]]+)?(declare[[:space:]]+)?(type|interface|enum|(abstract[[:space:]]+)?class)[[:space:]]+[A-Z]' && lens type-design-analyzer
 [ "$(grep -cE '^[[:space:]]*(//|/\*|\*)' <<<"$ADDED_TEXT")" -ge 3 ] && lens comment-analyzer
 has '(^|[^.[:alnum:]_$])var[[:space:]]|\.indexOf\([^)]*\)[[:space:]]*[!=<>]=*[[:space:]]*-1|Object\.assign\([[:space:]]*\{\}|\.apply\([[:space:]]*(this|null)|\.substr\(|(^|[^.[:alnum:]_$])require\(' && lens modern-ts-analyzer
+[ "$STYLED" = yes ] && lens impeccable
 if jq -e '(.scripts.test // "") as $t | $t != "" and ($t | test("no test specified") | not)' "$(git rev-parse --show-toplevel 2>/dev/null)/package.json" >/dev/null 2>&1 \
   && grep -qE '\.(ts|tsx|js|jsx|vue)$' <<<"$FILES" && ! grep -qE '\.(test|spec)\.|__tests__/|(^|/)tests?/' <<<"$FILES"; then
   lens pr-test-analyzer
@@ -118,4 +118,4 @@ if [ -z "$UNTRACKED" ] && grep -E '^[+-]' <<<"$DIFF_TEXT" | grep -vE '^(\+\+\+|-
   END { exit !(n > 0 && code == 0) }'; then
   VERB=review; LENSES=comment-analyzer
 fi
-echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT styled=$STYLED high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}${EFFORT:+ effort=$EFFORT}>"
+echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}${EFFORT:+ effort=$EFFORT}>"
