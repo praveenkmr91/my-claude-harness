@@ -4,6 +4,13 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Skills have no evals
+
+- **Evidence:** 15 skills under `skills/`, zero `evals/` directories; hooks have 718 node tests, skills none. `claude plugin eval <path>` takes a path target and runs `case.yaml` + `prompt.md` + `graders/*.md` natively (checked 2026-11-01).
+- **Why parked:** no skill regression observed yet; each eval run spends model tokens.
+- **Fix:** one `evals/` case per judgment-carrying skill, starting with `tailwind-v4` and `tdd`: prompt, expected outcome, LLM grader on the trace. Run before and after a skill edit.
+- **Worth it when:** the first edit to `tailwind-v4` or `tdd`, or the first skill regression noticed in a transcript.
+
 ### Step gate reads one skip line per dispatch
 
 - **Evidence:** session `0c6dfb54`: a dispatch missing both a check and a commit could not pass, since `step-gate.sh` reads only the prompt's first non-blank line, so `check:` and `commit:` skips cannot both be given. Its non-plan latch came from a shipped harness plan left on disk, fixed by deleting shipped harness plans (`plan-mode.md` "The plan is the file").
