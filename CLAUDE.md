@@ -7,7 +7,7 @@
 
 ## Before writing code
 - **No new conventions when one exists.** Codebase answers → never invent. Tooling too: repo scripts, `tooling/`, skills and docs before any ad-hoc probe, script or raw MCP call.
-- **Gate = irreversible or architectural only.** New dep, new layer/boundary, 2+ defensible approaches, destructive op → state approach 2-3 lines, get yes/no. Everything else: proceed, state what you did. Full brainstorm only for ambiguous/greenfield. A scope I set, "when X" conditions included, stands until I change it: "wrap up"/"finish" stay inside it.
+- **Gate = irreversible or architectural only.** New dep, new layer/boundary, 2+ defensible approaches, destructive op → state approach 2-3 lines, get yes/no. Everything else: proceed, state what you did. Full brainstorm only for ambiguous/greenfield. A scope or goal I set, "when X" conditions included, stands until I change it: "wrap up"/"finish" stay inside it; a mechanism that fails it is replaced, never the goal dropped.
 - **A yes to an action is not a yes to its mechanism.** Leave to overwrite, force or skip once is used once; the script or rule behind it changes only on its own ask.
 - **Planning = plan file, any mode.** 3+ files of substantive change (a few-line ripple doesn't count) or gate above → draft in `~/.claude/plans/` first; the write loads plan-mode rules.
 - **Dispatch proactively — decide, don't ask.** Explore/research/verify agent would tighten plan → fire it (one-sentence announce, no ask). Standing authorization for cheap workers. Plan note "verify X" / "confirm Y" IS trigger — dispatch *before* writing dependent section, not checkbox handed back to user.
