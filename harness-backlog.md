@@ -11,13 +11,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** add a `skill` kind to the existing harness (`automation/eval-lib.sh` switches on `kind`), one case per judgment-carrying skill, starting with `tailwind-v4` and `tdd`: prompt, planted expectation, judge score. Run before and after a skill edit. Not `claude plugin eval`: a second eval convention beside this one.
 - **Worth it when:** the first edit to `tailwind-v4` or `tdd`, or the first skill regression noticed in a transcript.
 
-### Step gate reads one skip line per dispatch
-
-- **Evidence:** session `0c6dfb54`: a dispatch missing both a check and a commit could not pass, since `step-gate.sh` reads only the prompt's first non-blank line, so `check:` and `commit:` skips cannot both be given. Its non-plan latch came from a shipped harness plan left on disk, fixed by deleting shipped harness plans (`plan-mode.md` "The plan is the file").
-- **Why parked:** with the latch fixed, a dispatch needing both skips is rare.
-- **Fix:** read every leading skip line, not just the first.
-- **Worth it when:** a dispatch needs both skips again.
-
 ### Direct-lookup nudge on a known target
 
 - **Evidence:** session `0c6dfb54`: `inline-call-nudge.sh` fired twice mid-investigation while every lookup read one known hook and its test file; each answer was `direct: continue`.

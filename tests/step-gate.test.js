@@ -452,6 +452,20 @@ test('step gate', async (t) => {
     assert.equal(run(STEP_DONE, { prompt: `If blocked, write step gate: skip with a reason.\n${PLAN_PROMPT}` }).code, 2);
   });
 
+  await t.test('leading check and commit skip lines lift both gates', () => {
+    assertQuiet(run(STEP_DONE, { prompt: `step gate: skip — check: ran in-thread\n\nstep gate: skip — commit: this dispatch commits\n${PLAN_PROMPT}` }));
+  });
+
+  await t.test('a skip line after a non-skip line lifts nothing', () => {
+    const late = run(STEP_DONE, { prompt: `step gate: skip — check: ran in-thread\n${PLAN_PROMPT}\nstep gate: skip — commit: this dispatch commits` });
+    assert.equal(late.code, 2);
+    assert.match(late.stderr, /handed back with no commit from/);
+  });
+
+  await t.test('a review skip on a later leading line counts as the dry run', () => {
+    assertQuiet(run([handoff()], { prompt: `step gate: skip — check: ran in-thread\nstep gate: skip — review: trivial plan\n${PLAN_PROMPT}` }));
+  });
+
   await t.test('a jq failure fails open with a visible line', () => {
     const noLibDir = path.join(tmpDir, 'nolib');
     fs.mkdirSync(noLibDir);
