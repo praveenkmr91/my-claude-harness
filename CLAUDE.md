@@ -21,7 +21,7 @@
 
 ## Before claiming done
 - **After every code change:** run linter + type checker before declaring done. The ticket's worked example IS the acceptance test: replay it end-to-end at runtime before claiming fixed; if it can't pass under the chosen design, that's a design finding to raise before shipping.
-- **No FE workarounds for BE contract gaps.** Poll/retry shims and client-side patches for a wrong or missing backend contract are not built — comment the exact ask on the ticket and block.
+- **No FE workarounds for BE contract gaps.** Shims or patches for a wrong or missing backend contract: never build; comment the ask on the ticket and block, unless I accepted the gap.
 - **Stakeholder-facing text (Jira, PR, commit) is concise, not terse.** Root cause 2-3 sentences, ask 1-2, done note 1-2 (Jira: no commit hashes). No verification narratives, tested-case lists, env caveats, trade-off essays. Full sentences, readable without session context; cut padding, not connective tissue.
 
 ## Committing
