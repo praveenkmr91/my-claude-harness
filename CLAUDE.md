@@ -40,6 +40,7 @@
 - **Classifier or hook denial = stop and ask, never route around.** Actual denials only; an anticipated block with a sanctioned exit (`ExitWorktree`) is executed. On one: finish independent work, hand me the blocked action, stop; I retry via `/permissions`, auto-mode exit or `!`. My yes unblocks only that action: run, report, never re-ask; my typed ask still sets the plan. No smaller pieces or alternate tool unless the denial names the route; deleting this session's leftover files isn't routing around.
 - **`<private>…</private>` = use now, never persist.** Content inside the tags never lands in memory files, .remember/, CLAUDE.md, commits, or any artifact — reference it this session only.
 - **Ask before writing, moving or deleting outside the repo, or a file I placed.** Raise the concern first, then wait. A repo secret stays put, gitignored. Publishing to claude.ai Artifacts counts; an unasked visual goes to a local file and the reply gives the path.
+- **Repo work product lives in the repo**, where its convention puts it (find the precedent): handoff notes, asks to other teams, drafts others act on. Scratchpad = throwaway output only.
 
 ## Tooling gotchas
 - **zsh: quote grep globs** — `hooks/block-dangerous-git.sh` auto-quotes unquoted `--include=*`; an empty grep is unverified until the command exited 0.
