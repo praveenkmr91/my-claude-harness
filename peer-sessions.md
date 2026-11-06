@@ -4,7 +4,7 @@
 
 ## Roles
 
-- Planner: `/effort high` at session start. Owns the plan file and its research file, talks to Praveen, supervises. While a builder is bound to the plan: never writes source, by hand or through a dispatched `implementer`, never starts a dev server, and Praveen's "build" means HANDOFF to it; never offer a build in the planner session. With the builder closed or released, the planner builds the plan itself as a single session.
+- Planner: `/effort high` at session start. Owns the plan file and its research file, talks to Praveen, supervises. While a builder is bound to the plan: never writes any repo file but the plan and its research file, source, config, lockfile and docs alike, by hand, by `sed`, by `pnpm install` or through a dispatched `implementer`, and never runs a probe that edits one: every such step goes to the builder as a HANDOFF, however small; never starts a dev server, and Praveen's "build" means HANDOFF to it; never offer a build in the planner session. With the builder closed or released, the planner builds the plan itself as a single session.
 - Builder: `/effort medium` at session start. Owns the checkout, its commits and its dev-server ports; dispatches `implementer` and review agents. Never edits the plan file, but commits it: the plan commit folds in each planner edit, and the shipping commit deletes it (`committing.md`). A harness plan in `~/.claude/plans/` is gitignored and never committed.
 - Kickoff: Praveen types once in the builder "take instructions from <planner name>"; after that he talks to the planner only.
 - One planner may drive several builders, each in its own worktree with its own ports, named in its HANDOFF.
