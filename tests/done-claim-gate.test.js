@@ -503,6 +503,31 @@ test('done-claim gate', async (t) => {
     assert.equal(run(`Shipped.\n${LEARN_SKIP}`, ship), 0);
   });
 
+  await t.test('a hand-back keys the lint demand on the files its agent transcript shows it wrote; with no transcript named, the cwd decides', () => {
+    const scripted = repoWith({ 'check:lint': 'oxlint .' });
+    const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
+    const agentRun = (id, files) => {
+      const out = path.join(tmpDir, `${id}.output`);
+      fs.writeFileSync(out, files.map((f) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: f } }] } })).join('\n'));
+      const hb = handBack('implementer');
+      hb.origin.from = id;
+      return [
+        { blocks: [{ type: 'tool_use', id: `dispatch-${id}`, name: 'Agent', input: { subagent_type: 'implementer' } }] },
+        { record: { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `dispatch-${id}`, content: `Async agent launched.\noutput_file: ${out}` }] } } },
+        { handback: hb },
+        tested,
+      ];
+    };
+    const opts = { editedFile: null, lint: false, cwd: scripted };
+    const reply = `Done: step 1 landed.\n${LENS_SKIPS}\n${LEARN_SKIP}`;
+    assert.doesNotMatch(runWithResults(reply, agentRun('ag1', [path.join(os.homedir(), '.claude/hooks/x.sh')]), opts).stderr, /LINT\/TSC/);
+    assert.match(runWithResults(reply, agentRun('ag2', ['/repo/src/app.ts']), opts).stderr, /LINT\/TSC/);
+    assert.match(runWithResults(reply, [{ handback: handBack('implementer') }, tested], opts).stderr, /LINT\/TSC/);
+    const gone = agentRun('ag3', ['/repo/src/app.ts']);
+    fs.rmSync(path.join(tmpDir, 'ag3.output'));
+    assert.match(runWithResults(reply, gone, opts).stderr, /LINT\/TSC/);
+  });
+
   await t.test('in a plan build a REPORT passes on hand-pass lens lines', () => {
     const report = `[REPORT demo step 1] Step 1 built.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings\n${RAW_OUTPUT}`;
     assert.equal(run(report, { editedFile: null, handback: handBack('implementer'), send: true, lint: false, bashCommand: 'node --test tests/*.test.js' }), 0);

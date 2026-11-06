@@ -31,8 +31,28 @@ def lens_ran(b):
 # shortcut: turn-scoped — edits in one turn and the commit ask in a later turn escape the review check, and a plan-file `rm` in one turn with its commit in the next escapes the shipping check; upgrade = scope to edits since the last commit.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset():
-    global texts,cmds,cmd_ids,results,edits,ran,tools,handbacks,verifier_calls,nudged,built,hb_at,stopped
-    texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; hb_at=0; stopped=False
+    global texts,cmds,cmd_ids,results,edits,ran,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped
+    texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; ran=set(); tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; built_blind=False; hb_at=0; stopped=False
+# An Agent dispatch result names the agent's own transcript (`output_file: …/<id>.output`); its Write/Edit calls are the hand-back's edit paths.
+agent_out={}
+output_file=re.compile(r'output_file:\s*(\S+/([^/\s]+)\.output)')
+def agent_edits(p):
+    files=[]
+    try:
+        for l in open(p):
+            try: a=json.loads(l)
+            except ValueError: continue
+            if a.get('type')!='assistant': continue
+            for b in a.get('message',{}).get('content') or []:
+                if isinstance(b,dict) and b.get('type')=='tool_use' and b.get('name') in ('Write','Edit','NotebookEdit'): files.append(b.get('input',{}).get('file_path') or b.get('input',{}).get('notebook_path') or '')
+    except OSError: pass
+    return files
+def handback(origin):
+    global built,built_blind,hb_at
+    built=True; hb_at=len(cmds)
+    files=agent_edits(agent_out.get(origin.get('from'),''))
+    if files: edits.extend(files)
+    else: built_blind=True
 stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
@@ -54,13 +74,14 @@ for line in open(path):
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta') and not r.get('isCompactSummary'): reset(); base=None
         if isinstance(c,str) and stop_msg.search(c): stopped=True
-        if r.get('origin',{}).get('handback') and r['origin'].get('name')=='implementer': built=True; hb_at=len(cmds)
+        if r.get('origin',{}).get('handback') and r['origin'].get('name')=='implementer': handback(r['origin'])
         if isinstance(c,str) and '<agent-message from=' in c: handbacks.append(c)
         if not isinstance(c,str):
             for b in c or []:
                 if isinstance(b,dict) and b.get('type')=='tool_result':
                     results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
                     if b.get('tool_use_id') in commit_ids and not b.get('is_error') and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]
+                    for m in output_file.finditer(results[b.get('tool_use_id')][1]): agent_out[m.group(2)]=m.group(1)
         # A blocked REPORT lands as an errored result and keeps the window, so an unchanged resend blocks again; a pending send has no result yet.
         if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('tool_use_id') in report_ids and not b.get('is_error') for b in c or []): reset(); base=last_sha
         # A PreToolUse block lands as an errored tool_result, not a hook_blocking_error attachment.
@@ -68,7 +89,7 @@ for line in open(path):
     elif t=='attachment':
         origin=r.get('attachment',{}).get('origin',{})
         if stop_msg.search(r.get('attachment',{}).get('prompt') or ''): stopped=True
-        if origin.get('handback') and origin.get('name')=='implementer': built=True; hb_at=len(cmds)
+        if origin.get('handback') and origin.get('name')=='implementer': handback(origin)
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
             if not isinstance(b,dict): continue
@@ -184,7 +205,7 @@ cwd=inp.get('cwd') or ''
 def has_lint_script(d):
     try: return any(re.search(r'lint|typecheck|type-check|tsc',k) for k in json.load(open(os.path.join(d,'package.json'))).get('scripts',{}))
     except (OSError,ValueError): return False
-# A built window has no edit paths, so the repo decides: lint is required only where its package.json defines a lint or type-check script.
+# A hand-back whose agent transcript cannot be read leaves the window blind, so the repo decides: lint is required only where the cwd's package.json defines a lint or type-check script.
 def repo_lints(cwd):
     if not (cwd and os.path.isdir(cwd)): return False
     if has_lint_script(cwd): return True
@@ -193,7 +214,7 @@ def repo_lints(cwd):
     return bool(top) and has_lint_script(top)
 # A REPORT reads the same post-hand-back slice as its evidence: a lint from before the last build says nothing about it.
 lint_cmds=[c for _,c in fresh] if report else cmds
-if (claim_word or commit_ask or committed) and ((built and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
+if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim_word or commit_ask or committed:
     verb,lenses='review','reuse-analyzer,placement-analyzer'
