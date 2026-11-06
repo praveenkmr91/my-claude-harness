@@ -2,6 +2,7 @@
 # Write|Edit PreToolUse hook, enforcing arm of ~/.claude/subagent-tiers.md; Opus-or-above main thread only, subagents skipped.
 #   From a Fable session, blocks every source write outright — Fable never writes code unless the last typed prompt carries [tier-override: <why>].
 #   From Opus, blocks every source write of a turn until implementer was dispatched since the last typed prompt, or the last typed prompt carries [tier-override: <why>].
+#   Both arms pass harness files under ~/.claude/ (plugin caches aside): those stay the main thread's.
 #   No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
 IN=$(cat)
 
@@ -35,6 +36,9 @@ typed_prompts() {
 overridden() {
   typed_prompts <"$T" | tail -1 | grep -q '\[tier-override:'
 }
+
+# Harness files are the main thread's to write: a hook edit is small and judgment-dense, so a prescriptive implementer brief outgrows the diff (2026-11-06). Plugin caches stay blocked: curation there reverts on update.
+case "$F" in "$HOME/.claude/plugins/"*) ;; "$HOME/.claude/"*) exit 0 ;; esac
 
 case "$MODEL" in *fable*)
   overridden && exit 0

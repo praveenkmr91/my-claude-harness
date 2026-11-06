@@ -15,6 +15,7 @@ test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
 const BASE_VERDICTS = 'reuse-analyzer: 0 findings\nplacement-analyzer: skip — single-file change';
 const LENS_SKIPS = 'reuse-analyzer: skip — rename only\nplacement-analyzer: skip — nothing moved';
+const LEARN_SKIP = 'learn: skip — nothing new this build';
 const RAW_OUTPUT = 'Raw output: /private/tmp/s/scratchpad/step1-checks.txt';
 const LENS_AGENTS = ['reuse-analyzer', 'placement-analyzer'].map((subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } }));
 
@@ -452,7 +453,7 @@ test('done-claim gate', async (t) => {
       assert.equal(status, 2);
       assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
     }
-    assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', reviews: LENS_AGENTS }), 0);
+    assert.equal(run(`Done: step 1 landed.\n${LEARN_SKIP}`, { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', reviews: LENS_AGENTS }), 0);
     assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBack('checker') }), 0);
     assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBackAttachment('checker') }), 0);
   });
@@ -462,7 +463,7 @@ test('done-claim gate', async (t) => {
     const { status, stderr } = runFull('Done: step 1 landed.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', built);
     assert.equal(status, 2);
     assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*on a done-claim or shipping commit in a plan build a hand pass does not count/);
-    assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}`, built), 0);
+    assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}\n${LEARN_SKIP}`, built), 0);
   });
 
   await t.test('in a plan build a first line opening "Step N" is a step claim and passes on hand-pass lens lines', () => {
@@ -481,8 +482,25 @@ test('done-claim gate', async (t) => {
     const { status, stderr } = runFull('Shipped.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', ship);
     assert.equal(status, 2);
     assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*shipping commit in a plan build a hand pass does not count/);
-    assert.equal(run('Shipped.', { ...ship, reviews: LENS_AGENTS }), 0);
+    assert.equal(run(`Shipped.\n${LEARN_SKIP}`, { ...ship, reviews: LENS_AGENTS }), 0);
     assert.equal(run('Shipped.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', { ...ship, bashCommand: 'git rm docs/notes.md && git commit -m x' }), 0);
+  });
+
+  await t.test('a plan build done-claim or shipping commit needs one /learn pass in the transcript, or a learn skip line', () => {
+    const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js', reviews: LENS_AGENTS };
+    const { status, stderr } = runFull('Done: step 1 landed.', built);
+    assert.equal(status, 2);
+    assert.match(stderr, /LEARN NOT RUN/);
+    const typed = '<command-message>learn</command-message>\n<command-name>/learn</command-name>';
+    assert.equal(run('Done: step 1 landed.', { ...built, prompt: typed }), 0);
+    assert.equal(run('Done: step 1 landed.', { ...built, reviews: [...LENS_AGENTS, { type: 'tool_use', name: 'Skill', input: { skill: 'learn' } }] }), 0);
+    assert.equal(run(`Done: step 1 landed.\n${LEARN_SKIP}`, built), 0);
+    // Near twins: a step claim, and a code edit with no hand-back, are not the build's done-claim.
+    assert.doesNotMatch(runFull('Step 1 passes verify.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', { ...built, reviews: [] }).stderr, /LEARN NOT RUN/);
+    assert.doesNotMatch(runFull('Done: typo fixed.', { bashCommand: 'node --test tests/*.test.js', reviews: LENS_AGENTS }).stderr, /LEARN NOT RUN/);
+    const ship = { editedFile: null, lint: false, bashCommand: 'git rm docs/plans/demo.md && git commit -m ship', reviews: LENS_AGENTS };
+    assert.match(runFull('Shipped.', ship).stderr, /LEARN NOT RUN/);
+    assert.equal(run(`Shipped.\n${LEARN_SKIP}`, ship), 0);
   });
 
   await t.test('in a plan build a REPORT passes on hand-pass lens lines', () => {
@@ -515,7 +533,7 @@ test('done-claim gate', async (t) => {
       handBack('implementer'),
       { type: 'assistant', message: { content: [
         { type: 'tool_use', name: 'Bash', input: { command: 'node --test tests/*.test.js' } },
-        { type: 'text', text: `Done: step 1 landed.\n${LENS_SKIPS}` },
+        { type: 'text', text: `Done: step 1 landed.\n${LENS_SKIPS}\n${LEARN_SKIP}` },
       ] } },
     ].map((r) => JSON.stringify(r)).join('\n'));
     const stop = (cwd) => spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, cwd }), encoding: 'utf8' });
@@ -783,7 +801,7 @@ test('done-claim gate', async (t) => {
     const typed = runWithResults('Done: step built.', built({ prompt: 'next' }), opts);
     assert.equal(typed.status, 2);
     assert.match(typed.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
-    const compacted = runWithResults('Done: step built.', built({ record: compaction }), opts);
+    const compacted = runWithResults(`Done: step built.\n${LEARN_SKIP}`, built({ record: compaction }), opts);
     assert.doesNotMatch(compacted.stderr, /REVIEW NOT RUN/);
     assert.equal(compacted.status, 0, compacted.stderr);
   });

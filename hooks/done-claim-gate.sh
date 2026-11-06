@@ -3,6 +3,7 @@
 # Claim = first line of the final reply (or the REPORT) only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
 # One-shot on Stop: stop_hook_active passes the retry unchecked, so the block message must carry the exact verdict format; a blocked REPORT re-blocks until it changes.
 # Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. A `Pass: <verb>` line in the reply is checked on every turn.
+# A plan build's done-claim or shipping commit also needs one `/learn` pass in the transcript (typed or Skill) or a `learn: skip — <reason>` line: of 84 build sessions, 13 ran /learn (measured 2026-11-06).
 
 INPUT=$(cat)
 python3 - "$INPUT" <<'PY'
@@ -36,7 +37,7 @@ stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 # Plan-review tracking is transcript-wide and never reset(): plan edits and their reviews span turns.
-ev=0; plan_edits={}; plan_reviews=[]; advisor_at=[]
+ev=0; plan_edits={}; plan_reviews=[]; advisor_at=[]; learned=False
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
 # The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
@@ -49,6 +50,7 @@ for line in open(path):
     if t=='user':
         c=r.get('message',{}).get('content')
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
+        if '<command-name>/learn</command-name>' in txt: learned=True
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta') and not r.get('isCompactSummary'): reset(); base=None
         if isinstance(c,str) and stop_msg.search(c): stopped=True
@@ -74,6 +76,7 @@ for line in open(path):
             if b.get('type') not in ('tool_use','server_tool_use'): continue
             ev+=1
             if b.get('name')=='advisor': advisor_at.append(ev)
+            if lens_ran(b)=='learn': learned=True
             if b.get('type')!='tool_use': continue
             if b.get('name') in ('Write','Edit'):
                 edited=b.get('input',{}).get('file_path','')
@@ -214,6 +217,8 @@ if claim_word or commit_ask or committed:
         problems.append("IMPECCABLE NOT RUN: this turn changed styling; run the `impeccable:impeccable` skill with `audit <changed files>` — a hand-written findings or skip line never satisfies it (review-routing.md).")
     hand_pass='; on a done-claim or shipping commit in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if strict else ''
     if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md){hand_pass}{report_tail}.")
+    if strict and not learned and 'learn' not in skipped:
+        problems.append("LEARN NOT RUN: this plan build claims done or ships, and `/learn` has not run in this session. Run the `learn` skill on this build (it writes only on a yes), or write `learn: skip — <reason>`.")
 if problems:
     print('\n'.join(problems),file=sys.stderr)
     sys.exit(2)

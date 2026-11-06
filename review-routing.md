@@ -3,7 +3,7 @@
 - Default ask is **review**; the hook's `<review-joins>` line picks verb + lenses — load exactly those.
 - A named verb overrides the hook's `verb=`, the heavier of two (battery > harden > review); its `lenses=` still ride along.
 - Announce the pass as `Pass: <verb>`, then do it — main thread, session tier, unless the verb says otherwise.
-- Effort (`effort=` on the joins line, only when the ask states one; xhigh / max read as high) sets depth, never members. **low** → report only findings verified at source with a reproduced failure scenario. **medium** or unstated → as below. **high** → every joined lens dispatched as an agent, and findings 60-74 also reported, tagged uncertain. A stated level goes to the `code-review` skill on PR asks, and sets an agent's dispatch `effort`, above or below its frontmatter. It overrides the per-lens and threshold rules below. A joins line without `lenses=` means nothing was in scope: the verb row's members apply.
+- Effort (`effort=` on the joins line, only when the ask states one; xhigh / max read as high) sets depth, never members. **low** → only findings verified at source with a reproduced failure scenario. **medium** or unstated → as below. **high** → every joined lens dispatched as an agent, and findings 60-74 also reported, tagged uncertain. A stated level goes to the `code-review` skill on PR asks, and sets an agent's dispatch `effort`, above or below its frontmatter. It overrides the per-lens and threshold rules below. A joins line without `lenses=` means nothing was in scope: the verb row's members apply.
 
 | Verb | Members | Runs as |
 |---|---|---|
@@ -12,7 +12,7 @@
 | **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer agent + security-review skill | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
-| **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor if irreversible (lint + tsc is the every-change gate in CLAUDE.md, not a verify member). On a done-claim for a build implementer wrote, or a shipping commit (it deletes `docs/plans/<slug>.md`), each lens runs as an agent or skill or is declined with a reason; a hand-written findings line does not count. | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
+| **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor if irreversible (lint + tsc is CLAUDE.md's gate, not a verify member). A done-claim on an implementer build or a shipping commit (it deletes `docs/plans/<slug>.md`) runs each lens as an agent or skill or declines it with a reason; a hand-written findings line does not count. Plus one `/learn` pass per build session, or `learn: skip — <reason>`. | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
 
 Hook joins (scope = files this session edited; dirty tree only when none):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
@@ -28,13 +28,13 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses). Explore locates code, never judges it.
 
-Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list (never /simplify: the battery covers it), harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; its members run one by one are not a pass; it runs in the checkout the push comes from after a frozen install.
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list (never /simplify: the battery covers it), harden once. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; members run one by one are not a pass; it runs in the push's checkout after a frozen install.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
 - Report ≥75 only; one line "N findings below threshold suppressed".
 - Each finding = observation, impact, suggestion.
-- Once findings are routed to a named peer session, every later recheck on that work goes there unasked.
+- Findings routed to a named peer session: every later recheck on that work goes there unasked.
 - Pre-existing debt: Critical (incident or security path) → report, tag pre-existing, never silently fix; High (blocks current work / recurs weekly) → one line; Medium/Low → suppressed count.
 - Refactor recommendation needs a trigger (region touched 3+ times for bugs, 3+ duplicates, >3 mocks to test, planned work depends on it) and a behavioral-equivalence check; ugly-but-correct outside the change path → leave, say so.
 </review-routing>

@@ -152,6 +152,21 @@ test('opus write nudge', async (t) => {
     assert.equal(run({ sessionId: newSession(), tier: 'fable', file: '/private/tmp/claude-501/-Users-p-repo/f503-session/scratchpad/probe.mjs' }).code, 2);
   });
 
+  await t.test('fable session writes harness hooks and tests under ~/.claude directly; a plugin cache file and a look-alike folder still block', () => {
+    const home = os.homedir();
+    assert.equal(run({ sessionId: newSession(), tier: 'fable', file: path.join(home, '.claude/hooks/done-claim-gate.sh') }).code, 0);
+    assert.equal(run({ sessionId: newSession(), tier: 'fable', file: path.join(home, '.claude/tests/x.test.js') }).code, 0);
+    assert.equal(run({ sessionId: newSession(), tier: 'fable', file: path.join(home, '.claude/plugins/cache/x/hooks/a.sh') }).code, 2);
+    assert.equal(run({ sessionId: newSession(), tier: 'fable', file: path.join(home, '.claude-other/hooks/a.sh') }).code, 2);
+  });
+
+  await t.test('opus session writes harness hooks and tests under ~/.claude directly with no dispatch; a plugin cache file still blocks', () => {
+    const home = os.homedir();
+    assert.equal(run({ sessionId: newSession(), file: path.join(home, '.claude/hooks/done-claim-gate.sh') }).code, 0);
+    assert.equal(run({ sessionId: newSession(), file: path.join(home, '.claude/tests/x.test.js') }).code, 0);
+    assert.equal(run({ sessionId: newSession(), file: path.join(home, '.claude/plugins/cache/x/hooks/a.sh') }).code, 2);
+  });
+
   await t.test('a doc write is not gated — the next source write still blocks', () => {
     const sessionId = newSession();
     assert.equal(run({ sessionId, transcriptPath: transcripts.opusNoDispatch, file: '/tmp/notes.md' }).code, 0);
