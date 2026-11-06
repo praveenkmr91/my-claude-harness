@@ -797,3 +797,90 @@ test('done-claim gate', async (t) => {
     assert.equal(run('Done.', { stopHookActive: true }), 0);
   });
 });
+
+test('done-claim gate: plan presented unreviewed', async (t) => {
+  const PLAN = '/h/.claude/plans/x.md';
+  const asks = {
+    type: 'Should I start? Type `implement` and I\'ll hand both steps to the implementer.',
+    typeRepo: 'So: type `implement` and I\'ll move the plan into the repo and build it.',
+    say: 'If you say go, I\'ll hand it to the implementer.',
+    waiting: 'The dry run is still running; I\'ll bring the plan back once it reports.',
+  };
+  const writePlan = (file = PLAN) => ({ type: 'tool_use', name: 'Write', input: { file_path: file } });
+  const editPlan = (file = PLAN) => ({ type: 'tool_use', name: 'Edit', input: { file_path: file } });
+  const review = (subagent_type, prompt) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type, prompt } });
+  const advisor = { type: 'server_tool_use', name: 'advisor', input: {} };
+  const assistant = (...content) => ({ type: 'assistant', message: { content } });
+  const prompt = (text) => ({ type: 'user', message: { content: text } });
+  const runPlan = (records, final, input = {}) => {
+    const transcriptPath = path.join(tmpDir, `plan${seq++}.jsonl`);
+    fs.writeFileSync(transcriptPath, records.map((r) => JSON.stringify(r)).join('\n'));
+    return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, last_assistant_message: final, ...input }), encoding: 'utf8', env });
+  };
+  const turn = (blocks, final) => [prompt('plan it'), assistant(...blocks), assistant({ type: 'text', text: final })];
+
+  await t.test('blocks an implement ask on a plan nobody reviewed, and a reply that only waits stays quiet', () => {
+    const records = (final) => turn([writePlan()], final);
+    const fires = runPlan(records(asks.type), asks.type);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /PLAN PRESENTED UNREVIEWED/);
+    assert.match(fires.stderr, /\(A\)/);
+    assert.match(fires.stderr, /asks to implement x\.md/);
+    assert.equal(runPlan(records(asks.waiting), asks.waiting).status, 0);
+  });
+
+  await t.test('blocks when the plan was edited after its last review, quiet once a cold read follows the edit', () => {
+    const blocks = [writePlan(), review('dry-runner', `Dry-run ${PLAN}`), advisor, editPlan()];
+    const fires = runPlan(turn(blocks, asks.typeRepo), asks.typeRepo);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(A\)/);
+    assert.doesNotMatch(fires.stderr, /\(B\)/);
+    const quiet = runPlan(turn([...blocks, review('cold-reader', PLAN)], asks.typeRepo), asks.typeRepo);
+    assert.equal(quiet.status, 0, quiet.stderr);
+  });
+
+  await t.test('blocks a reviewed plan with no advisor after its first review, quiet once the advisor ran', () => {
+    const blocks = [writePlan(), review('dry-runner', `Dry-run ${PLAN}`)];
+    const fires = runPlan(turn(blocks, asks.say), asks.say);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(B\)/);
+    assert.doesNotMatch(fires.stderr, /\(A\)/);
+    assert.equal(runPlan(turn([...blocks, advisor], asks.say), asks.say).status, 0);
+  });
+
+  await t.test('a review that names another plan does not cover this one, and a plugin-prefixed reviewer type counts', () => {
+    const other = runPlan(turn([writePlan(), review('cold-reader', '/repo/docs/plans/other.md'), advisor], asks.type), asks.type);
+    assert.equal(other.status, 2, other.stderr);
+    assert.match(other.stderr, /\(A\)/);
+    const prefixed = runPlan(turn([writePlan(), review('hera:cold-reader', `Cold-read ${PLAN}`), advisor], asks.type), asks.type);
+    assert.equal(prefixed.status, 0, prefixed.stderr);
+  });
+
+  await t.test('a `plan gate: skip — <reason>` line in the turn suppresses the block', () => {
+    const reply = `plan gate: skip — trivial one-line plan\n${asks.type}`;
+    assert.equal(runPlan(turn([writePlan()], reply), reply).status, 0);
+    const bare = 'plan gate: skip\n' + asks.type;
+    assert.equal(runPlan(turn([writePlan()], bare), bare).status, 2);
+  });
+
+  await t.test('no plan edit, or edits only to a research note, leave the implement ask alone', () => {
+    assert.equal(runPlan(turn([], asks.type), asks.type).status, 0);
+    assert.equal(runPlan(turn([writePlan('/h/.claude/plans/x.research.md')], asks.type), asks.type).status, 0);
+  });
+
+  await t.test('tracking spans turns: a review in turn 1 covers an ask in turn 2, a plan edit in turn 2 voids it', () => {
+    const turn1 = [prompt('plan it'), assistant(writePlan(), review('cold-reader', PLAN), advisor), assistant({ type: 'text', text: 'Plan is ready.' })];
+    const quiet = runPlan([...turn1, prompt('looks good'), assistant({ type: 'text', text: asks.type })], asks.type);
+    assert.equal(quiet.status, 0, quiet.stderr);
+    const fires = runPlan([...turn1, prompt('change step 2'), assistant(editPlan()), assistant({ type: 'text', text: asks.type })], asks.type);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(A\)/);
+  });
+
+  await t.test('an empty transcript, and a plan reply with no implement ask, pass', () => {
+    const empty = runPlan([], asks.type);
+    assert.equal(empty.status, 0, empty.stderr);
+    const noAsk = runPlan(turn([writePlan()], 'The plan is written to x.md.'), 'The plan is written to x.md.');
+    assert.equal(noAsk.status, 0, noAsk.stderr);
+  });
+});

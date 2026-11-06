@@ -35,6 +35,8 @@ def reset():
 stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
+# Plan-review tracking is transcript-wide and never reset(): plan edits and their reviews span turns.
+ev=0; plan_edits={}; plan_reviews=[]; advisor_at=[]
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
 # The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
@@ -69,7 +71,14 @@ for line in open(path):
         for b in r.get('message',{}).get('content') or []:
             if not isinstance(b,dict): continue
             if b.get('type')=='text': texts.append(b['text'])
+            if b.get('type') not in ('tool_use','server_tool_use'): continue
+            ev+=1
+            if b.get('name')=='advisor': advisor_at.append(ev)
             if b.get('type')!='tool_use': continue
+            if b.get('name') in ('Write','Edit'):
+                edited=b.get('input',{}).get('file_path','')
+                if re.search(r'/plans/[^/]+\.md$',edited) and not edited.endswith('.research.md'): plan_edits[edited]=ev
+            elif b.get('name') in ('Agent','Task') and lens_ran(b) in ('cold-reader','dry-runner'): plan_reviews.append((ev,b.get('input',{}).get('prompt') or ''))
             message=b.get('input',{}).get('message')
             # A REPORT's lens and skip lines satisfy the Stop arm after the send.
             if b.get('name')=='SendMessage' and isinstance(message,str) and is_report(message):
@@ -100,6 +109,16 @@ for verb,members in NAMED_VERBS.items():
     if missing: problems.append(f"NAMED VERB NOT RUN: this reply announces `Pass: {verb}`, and no Skill/Agent call ran for {', '.join(missing)}. A verdict line does not count here — invoke each member, or write `<member>: not run — <reason>` for each one you are not running.")
 if nudged and 'implementer' not in ran and not re.search(label_open+r'implementer'+label_close+r'(?:dispatching\b|'+skip_reason+r')','\n'.join(texts),re.M):
     problems.append("IMPLEMENTER NUDGE UNANSWERED: opus-write-nudge fired this turn and no `implementer` dispatch or verdict line followed. Write `implementer: dispatching` (and dispatch) or `implementer: skip — <reason>`.")
+plan_tail=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
+implement_ask=not report and plan_edits and plan_tail and re.search(r'\b(implement|build it|hand (?:it )?to the implementer|start the build)\b',plan_tail[-1],re.I) and re.search(r'\?|\btype\b|\bsay\b|approv|go ahead|want me|\bif you\b',plan_tail[-1],re.I)
+if implement_ask and not re.search(label_open+r'plan gate'+label_close+skip_reason,'\n'.join(texts),re.M|re.I):
+    plan_path=max(plan_edits,key=plan_edits.get)
+    plan_name=os.path.basename(plan_path)
+    covering=[e for e,prompt in plan_reviews if plan_path in prompt or plan_name in prompt]
+    unreviewed=[]
+    if not any(e>plan_edits[plan_path] for e in covering): unreviewed.append('(A) no cold-reader or dry-runner ran on it after its last edit')
+    if covering and not any(a>covering[0] for a in advisor_at): unreviewed.append('(B) no advisor consult followed its first review')
+    if unreviewed: problems.append(f"PLAN PRESENTED UNREVIEWED: this reply asks to implement {plan_name}, but {' and '.join(unreviewed)} (plan-mode.md Review). Run the missing review, fold it, then present — or write `plan gate: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 # A redirect counts by its target only: `node --test x.test.js > out.txt` names code but writes none.
 redirect_target=re.compile(r'(?:>>?|\btee(?:\s+-a)?)\s*([^\s;&|]+)')
