@@ -3,6 +3,8 @@
 // heredoc, redirect, tee, an inline interpreter script, or staged in scratch and copied in skips all of them.
 'use strict';
 
+const path = require('node:path');
+
 const SOURCE_EXT = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|swift|kts?|dart|css|scss|html|json|ya?ml|toml|mdx?|csv|sh)$/;
 const DOTFILE = /(^|\/)\.[\w.-]+$/;
 const SCRATCH = /^(\/tmp\/|\/private\/tmp\/|\/private\/var\/folders\/|\/var\/folders\/|\/dev\/)/;
@@ -39,6 +41,7 @@ const SED_I = /^\s*(?:\w+=\S*\s+)*sed\s(?:\S+\s)*?(?:-[A-Za-z]*i\S*|--in-place\S
 const PERL_I = /^\s*(?:\w+=\S*\s+)*perl\s(?:\S+\s)*?-[A-Za-z]*i\S*(?=\s|$)/;
 const GIT_MV = /^\s*(?:\w+=\S*\s+)*git\s+mv\s/;
 const REPO_PLANS = /(^|\/)plans\/[^/]+\.md$/;
+const RELATIVE_PATH = /^[\w.\/-]+$/;
 const MEMORY = /\/\.claude\/projects\/[^/]+\/memory\//;
 
 function shellVars(command) {
@@ -162,12 +165,21 @@ function interpreterTargets(command, vars, sessionCwd) {
 
 const isPlanPath = (target) => REPO_PLANS.test(target) || target.startsWith(`${process.env.HOME}/.claude/plans/`);
 
-function planEditTargets(command, vars) {
+// A relative token is resolved only if it reads as a path: a sed script like s#a#b.md# is not a file.
+const isPlanToken = (token, cwd) =>
+  !token.startsWith('-') && (token.startsWith('/') || RELATIVE_PATH.test(token)) && isPlanPath(path.resolve(cwd, token));
+
+function planEditTargets(command, vars, sessionCwd) {
   const found = [];
+  let cwd = sessionCwd;
   for (const segment of command.split(/[;&|\n]+/)) {
     const tokens = segment.trim().split(/\s+/).map((t) => expand(t.replace(/^['"]|['"]$/g, ''), vars));
-    if (SED_I.test(segment) || PERL_I.test(segment)) found.push(...tokens.filter(isPlanPath));
-    if (GIT_MV.test(segment) && isPlanPath(tokens[tokens.length - 1])) found.push(tokens[tokens.length - 1]);
+    if (tokens[0] === 'cd' && tokens[1] && !tokens[1].startsWith('-')) {
+      cwd = path.resolve(cwd, tokens[1]);
+      continue;
+    }
+    if (SED_I.test(segment) || PERL_I.test(segment)) found.push(...tokens.filter((t) => isPlanToken(t, cwd)));
+    if (GIT_MV.test(segment) && isPlanToken(tokens[tokens.length - 1], cwd)) found.push(tokens[tokens.length - 1]);
   }
   return found;
 }
@@ -189,7 +201,7 @@ process.stdin.on('end', () => {
   const executed = command.replace(HEREDOC_BODY, (body, opener) => (INTERPRETER.test(opener) ? body : opener));
   const vars = shellVars(shellOnly);
   const sessionCwd = input.cwd ?? '';
-  const planTargets = [...new Set(planEditTargets(shellOnly, vars))];
+  const planTargets = [...new Set(planEditTargets(shellOnly, vars, sessionCwd))];
   if (planTargets.length > 0) {
     process.stderr.write(
       `BLOCKED: shell edit of ${planTargets.join(', ')}. edit plan files with Write or Edit, so plan-lint sees them.\n`,

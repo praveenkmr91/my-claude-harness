@@ -62,10 +62,16 @@ test('bash write guard', async (t) => {
     ['perl -pi on a repo plan', "perl -pi -e 's/a/b/' /Users/me/repo/docs/plans/holdings.md"],
     ['perl -i.bak on a harness plan', "perl -i.bak -pe 's/a/b/' ~/.claude/plans/plan-lint.md"],
     ['git mv into docs/plans', 'git mv /tmp/draft.md docs/plans/draft.md'],
+    [
+      'sed -i on a relative plan after cd into the harness plans dir',
+      "cd ~/.claude/plans && f=screen-folders-follow-url.md && sed -i '' -e 's#a#b#' $f",
+    ],
+    ['sed -i on a relative plan after cd into docs/plans', ["cd docs/plans && sed -i '' 's/a/b/' x.md", '/Users/me/repo']],
   ];
-  for (const [name, command] of planEdits) {
+  for (const [name, entry] of planEdits) {
+    const [command, cwd] = [entry].flat();
     await t.test(`blocks ${name}`, () => {
-      const res = run(command);
+      const res = run(command, cwd);
       assert.equal(res.code, 2);
       assert.match(res.stderr, /edit plan files with Write or Edit, so plan-lint sees them/);
     });
@@ -75,6 +81,8 @@ test('bash write guard', async (t) => {
     ['sed -i on a non-plan file', "sed -i '' 's/a/b/' docs/layout.md"],
     ['sed -i one-liner', "sed -i '' 's#a#b#g' packages/core.i18n/package.json"],
     ['git mv', 'git mv packages/a/banner packages/b/banner'],
+    ['sed -n read of a plan after cd into the harness plans dir', 'cd ~/.claude/plans && sed -n 1,5p x.md'],
+    ['sed -i on a relative file after cd into /tmp', "cd /tmp && sed -i '' 's/a/b/' x.md"],
     ['stderr and null redirects', 'pnpm verify 2>&1 > /dev/null'],
     ['fd duplication', 'echo oops >&2'],
     ['scratchpad output', 'jq . a.json > /private/tmp/claude-501/x/scratchpad/out.json'],
