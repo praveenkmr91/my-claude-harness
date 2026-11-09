@@ -195,10 +195,46 @@ evidence_ids=runtime_ids+static_ids
 report_tail='; for a REPORT, the lens lines go in the message itself' if report else ''
 no_evidence_close="run the step's → verify lines in this thread and cite their output" if report else 'or reword the first line as a status, not a claim'
 no_check='no check ran since the last REPORT' if report else 'no test or runtime command ran this turn — static-clean (lint + tsc) is not done'
-failed_run_close='; a REPORT cannot be reworded' if report else ', or reword the first line as a status that names what is still red'
+failed_run_close="; a REPORT cannot be reworded — unless the plan step's → verify expects the failure: then add an `expected red: <words quoted from that verify line>` line" if report else ', or reword the first line as a status that names what is still red'
+# A fail-first step's REPORT is red by design; the quote must come from the plan so a builder cannot excuse an unplanned failure.
+def expected_red():
+    if not report: return False
+    try:
+        first=next((l for l in final.split('\n') if l.strip()),'').lstrip('*_>#` \t')
+        header=re.match(r'\[\s*REPORT\s+([A-Za-z0-9][\w-]*)\s+step\s+(\d+)\b',first,re.I)
+        label=re.search(label_open+r'expected red'+label_close+r'(.+)$',final,re.I|re.M)
+        if not (header and label): return False
+        quote=' '.join(label.group(1).strip().strip('"\'`').split())
+        if len(quote.split())<4 or not re.search(r'\bfail(?:s|ed|ing)?\b',quote,re.I): return False
+        slug,step=header.group(1),int(header.group(2))
+        tail='/plans/'+slug+'.md'
+        plan=None
+        raw=open(path).read()
+        # Walk back from each literal hit: a lazy path regex goes quadratic on a base64 run full of slashes.
+        for m in re.finditer(re.escape(tail),raw):
+            s=m.start()
+            while s>0 and not (raw[s-1].isspace() or raw[s-1] in '"\'`\\'): s-=1
+            found=raw[s:m.end()]
+            found=found[found.find('/'):]
+            if os.path.isfile(found): plan=found
+        if not plan and inp.get('cwd'):
+            fallback=os.path.join(inp['cwd'],'docs','plans',slug+'.md')
+            if os.path.isfile(fallback): plan=fallback
+        if not plan: return False
+        plan_lines=open(plan).read().split('\n')
+        # A numbered list in an earlier section (Why, Context) must not stand in for the step.
+        steps_at=next((i for i,l in enumerate(plan_lines) if re.match(r'#+\s*Steps\b',l,re.I)),-1)
+        start=next((i for i in range(steps_at+1,len(plan_lines)) if re.match(r'\s*%d\.\s'%step,plan_lines[i])),None)
+        if start is None: return False
+        end=next((i for i in range(start+1,len(plan_lines)) if re.match(r'\s*\d+\.\s|#',plan_lines[i])),len(plan_lines))
+        block=' '.join(' '.join(plan_lines[start:end]).split())
+        marker='→ verify:' if '→ verify:' in block else 'verify:'
+        if marker not in block: return False
+        return quote.lower() in block.split(marker,1)[1].lower()
+    except (OSError,ValueError): return False
 if claim_word and not browser_run and not evidence_ids:
     problems.append("DONE-CLAIM WITHOUT EVIDENCE: the first line claims "+repr(claim_word)+" but "+no_check+". Exercise the change (tests, Playwright, curl, browser) and report the output, "+no_evidence_close+report_tail+".")
-elif claim_word and any(failed(results.get(ids[-1])) for ids in (runtime_ids,static_ids) if ids):
+elif claim_word and any(failed(results.get(ids[-1])) for ids in ((static_ids,) if expected_red() else (runtime_ids,static_ids)) if ids):
     problems.append("DONE-CLAIM OVER A FAILED RUN: the first line claims "+repr(claim_word)+" but the last test or runtime command this turn failed (non-zero exit or a runner fail marker in its output). Fix the failures and rerun until green"+failed_run_close+report_tail+".")
 web=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte)\b')
 cwd=inp.get('cwd') or ''

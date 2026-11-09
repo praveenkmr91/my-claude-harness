@@ -819,6 +819,70 @@ test('done-claim gate', async (t) => {
     assert.match(noRawOutput.stderr, /REPORT WITHOUT RAW OUTPUT/);
   });
 
+  await t.test('a REPORT over a red run passes only with an expected-red quote taken from that step\'s plan verify line', () => {
+    const planText = [
+      '# Demo',
+      '## Steps',
+      '3. Rely on the existing spec.',
+      '   → verify: `pnpm vitest run` exit 0; the scroll case fails with the helper\'s line removed.',
+      '5. Add one e2e case per app.',
+      '   → verify: both playwright commands fail on the new cases only.',
+      '6. Fix it.',
+      '   → verify: the step 5 commands pass in full.',
+    ].join('\n');
+    const withPlan = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
+    fs.mkdirSync(path.join(withPlan, 'docs', 'plans'), { recursive: true });
+    fs.writeFileSync(path.join(withPlan, 'docs', 'plans', 'demo.md'), planText);
+    const scopedPlanText = [
+      '# Demo',
+      '## Why',
+      '1. First note.',
+      '5. Earlier note.',
+      '   → verify: both playwright commands fail on the new cases only.',
+      '## Steps',
+      '5. Add one e2e case per app.',
+      '   → verify: the commands pass.',
+    ].join('\n');
+    fs.writeFileSync(path.join(withPlan, 'docs', 'plans', 'demo3.md'), scopedPlanText);
+    const noPlan = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
+    const redPlaywright = { command: 'pnpm exec playwright test e2e/x.spec.ts', isError: true, output: 'Exit code 1\n  1 failed' };
+    const redLint = { command: 'pnpm lint', isError: true, output: 'Exit code 1' };
+    const opts = { send: true, lint: false, editedFile: null };
+    const body = (header, expected) => `${header} Step built.\n${expected ? `expected red: ${expected}\n` : ''}${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const quote = 'fail on the new cases only';
+    const attempt = (message, cwd, runs = [{ handback: handBack('implementer') }, redPlaywright]) => runWithResults(message, runs, { ...opts, cwd });
+
+    const passes = attempt(body('[REPORT demo step 5]', quote), withPlan);
+    assert.equal(passes.status, 0, passes.stderr);
+    const bare = attempt(body('[REPORT demo step 5]'), withPlan);
+    assert.equal(bare.status, 2);
+    assert.match(bare.stderr, /DONE-CLAIM OVER A FAILED RUN[^\n]*expected red: <words quoted from that verify line>/);
+    for (const [name, message, cwd] of [
+      ['a quote absent from that step\'s verify line', body('[REPORT demo step 6]', quote), withPlan],
+      ['a near-twin step whose verify says "fails" in other words', body('[REPORT demo step 3]', quote), withPlan],
+      ['a quote with no fail word', body('[REPORT demo step 5]', 'both playwright commands'), withPlan],
+      ['a plan file that does not exist', body('[REPORT demo step 5]', quote), noPlan],
+      ['a quote under four words', body('[REPORT demo step 5]', 'fail'), withPlan],
+      ['a slug that steers the path', body('[REPORT ../demo step 5]', quote), withPlan],
+      ['a numbered list in an earlier section standing in for the step', body('[REPORT demo3 step 5]', 'both playwright commands fail on the new cases only'), withPlan],
+    ]) {
+      const blocked = attempt(message, cwd);
+      assert.equal(blocked.status, 2, name);
+      assert.match(blocked.stderr, /DONE-CLAIM OVER A FAILED RUN/, name);
+    }
+    const lintRed = attempt(body('[REPORT demo step 5]', quote), withPlan, [{ handback: handBack('implementer') }, redPlaywright, redLint]);
+    assert.equal(lintRed.status, 2);
+    assert.match(lintRed.stderr, /DONE-CLAIM OVER A FAILED RUN/);
+
+    const harnessPlans = path.join(tmpDir, 'harness', 'plans');
+    fs.mkdirSync(harnessPlans, { recursive: true });
+    const harnessPlan = path.join(harnessPlans, 'demo2.md');
+    fs.writeFileSync(harnessPlan, planText);
+    const named = [{ prompt: `[HANDOFF demo2 step 1] Plan: ${harnessPlan}` }, { handback: handBack('implementer') }, redPlaywright];
+    const viaTranscript = attempt(body('[REPORT demo2 step 5]', quote), noPlan, named);
+    assert.equal(viaTranscript.status, 0, viaTranscript.stderr);
+  });
+
   await t.test('a compaction summary is not a typed prompt, so it keeps the lens dispatches', () => {
     const compaction = { type: 'user', isCompactSummary: true, message: { content: 'This session is being continued from a previous conversation.' } };
     const built = (between) => [{ blocks: LENS_AGENTS }, between, { handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }];
