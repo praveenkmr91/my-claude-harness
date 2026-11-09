@@ -4,6 +4,13 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Tier nudge is blind to shell-made code changes
+
+- **Evidence:** session `fdb9ac57` (DPLK-256): `git rm` of 7 source files and `sed -i` on 3 `.ts/.tsx` files under `src/widgets/invoices/` ran on the Opus main thread before any `implementer` dispatch; `opus-write-nudge.sh` fired only on the later Edit.
+- **Why parked:** one session; the rule line in `subagent-tiers.md` now names shell writes.
+- **Fix:** a Bash arm on `opus-write-nudge.sh` reusing `bash-write-guard.js`'s `SED_I` pattern plus `git rm` on source paths, with the firing / near-twin / empty-input test triple.
+- **Worth it when:** a second session runs a shell-made code change before dispatch.
+
 ### Skills have no evals
 
 - **Evidence:** 15 skills under `skills/`, none covered by a case; hooks have 726 node tests. `evals/cases/` holds only `code` and plan kinds, run by `automation/eval-run.sh` and scored by `eval-score.sh`.
