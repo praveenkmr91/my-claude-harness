@@ -18,3 +18,5 @@ description: Extract the most reusable lesson from this session, check it agains
    Pick the tier by reach: every project → global; one framework → framework ref; one repo → project memory.
 
 4. **Show** the checklist results, the verdict with a one-line reason, and the exact diff or new file. Write only on yes. Drop needs no confirmation.
+
+**`/learn report`** (`$ARGUMENTS` is exactly `report`): walk the weekly batch's reports instead of this session. Read every `~/.claude/state/learn/[0-9]*.md` newer than `~/.claude/state/learn/acked`, oldest first; none → say so and stop. Per report, take each `## Absorb` and `## Save` proposal in order: show its verdict, evidence and diff, write only on yes, skip on no; `## Dropped` lines are shown once, never acted on. After the last report, `touch ~/.claude/state/learn/acked`.

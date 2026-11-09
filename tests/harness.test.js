@@ -490,6 +490,21 @@ test('context-canary: every expected answer appears in its source file', () => {
   assert.deepEqual(failures, [], 'update the canary question in automation/context-canary.sh when moving the text');
 });
 
+test('weekly-learn: DENY covers every MCP server settings.json pre-allows plus the seven write tools', () => {
+  const defs = read('automation/weekly-learn.sh').match(/^DENY=\([\s\S]*?\)$/m)[0];
+  const denied = execFileSync('bash', ['-c', `${defs}; printf '%s\\n' "\${DENY[@]}"`], { encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean);
+  const servers = new Set(
+    JSON.parse(read('settings.json')).permissions.allow
+      .filter((rule) => rule.startsWith('mcp__'))
+      .map((rule) => rule.split('__').slice(0, 2).join('__')),
+  );
+  const required = ['Edit', 'Write', 'NotebookEdit', 'Agent', 'Bash', 'Skill', 'SendMessage', ...servers];
+  assert.ok(servers.size > 0, 'no mcp__ servers found in settings.json permissions.allow');
+  assert.deepEqual(required.filter((name) => !denied.includes(name)), [], 'add the missing names to DENY in automation/weekly-learn.sh');
+});
+
 test('block-dangerous-git.sh: every command family it guards has its own if-gate', () => {
   const families = [
     ['git', /git (push|commit|add)/],

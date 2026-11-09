@@ -39,6 +39,7 @@ $advisories"
 done
 
 bash "$HOME/.claude/automation/context-canary.sh" || failed+=("context canary (log: $HOME/.claude/state/canary)")
+bash "$HOME/.claude/automation/weekly-learn.sh" || failed+=("weekly learn (log: $HOME/.claude/state/learn)")
 
 if [ ${#failed[@]} -gt 0 ]; then
   msg="Failed: ${failed[*]}"
