@@ -22,7 +22,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 - Bulk (≥200 added lines or ≥3 new files) → /delete-list (report, never auto-apply).
 - Added web code → one lens per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.sh`.
 - a11y-audit never auto-joins.
-- Per joined lens: hand pass first, reading its definition in `~/.claude/agents/` or the pr-review-toolkit plugin's `agents/`; agent only on a lead. One reply line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`.
+- Per joined lens: hand pass first, reading its definition in `~/.claude/agents/` or the pr-review-toolkit plugin's `agents/`; agent only on a lead. One reply line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`; write a skip reason only after reading the diff, an implementer's included.
 - PR ask ("check PR", "review PR 12", a PR URL; joins show `pr=`) → the `code-review` skill on that PR, lenses scored from its diff. `--comment` only on explicit ask; the battery (`pr-review-toolkit:review-pr`) only on full / deep.
 - Auto: code edits nudge the lens list mid-turn; the Stop gate blocks a code turn's done-claim or commit ask until every named lens has its line.
 
