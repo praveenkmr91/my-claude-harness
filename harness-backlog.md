@@ -4,6 +4,13 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Done-claim gate accepts hand-written skip lines on implementer builds
+
+- **Evidence:** 2026-11-09, Hayah rename across three portals: `done-claim-gate.sh` passed hand-written `<lens>: skip — <reason>` lines on three `implementer` sweep commits (306–386 lines each), though `review-routing.md` "verify" says a hand-written findings line does not count on an implementer build. Praveen had to ask "did u review" before the diff was read.
+- **Why parked:** one session; the residue census rule (`subagent-tiers.md`) now gives the skip line something concrete to cite.
+- **Fix:** when the turn dispatched `implementer`, the gate requires each lens line to be an agent or skill run, or a skip that names the residue census; a bare reason fails. Firing / near-twin / empty-input test triple.
+- **Worth it when:** a second session ships an implementer build on skip lines alone.
+
 ### Skills have no evals
 
 - **Evidence:** 15 skills under `skills/`, none covered by a case; hooks have 726 node tests. `evals/cases/` holds only `code` and plan kinds, run by `automation/eval-run.sh` and scored by `eval-score.sh`.
