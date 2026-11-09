@@ -4,13 +4,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
-### Tier nudge is blind to shell-made code changes
-
-- **Evidence:** session `fdb9ac57` (DPLK-256): `git rm` of 7 source files and `sed -i` on 3 `.ts/.tsx` files under `src/widgets/invoices/` ran on the Opus main thread before any `implementer` dispatch; `opus-write-nudge.sh` fired only on the later Edit.
-- **Why parked:** one session; the rule line in `subagent-tiers.md` now names shell writes.
-- **Fix:** a Bash arm on `opus-write-nudge.sh` reusing `bash-write-guard.js`'s `SED_I` pattern plus `git rm` on source paths, with the firing / near-twin / empty-input test triple.
-- **Worth it when:** a second session runs a shell-made code change before dispatch.
-
 ### Skills have no evals
 
 - **Evidence:** 15 skills under `skills/`, none covered by a case; hooks have 726 node tests. `evals/cases/` holds only `code` and plan kinds, run by `automation/eval-run.sh` and scored by `eval-score.sh`.
@@ -79,12 +72,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `new-dep-gate.js`.
 - **Why parked:** the rule applies on touch; a retro-audit of every hook has no failure behind it yet.
 - **Fix:** per hook, feed `{}`, a missing transcript and an unmatched command, and assert the documented fail-open or fail-closed outcome.
-
-### Main-thread write-block is blind to shell writes
-
-- **Evidence:** `opus-write-nudge.sh` blocks the first Write|Edit of a source file per turn from an Opus-or-above main thread, but `bash-write-guard.js` deliberately passes `sed -i`, `git mv` and `.bak` restores, so the same thread can still edit source from Bash. The products-widget builder landed step 1 through `git rm -r` and `sed -i` on the main thread with no dispatch.
-- **Why parked:** closing it means teaching the Bash guard the session model and the hook's three escapes; needs one rule for both hooks, not a second guard. Measure first: the two-week census after the block (see `state/census/2026-10-22.tar.gz`, `dispatch-census.js`) shows whether writes moved to `sed -i`.
-- **Fix:** in `bash-write-guard.js`, read the live model the same way the hook does and deny `sed -i` / `perl -pi` on source extensions from an Opus-or-above main thread unless that turn carries a dispatch or a typed override, with the same message.
 
 ### Workers write source through interpreter scripts, unseen by write-time hooks
 

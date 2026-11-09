@@ -3,7 +3,9 @@
 // heredoc, redirect, tee, an inline interpreter script, or staged in scratch and copied in skips all of them.
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const SOURCE_EXT = /\.(tsx?|jsx?|mjs|cjs|vue|svelte|swift|kts?|dart|css|scss|html|json|ya?ml|toml|mdx?|csv|sh)$/;
 const DOTFILE = /(^|\/)\.[\w.-]+$/;
@@ -40,6 +42,10 @@ const PATH_TOKEN = /[\w.~$\/-]+\.[A-Za-z]+\b/g;
 const SED_I = /^\s*(?:\w+=\S*\s+)*sed\s(?:\S+\s)*?(?:-[A-Za-z]*i\S*|--in-place\S*)(?=\s|$)/;
 const PERL_I = /^\s*(?:\w+=\S*\s+)*perl\s(?:\S+\s)*?-[A-Za-z]*i\S*(?=\s|$)/;
 const GIT_MV = /^\s*(?:\w+=\S*\s+)*git\s+mv\s/;
+const GIT_RM = /^\s*(?:\w+=\S*\s+)*git\s+rm\s/;
+const FED_EDITOR = /^\s*(?:xargs(?:\s+-\S+)*\s+|.*?\s-exec(?:dir)?\s+)/;
+const NUDGE = path.join(__dirname, 'opus-write-nudge.sh');
+const DIR_WALK_CAP = 500;
 const REPO_PLANS = /(^|\/)plans\/[^/]+\.md$/;
 const RELATIVE_PATH = /^[\w.\/-]+$/;
 const MEMORY = /\/\.claude\/projects\/[^/]+\/memory\//;
@@ -184,6 +190,56 @@ function planEditTargets(command, vars, sessionCwd) {
   return found;
 }
 
+const argTokens = (segment, vars) =>
+  segment.trim().split(/\s+/).map((t) => expand(t.replace(/^['"]|['"]$/g, ''), vars)).filter(Boolean);
+
+// A moved or removed directory is judged by the files inside it: git mv src/core/a src/core/b carries no extension.
+function expandDirs(paths) {
+  return paths.flatMap((p) => {
+    if (!fs.statSync(p, { throwIfNoEntry: false })?.isDirectory()) return [p];
+    return fs.readdirSync(p, { recursive: true }).slice(0, DIR_WALK_CAP).map((f) => path.join(p, String(f)));
+  });
+}
+
+// Code edits made through the shell, for opus-write-nudge.sh to tier-gate. A sed fed its files by xargs or
+// find -exec names none, so it is gated by the directory it runs in.
+function shellCodeEdits(command, vars, sessionCwd) {
+  const named = [];
+  let unresolvedIn;
+  let cwd = sessionCwd || process.cwd();
+  const masked = maskQuoted(command);
+  for (const m of masked.matchAll(/[^;&|\n]+/g)) {
+    const segment = command.slice(m.index, m.index + m[0].length);
+    const tokens = argTokens(segment, vars);
+    if (tokens[0] === 'cd' && tokens[1] && !tokens[1].startsWith('-')) {
+      cwd = path.resolve(cwd, tokens[1]);
+      continue;
+    }
+    const fed = m[0].match(FED_EDITOR);
+    const editor = fed ? segment.slice(fed[0].length) : segment;
+    const args = argTokens(editor, vars);
+    if (SED_I.test(editor) || PERL_I.test(editor)) {
+      named.push(...args.slice(args.findIndex((t) => t === 'sed' || t === 'perl') + 1).filter((t) => !t.startsWith('-')).map((t) => path.resolve(cwd, t)));
+      if (fed) unresolvedIn = `${cwd}/`;
+    } else if (GIT_MV.test(segment) || (GIT_RM.test(segment) && !tokens.includes('--cached'))) {
+      const operands = tokens.slice(tokens.findIndex((t) => t === 'mv' || t === 'rm') + 1).filter((t) => !t.startsWith('-'));
+      const sources = GIT_MV.test(segment) ? operands.slice(0, -1) : operands;
+      named.push(...expandDirs(sources.map((t) => path.resolve(cwd, t))));
+    }
+  }
+  return { named, unresolvedIn };
+}
+
+function tierGate(input, { named, unresolvedIn }) {
+  if (named.length === 0 && !unresolvedIn) return;
+  const payload = { ...input, tool_input: { shell_targets: named, unresolved_in: unresolvedIn } };
+  const res = spawnSync('bash', [NUDGE], { input: JSON.stringify(payload), encoding: 'utf8', timeout: 4000 });
+  if (res.status === 2) {
+    process.stderr.write(res.stderr);
+    process.exit(2);
+  }
+}
+
 let raw = '';
 process.stdin.on('data', (chunk) => (raw += chunk));
 process.stdin.on('end', () => {
@@ -211,7 +267,10 @@ process.stdin.on('end', () => {
   const targets = [
     ...new Set([...shellTargets(shellOnly, vars, sessionCwd), ...interpreterTargets(executed, vars, sessionCwd)]),
   ];
-  if (targets.length === 0) process.exit(0);
+  if (targets.length === 0) {
+    tierGate(input, shellCodeEdits(shellOnly, vars, sessionCwd));
+    process.exit(0);
+  }
 
   process.stderr.write(
     `BLOCKED: shell write to ${targets.join(', ')}. Use Write or Edit to create or change source, config and doc files — ` +

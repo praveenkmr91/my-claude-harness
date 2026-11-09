@@ -195,3 +195,72 @@ test('opus write nudge', async (t) => {
     assert.equal(res.stderr, '');
   });
 });
+
+const GUARD_PATH = path.join(ROOT, 'hooks', 'bash-write-guard.js');
+const repo = path.join(tmpDir, 'repo');
+fs.mkdirSync(path.join(repo, 'src/core/old/pkg'), { recursive: true });
+fs.writeFileSync(path.join(repo, 'src/core/old/pkg/index.ts'), '');
+fs.mkdirSync(path.join(repo, 'docs/old'), { recursive: true });
+fs.writeFileSync(path.join(repo, 'docs/old/notes.md'), '');
+
+function runGuard(command, { transcriptPath = transcripts.opusNoDispatch, cwd = repo, agentId } = {}) {
+  const payload = { session_id: newSession(), agent_id: agentId, transcript_path: transcriptPath, cwd, tool_input: { command } };
+  const res = spawnSync('node', [GUARD_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
+  return { code: res.status, stderr: res.stderr };
+}
+
+test('shell code edits relayed by bash-write-guard', async (t) => {
+  const renameSweep = "git mv src/core/old src/core/new && git grep -lI '@old/' | xargs sed -i '' -e 's#@old/#@new/#g'";
+
+  const blocked = [
+    ['the 2026-11-09 rename sweep, verbatim in shape', renameSweep],
+    ['git mv of a directory holding code', 'git mv src/core/old src/core/new'],
+    ['sed -i fed by xargs', "git grep -l x | xargs sed -i '' 's/x/y/g'"],
+    ['sed -i through find -exec', "find src -name '*.ts' -exec sed -i '' 's/x/y/' {} +"],
+    ['sed -i on a named source file', "sed -i '' 's/a/b/' src/a.tsx"],
+    ['perl -pi on a named source file', "perl -pi -e 's/a/b/' src/a.ts"],
+    ['git rm of a source file', 'git rm src/a.ts'],
+    ['sed -i after cd into the repo', `cd ${repo} && sed -i '' 's/a/b/' src/a.ts`],
+  ];
+  for (const [name, command] of blocked) {
+    await t.test(`blocks ${name} from an opus turn with no dispatch`, () => {
+      const { code, stderr } = runGuard(command);
+      assert.equal(code, 2);
+      assert.match(stderr, /implementer/);
+    });
+  }
+
+  await t.test('the rename sweep passes once implementer was dispatched this turn', () => {
+    assert.equal(runGuard(renameSweep, { transcriptPath: transcripts.opusDispatchedThisTurn }).code, 0);
+  });
+
+  await t.test('the rename sweep passes below opus and from a subagent', () => {
+    assert.equal(runGuard(renameSweep, { transcriptPath: transcripts.sonnetTyped }).code, 0);
+    assert.equal(runGuard(renameSweep, { agentId: 'agent-1' }).code, 0);
+  });
+
+  const quiet = [
+    ['sed without -i', "sed -n '1,5p' src/a.tsx"],
+    ['sed -i on config', "sed -i '' 's/a/b/' package.json"],
+    ['git mv of a docs-only directory', 'git mv docs/old docs/new'],
+    ['git rm --cached', 'git rm --cached src/a.ts'],
+    ['sed -i quoted inside a grep pattern', 'grep -n "x | sed -i y" hooks/x.js'],
+    ['sed -i on a session scratchpad file', "sed -i '' 's/a/b/' /private/tmp/claude-501/-Users-p-repo/f503/scratchpad/probe.ts"],
+    ['sed -i on a harness hook', `sed -i '' 's/a/b/' ${path.join(os.homedir(), '.claude/hooks/x.sh')}`],
+  ];
+  for (const [name, command] of quiet) {
+    await t.test(`stays quiet on ${name}`, () => {
+      assert.equal(runGuard(command).code, 0);
+    });
+  }
+
+  await t.test('xargs sed run from the harness directory stays quiet', () => {
+    assert.equal(runGuard("git grep -l x | xargs sed -i '' 's/x/y/'", { cwd: path.join(os.homedir(), '.claude') }).code, 0);
+  });
+
+  await t.test('fails open with no transcript', () => {
+    const { code, stderr } = runGuard(renameSweep, { transcriptPath: path.join(tmpDir, 'missing.jsonl') });
+    assert.equal(code, 0);
+    assert.equal(stderr, '');
+  });
+});
