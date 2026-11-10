@@ -105,6 +105,11 @@ test('a session loads user settings only and every user allow rule reaches it as
       assert.ok(!denied.includes(rule), `${rule} present in ${JSON.stringify(denied)}`);
     }
     assert.match(args[args.indexOf('-p') + 1], /CLAUDE\.md/);
+    const scripts = path.join(home, '.claude', 'skills', 'a11y-audit', 'scripts');
+    assert.deepEqual(flagValues(args, '--allowedTools'), [
+      'Read', 'Grep', 'Glob', 'Skill(delete-audit)', 'Skill(improve-codebase-architecture)', 'Skill(a11y-audit)',
+      `Bash(python3 ${scripts}/contrast_checker.py *)`, `Bash(python3 ${scripts}/a11y_scanner.py *)`,
+    ]);
   }
 });
 

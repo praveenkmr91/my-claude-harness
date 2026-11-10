@@ -160,16 +160,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** digest only the records stamped after the cursor's time; `user` and `assistant` records carry an ISO `timestamp` in UTC whose first 19 characters compare as strings, so the cursor's local mtime is rendered in UTC first (`date -u -r <cursor> +%Y-%m-%dT%H:%M:%S`).
 - **Worth it when:** a weekly report proposes a lesson that an earlier report already proposed from the same session.
 
-### Weekly audit's allow list is wider than its prompt needs
-
-- **Evidence:** `weekly-audit.sh`'s `ALLOW` holds a bare `Skill` and `Bash(python3 $SCRIPTS/*)`.
-    - Bare `Skill` lets the session run any user or plugin command, and a command's `allowed-tools` becomes a session allow under `dontAsk`. pr-review-toolkit's `commands/review-pr.md:4` grants a bare `Bash`, so one `/pr-review-toolkit:review-pr` call opens every shell command (read from the 2.1.319 binary and the plugin cache; unprobed).
-    - The `*` in the python3 rule matches `../`, so `python3 $SCRIPTS/../../../../<repo>/tools/x.py` runs a script the repo ships. No path normalisation was found in the binary's Bash rule matching (unprobed). `scripts/` holds only `a11y_scanner.py` and `contrast_checker.py`.
-    - A skill or command the repo itself ships is not discovered under `--setting-sources user` (its discovery is gated on project settings in the binary; unprobed).
-- **Why parked:** the allow line predates the read-only plan, and a wrong `Skill(...)` rule shows up only as a failed Monday audit, so narrowing it waits for a live probe.
-- **Fix:** `ALLOW` names `Skill(delete-audit)`, `Skill(improve-codebase-architecture)`, `Skill(a11y-audit)`, `Bash(python3 $SCRIPTS/contrast_checker.py *)` and `Bash(python3 $SCRIPTS/a11y_scanner.py *)`; a `-p` probe confirms the three skills still run and another skill is denied.
-- **Worth it when:** before the next audited repo outside Praveen's own, or the first audit report that names a skill outside the three.
-
 ### Git guard misses command shapes that sessions do not use
 
 - **Evidence:** replayed through `hooks/block-dangerous-git.sh`, 19 commands that should be denied pass (commit `-a` after the message, `git add -- .`, a forced branch delete written `-d -f`, `mv` or `unlink` of a lockfile, a push from the backup repo to another remote or behind `stdbuf`), 5 harmless ones are denied (a message or search pattern that mentions a guarded command), and the guard is not started behind `env`, `command`, `nohup`, `bash -c` or `eval`. A census of 57,796 Bash calls in 3,380 transcripts holds none of those shapes but one, `git -C <dir> add -A` (11 calls), which the guard now denies.
