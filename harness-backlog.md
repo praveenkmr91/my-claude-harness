@@ -153,3 +153,27 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** cause unknown.
 - **Fix:** read the 8 prompts' tool inputs for a shared shape (socket-path address, cross-project target).
 - **Worth doing when:** it prompts again.
+
+### Weekly learn re-reads a resumed session whole
+
+- **Evidence:** `learn-digest.sh` selects by file modification time (`find -newer <cursor>`) and digests the whole file, so a session digested one week and resumed the next is read again from its first record (or from the head-cut point, for a session over the file cap) and a lesson from its first part can be proposed twice. Unobserved: one weekly run on record, and `state/learn/cursor` was absent after it although `state/learn/2026-11-09.md` exists, so no run has yet started from a cursor.
+- **Why parked:** the case has not been seen, and the digest's size cap has never been hit (155,129 of 409,600 bytes in the one run).
+- **Fix:** digest only the records stamped after the cursor's time; `user` and `assistant` records carry an ISO `timestamp` in UTC whose first 19 characters compare as strings, so the cursor's local mtime is rendered in UTC first (`date -u -r <cursor> +%Y-%m-%dT%H:%M:%S`).
+- **Worth it when:** a weekly report proposes a lesson that an earlier report already proposed from the same session.
+
+### Weekly audit's allow list is wider than its prompt needs
+
+- **Evidence:** `weekly-audit.sh`'s `ALLOW` holds a bare `Skill` and `Bash(python3 $SCRIPTS/*)`.
+    - Bare `Skill` lets the session run any user or plugin command, and a command's `allowed-tools` becomes a session allow under `dontAsk`. pr-review-toolkit's `commands/review-pr.md:4` grants a bare `Bash`, so one `/pr-review-toolkit:review-pr` call opens every shell command (read from the 2.1.319 binary and the plugin cache; unprobed).
+    - The `*` in the python3 rule matches `../`, so `python3 $SCRIPTS/../../../../<repo>/tools/x.py` runs a script the repo ships. No path normalisation was found in the binary's Bash rule matching (unprobed). `scripts/` holds only `a11y_scanner.py` and `contrast_checker.py`.
+    - A skill or command the repo itself ships is not discovered under `--setting-sources user` (its discovery is gated on project settings in the binary; unprobed).
+- **Why parked:** the allow line predates the read-only plan, and a wrong `Skill(...)` rule shows up only as a failed Monday audit, so narrowing it waits for a live probe.
+- **Fix:** `ALLOW` names `Skill(delete-audit)`, `Skill(improve-codebase-architecture)`, `Skill(a11y-audit)`, `Bash(python3 $SCRIPTS/contrast_checker.py *)` and `Bash(python3 $SCRIPTS/a11y_scanner.py *)`; a `-p` probe confirms the three skills still run and another skill is denied.
+- **Worth it when:** before the next audited repo outside Praveen's own, or the first audit report that names a skill outside the three.
+
+### audit-due.sh copies the report through a repo symlink
+
+- **Evidence:** `hooks/audit-due.sh:25` runs `cp "$REPORT" "$TOP/docs/audits/audit.md"`, and `cp` writes through a destination symlink (scratchpad probe). A repo that tracks `docs/audits/audit.md` as a symlink to, say, `~/.claude/CLAUDE.md` gets that file overwritten with last week's report at the next session start there, report text the repo can steer.
+- **Why parked:** found by the weekly-automation review outside that plan's scope; the one audited repo is Praveen's own.
+- **Fix:** skip the landing when `docs/audits` or `docs/audits/audit.md` is a symlink, or its resolved path falls outside `$TOP`. Firing / near-twin / empty-input test triple.
+- **Worth it when:** before the next audited repo outside Praveen's own.

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Usage: learn-digest.sh <projects-root> <cursor> <out-dir>
-# One digest per kept session under <out-dir>; sessions past the set cap are listed in <out-dir>/skipped.txt.
+# Sessions are taken oldest first. One digest per kept session under <out-dir>; the newer sessions past the set cap are
+# listed in <out-dir>/skipped.txt, and <out-dir>/kept-until, an empty file with the newest kept session's modification
+# time, exists when any were skipped.
 set -u -o pipefail
 export PATH="/opt/homebrew/bin:/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/bin:/bin"
 
@@ -59,11 +61,12 @@ with open(out, "w", encoding="utf-8", errors="replace") as f:
 PY
 
 if [ -e "$cursor" ]; then recent=(-newer "$cursor"); else recent=(-mtime -7); fi
-files=$(find "$root" -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' "${recent[@]}" -exec stat -f '%m %N' -- {} + | sort -rn | cut -d' ' -f2-)
+files=$(find "$root" -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' "${recent[@]}" -exec stat -f '%Fm %N' -- {} + | sort -k1,1n -k2) || { echo "learn-digest: cannot list sessions" >&2; exit 1; }
 
 total=0
 failed=0
-while IFS= read -r file; do
+last_kept_mtime=
+while IFS=' ' read -r mtime file; do
   [ -n "$file" ] || continue
   # The marker is read from raw string content only: a tool result is an array and may quote it.
   summary=$(jq -R -n -r -L "$LIB" 'include "turns";
@@ -78,7 +81,13 @@ while IFS= read -r file; do
   IFS=$'\t' read -r ran_learn typed cwd <<<"$summary"
   [ "$ran_learn" = false ] && [ "$typed" -ge 3 ] || continue
 
-  if [ "$total" -ge "$set_cap" ]; then
+  if [ "$total" -ge "$set_cap" ] && [ "$mtime" != "$last_kept_mtime" ]; then
+    if [ -n "$last_kept_mtime" ]; then
+      # UTC on both: a local stamp inside a DST fall-back hour is ambiguous and touch picks the earlier instant.
+      stamp=$(TZ=UTC date -r "${last_kept_mtime%%.*}" +%Y-%m-%dT%H:%M:%S) \
+        && TZ=UTC touch -d "$stamp.${last_kept_mtime#*.}" "$out/kept-until" \
+        || { echo "learn-digest: cannot write $out/kept-until" >&2; exit 1; }
+    fi
     printf '%s\n' "$file" >> "$out/skipped.txt" || { echo "learn-digest: cannot write $out/skipped.txt" >&2; exit 1; }
     continue
   fi
@@ -89,6 +98,7 @@ while IFS= read -r file; do
        | (typed_text | {k: "user", t: .}), (assistant_text | {k: "assistant", t: .})' -- "$file" \
      | python3 -c "$WRITE_DIGEST" "# $file · repo $cwd" "$file_cap" "$digest"; then
     total=$((total + $(stat -f %z -- "$digest")))
+    last_kept_mtime=$mtime
   else
     echo "learn-digest: cannot digest $file" >&2
     failed=1

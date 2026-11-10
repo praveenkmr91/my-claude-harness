@@ -130,12 +130,12 @@ test('a file under its cap has no cut line', () => {
   assert.equal(read(out, 'short').some((line) => line.startsWith('[head cut')), false);
 });
 
-test('past the set cap the crossing session is kept and the older ones are listed newest first', () => {
+test('past the set cap the oldest sessions are kept and the newer ones are listed oldest first', () => {
   const root = freshDir('root');
   const probeOut = path.join(freshDir('out'), 'digest');
   const out = path.join(freshDir('out'), 'digest');
   const newest = session(root, 'aaa-newest', FOUR_PROMPTS, { ageSeconds: 300 });
-  session(root, 'bbb-middle', FOUR_PROMPTS, { ageSeconds: 600 });
+  const middle = session(root, 'bbb-middle', FOUR_PROMPTS, { ageSeconds: 600 });
   const older = session(root, 'ccc-older', FOUR_PROMPTS, { ageSeconds: 900 });
   const oldest = session(root, 'ddd-oldest', FOUR_PROMPTS, { ageSeconds: 1200 });
   session(root, 'eee-learn', [...FOUR_PROMPTS, skillCall('learn')], { ageSeconds: 1500 });
@@ -143,13 +143,33 @@ test('past the set cap the crossing session is kept and the older ones are liste
   assert.equal(run(root, NO_CURSOR, probeOut).status, 0);
   const one = fs.statSync(path.join(probeOut, 'aaa-newest.md')).size;
   assert.equal(fs.existsSync(path.join(probeOut, 'skipped.txt')), false);
+  assert.equal(fs.existsSync(path.join(probeOut, 'kept-until')), false);
 
   const result = run(root, NO_CURSOR, out, { LEARN_DIGEST_SET_CAP: String(one + 1) });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(digests(out), ['aaa-newest.md', 'bbb-middle.md']);
-  assert.equal(fs.readFileSync(path.join(out, 'skipped.txt'), 'utf8'), `${older}\n${oldest}\n`);
-  assert.equal(read(out, 'aaa-newest')[0], `# ${newest} · repo `);
+  assert.deepEqual(digests(out), ['ccc-older.md', 'ddd-oldest.md']);
+  assert.equal(fs.readFileSync(path.join(out, 'skipped.txt'), 'utf8'), `${middle}\n${newest}\n`);
+  assert.equal(read(out, 'ddd-oldest')[0], `# ${oldest} · repo `);
+  const keptUntil = fs.statSync(path.join(out, 'kept-until'), { bigint: true });
+  assert.equal(keptUntil.size, 0n);
+  assert.equal(keptUntil.mtimeNs, fs.statSync(older, { bigint: true }).mtimeNs);
+});
+
+test('sessions tied with the last kept one are kept past the cap', () => {
+  const root = freshDir('root');
+  const out = path.join(freshDir('out'), 'digest');
+  const first = session(root, 'aaa-first', FOUR_PROMPTS);
+  const second = session(root, 'bbb-second', FOUR_PROMPTS);
+  const tied = new Date(Date.now() - 600 * 1000);
+  for (const file of [first, second]) fs.utimesSync(file, tied, tied);
+
+  const result = run(root, NO_CURSOR, out, { LEARN_DIGEST_SET_CAP: '1' });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(digests(out), ['aaa-first.md', 'bbb-second.md']);
+  assert.equal(fs.existsSync(path.join(out, 'skipped.txt')), false);
+  assert.equal(fs.existsSync(path.join(out, 'kept-until')), false);
 });
 
 test('no cursor file reads the last 7 days; a cursor file reads what is newer than it', () => {

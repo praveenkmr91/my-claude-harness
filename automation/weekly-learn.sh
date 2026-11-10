@@ -45,9 +45,16 @@ if (cd "$HOME/.claude" && claude -p "$PROMPT" --output-format json --model opus 
       > "$state/$day.json" 2> "$state/$day.err" \
    && jq -e '.is_error == false' "$state/$day.json" > /dev/null \
    && jq -r '.result' "$state/$day.json" > "$state/$day.md"; then
-  mv "$marker" "$state/cursor"
+  if [ -e "$digest/kept-until" ]; then
+    mv "$digest/kept-until" "$state/cursor"
+    rm -f "$marker"
+  else
+    mv "$marker" "$state/cursor"
+  fi
   proposals=$(grep -c '^## \(Absorb\|Save\)' "$state/$day.md")
-  osascript -e "display notification \"Weekly learn report ready: $proposals proposals\" with title \"Weekly learn\""
+  deferred=
+  if [ -s "$digest/skipped.txt" ]; then deferred=", $(wc -l < "$digest/skipped.txt" | tr -d ' ') sessions deferred"; fi
+  osascript -e "display notification \"Weekly learn report ready: $proposals proposals$deferred\" with title \"Weekly learn\""
   exit 0
 fi
 
