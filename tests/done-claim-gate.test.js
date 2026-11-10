@@ -819,6 +819,23 @@ test('done-claim gate', async (t) => {
     assert.match(noRawOutput.stderr, /REPORT WITHOUT RAW OUTPUT/);
   });
 
+  await t.test('a queued message with a pasted image does not crash the gate', () => {
+    const imageAttachment = { type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', prompt: [{ type: 'text', text: '[Image #2]' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '' } }] } };
+    const result = runWithResults('Looking at the screenshot now.', [{ record: imageAttachment }], { lint: false, editedFile: null });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+  });
+
+  await t.test('a peer STOP queued alongside an image still counts as a stop', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+    const stopEnvelope = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[STOP demo] Stop after this step and report.\n</cross-session-message>';
+    const stopAttachment = { type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', isMeta: true, prompt: [{ type: 'text', text: stopEnvelope }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '' } }] } };
+    const redCheck = { command: 'pnpm verify', isError: true, output: 'Exit code 1\nℹ fail 1' };
+    const opts = { send: true, lint: false, editedFile: null };
+    const build = [{ handback: handBack('implementer') }, redCheck];
+    assert.equal(runWithResults(report, [...build, { record: stopAttachment }], opts).status, 0);
+  });
+
   await t.test('a REPORT over a red run passes only with an expected-red quote taken from that step\'s plan verify line', () => {
     const planText = [
       '# Demo',

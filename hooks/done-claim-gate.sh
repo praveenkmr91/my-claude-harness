@@ -92,7 +92,7 @@ for line in transcript:
         if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'about to write source' in str(b.get('content','')) for b in c or []): nudged=True
     elif t=='attachment':
         origin=r.get('attachment',{}).get('origin',{})
-        if stop_msg.search(r.get('attachment',{}).get('prompt') or ''): stopped=True
+        if stop_msg.search(result_text(r.get('attachment',{}).get('prompt'))): stopped=True
         if origin.get('handback') and origin.get('name')=='implementer': handback(origin)
     elif t=='assistant':
         for b in r.get('message',{}).get('content') or []:
