@@ -192,6 +192,16 @@ test('check P1', async (t) => {
     assert.deepEqual(rulesOf(['| Field | Source |', '| --- | --- |', '| we found | sample |'].join('\n')), ['P1']);
   });
 
+  await t.test('passes interface wording: re.I, I/O, not-found, initially collapsed', () => {
+    const text = 'Pass flags=re.I to the I/O reader.\nThe not-found page renders with the panel initially collapsed.\n';
+    assert.deepEqual(rulesOf(text), []);
+  });
+
+  await t.test('still fails the journal twins of that wording', () => {
+    const text = 'The reader failed. I retried it.\nThe page was not found.\nInitially the panel was built as a modal.\n';
+    assert.deepEqual(rulesOf(text), ['P1', 'P1', 'P1']);
+  });
+
   await t.test('passes "Sampled on ocbc-dev" and "i.e."', () => {
     assert.equal(check('Sampled on ocbc-dev, i.e. the shared contact.\n').code, 0);
   });
@@ -304,6 +314,13 @@ test('check P4', async (t) => {
   await t.test('fails an Open bullet spanning four lines', () => {
     const text = ['## Open', '', '- first line', '  second', '  third', '  fourth'].join('\n');
     assert.deepEqual(check(text).findings, ['3 P4 - first line']);
+  });
+
+  await t.test('reads any heading that opens with Open, not one that merely starts with the letters', () => {
+    const bullet = ['', '- first line', '  second', '  third', '  fourth'];
+    assert.deepEqual(rulesOf(['## Open questions', ...bullet].join('\n')), ['P4']);
+    assert.deepEqual(rulesOf(['## OpenAPI contract', ...bullet].join('\n')), []);
+    assert.deepEqual(rulesOf(['## Open-source licences', ...bullet].join('\n')), []);
   });
 
   await t.test('passes Open bullets of up to three lines, and long bullets elsewhere', () => {

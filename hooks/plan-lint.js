@@ -11,9 +11,13 @@ const NAME_CRITERIA = 'name each criterion in the step that delivers it';
 const WRITE_PARSEABLE = 'write steps as `1. **`, `1.1 **`, `### 1.` or `## Step 1`, and criteria as `- A1` bullets';
 const DRAFT_TITLE_ONLY = 'keep the draft chunk to its title, criteria and files; detail it once the previous chunk lands';
 
-const FIRST_PERSON = /\bI\b/;
-const JOURNAL_MARKER =
-  /\b(we|found|turned out|turns out|investigated|investigation|probably|apparently|it seems|note that|interestingly|initially|originally|previously|at first)\b/i;
+// Interface wording is not a journal: `re.I`, `I/O`, `not-found`, `initially collapsed`.
+const FIRST_PERSON = /(?<![\w./-])I(?![\w/-])/;
+const UI_STATE = 'collapsed|expanded|open|closed|hidden|visible|shown|selected|checked|unchecked|disabled|enabled|empty|focused';
+const JOURNAL_MARKER = new RegExp(
+  `(?<![\\w-])(we|found|turned out|turns out|investigated|investigation|probably|apparently|it seems|note that|interestingly|initially(?! (?:${UI_STATE})\\b)|originally|previously|at first)(?![\\w-])`,
+  'i',
+);
 
 const FENCE = /^\s*```/;
 const MASKED_SPAN = /`[^`\n]*`|"[^"\n]*"|“[^”\n]*”/g;
@@ -24,7 +28,7 @@ const RESEARCH_HEADING =
   /\b(sampled|traced|journey|findings?|research|investigation|log|notes|history|vs\.?|addendum|unverified)\b|\d{4}-\d{2}-\d{2}/i;
 const DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 const CONTEXT_HEADING = /^## Context\s*$/;
-const OPEN_HEADING = /^## Open\s*$/;
+const OPEN_HEADING = /^## Open(\s|$)/;
 const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
 const INDENTED = /^\s{2,}\S/;
 const VERIFY_LINE = /^\s*→ verify/;

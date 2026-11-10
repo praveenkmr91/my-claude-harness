@@ -230,13 +230,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** pin the server, remove the duplicates, track `scripts/`.
 - **Worth it when:** `settings.json` is next cleaned up, or a browser server update breaks a session.
 
-### Plan lint fires on interface wording
-
-- **Evidence:** usage census: 555 lint blocks, P6 218, P4 50, P1 42, P9 3. P6 samples are dates and names, as intended; the false P1 fires (`re.I`, "initially collapsed", "not-found page", "I/O") are at most part of 42. Two were hit on 2026-11-10 while writing `plans/usage-fixes.md`.
-- **Why parked:** each false fire costs one reworded line.
-- **Fix:** the journal-word and first-person checks skip code spans and the listed interface phrases; the Open-item length check reads any heading that opens with Open.
-- **Worth it when:** a plan needs a third reword for the same phrase.
-
 ### Smaller sweep leftovers
 
 - **Evidence:** `plans/harness-sweep.research.md`: `CLAUDE.md` sits exactly at its 1,399-word ceiling, so any added rule needs another moved out; the review join for "an ask naming shared state, public API or a money-moving mutation" has no code behind it; `evals/results.md` is overwritten each run, so evidence a rule doc cites does not survive.
