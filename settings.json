@@ -616,11 +616,11 @@
       "In-place edits (`sed -i`, `perl -pi`) to git-tracked files inside a trusted repo are not Irreversible Local Destruction — the prior content is recoverable from git. Untracked or .gitignored files, and paths outside a trusted repo, are not covered.",
       "Stopping a localhost dev server (vite, rsbuild, node) that this session started — `kill <pid>` on a PID the session itself launched or found listening on that repo's own dev port — is not Interfere With Workloads. `kill -9` on other processes, `killall`, `pkill` by pattern, and processes the session did not start are not covered.",
       "`git worktree remove` (without `--force`) on a worktree Claude created under the session scratchpad or a repo's `.claude/worktrees/` — git refuses a dirty worktree. Chaining `&& git branch -D <branch>` for the branch that worktree had checked out is covered too: the `&&` skips the delete when git refuses the removal. `--force`, `git worktree prune` of others' worktrees, and deleting any other branch are not covered.",
-      "An Agent dispatch with model fable onto a read-only review agent (`Plan`, `*review*`, `*analyzer*`) whose prompt carries `[tier-override: <why>]` is not Auto-Mode Bypass when the user's most recent typed message asked for a Fable review or consult in any wording, and the override's <why> quotes that message. Not covered: an override with no such user ask, Fable onto `general-purpose` or any agent that can write, or any other hook denial."
+      "An Agent dispatch with model fable onto a read-only review agent (`Plan`, `*review*`, `*analyzer*`) whose prompt carries `[tier-override: <why>]` is not Auto-Mode Bypass when the user's most recent typed message asked for a Fable review or consult in any wording, and the override's <why> quotes that message. Not covered: an override with no such user ask, Fable onto `general-purpose` or any agent that can write, or any other hook denial.",
+      "In @additiv-hydrogen repos, `npx eslint --fix <file>` on touched files is routine. Project scripts run through `npm run`, `pnpm run`, `yarn run` or `bun run` (lint, eject:hydrogen, eject:css, upload:resourceset included) are pre-authorised by the user and are not Modify Shared Resources; `upload:resourceset` still gets a `--dry-run` diff first"
     ],
     "soft_deny": [
-      "$defaults",
-      "In @additiv-hydrogen repos, `npx eslint --fix <file>` on touched files is routine. Project scripts run through `npm run`, `pnpm run`, `yarn run` or `bun run` (lint, eject:hydrogen, eject:css, upload:resourceset included) are pre-authorised by the user and are not Modify Shared Resources; `upload:resourceset` still gets a `--dry-run` diff first"
+      "$defaults"
     ],
     "environment": [
       "### Org-wide",
