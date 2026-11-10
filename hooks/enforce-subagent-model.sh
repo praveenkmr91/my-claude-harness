@@ -43,6 +43,18 @@ rank() {
   esac
 }
 
+declares_own_model() {
+  local definition="$HOME/.claude/agents/$1.md"
+  [ -r "$definition" ] || return 1
+  local declared
+  declared=$(awk '
+    NR == 1 && $0 != "---" { exit }
+    NR > 1 && $0 == "---" { exit }
+    /^model:/ { sub(/^model:[ \t]*/, ""); gsub(/[ \t\r"\047]/, ""); print; exit }
+  ' "$definition")
+  [ -n "$declared" ] && [ "$declared" != "inherit" ]
+}
+
 session_model=""
 fable_asked=false
 sonnet_battery_asked=false
@@ -132,9 +144,11 @@ if [ -z "$child_model" ]; then
   if [ "$is_brain_agent" = true ] && [ "$session_rank" -eq 4 ] && [ "$fable_asked" != true ]; then
     inject "opus"
   fi
-  # Fable never writes code: a worker or general-purpose dispatch from a Fable session is
-  # placed on opus rather than inheriting (the /simplify skill fans out general-purpose).
-  if [ "$is_brain_agent" != true ] && [ "$session_rank" -eq 4 ]; then
+  # Fable never writes code: a general-purpose dispatch, or a worker whose definition names no
+  # model, is placed on opus rather than inheriting (the /simplify skill fans out
+  # general-purpose). An injected model would override the agent's own, so a worker whose
+  # definition declares one (implementer, checker) is left alone.
+  if [ "$is_brain_agent" != true ] && [ "$session_rank" -eq 4 ] && ! declares_own_model "$subagent_type"; then
     inject "opus"
   fi
   # A bare general-purpose dispatch from an Opus session inherited Opus for a settled-design

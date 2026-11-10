@@ -245,8 +245,20 @@ test.describe('subagent tier hook', () => {
     );
   });
 
-  test('implementer, no model, fable session, user asked for Fable -> inject:opus (Fable never writes)', () => {
-    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.fableAsked })), 'inject:opus');
+  test("implementer, no model, fable session, user asked for Fable -> inherit (the agent's declared model applies)", () => {
+    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.fableAsked })), 'inherit');
+  });
+
+  test("implementer, no model, fable session -> inherit (the agent's declared model applies)", () => {
+    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.fable })), 'inherit');
+  });
+
+  test("checker, no model, fable session -> inherit (the agent's declared model applies)", () => {
+    assert.equal(verdict(payload({ subagentType: 'checker', transcriptPath: transcripts.fable })), 'inherit');
+  });
+
+  test('agent type with no definition file, no model, fable session -> inject:opus', () => {
+    assert.equal(verdict(payload({ subagentType: 'no-such-agent', transcriptPath: transcripts.fable })), 'inject:opus');
   });
 
   test('general-purpose, no model, fable session -> inject:opus', () => {
