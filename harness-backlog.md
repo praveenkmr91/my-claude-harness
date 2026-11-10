@@ -177,3 +177,10 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** found by the weekly-automation review outside that plan's scope; the one audited repo is Praveen's own.
 - **Fix:** skip the landing when `docs/audits` or `docs/audits/audit.md` is a symlink, or its resolved path falls outside `$TOP`. Firing / near-twin / empty-input test triple.
 - **Worth it when:** before the next audited repo outside Praveen's own.
+
+### Git guard misses command shapes that sessions do not use
+
+- **Evidence:** replayed through `hooks/block-dangerous-git.sh`, 19 commands that should be denied pass (commit `-a` after the message, `git add -- .`, a forced branch delete written `-d -f`, `mv` or `unlink` of a lockfile, a push from the backup repo to another remote or behind `stdbuf`), 5 harmless ones are denied (a message or search pattern that mentions a guarded command), and the guard is not started behind `env`, `command`, `nohup`, `bash -c` or `eval`. A census of 57,796 Bash calls in 3,380 transcripts holds none of those shapes but one: `git -C <dir> add -A`, 11 calls, 8 in task worktrees or checkouts and 3 in scratch folders.
+- **Why parked:** the hook blocks the shapes sessions use. The rewrite (token scan, one plain form for the backup push, 17 more `if` entries) went through two cold reads and still had open gaps.
+- **Fix:** smallest first: the bulk-add pattern allows git's global options between `git` and `add`. The full rewrite only on new evidence.
+- **Worth it when:** a transcript shows a missed shape staging, pushing or deleting something it should not have.
