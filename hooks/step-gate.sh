@@ -33,7 +33,7 @@ EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "
   (select(.type? == "attachment") | .attachment.prompt? | strings | select(test($handoff)) | "O"),
   (select(.type? == "user") | .message.content[]? | select(.type? == "tool_result" and .is_error? == true) | "E \(.tool_use_id)"),
   (select(.type? == "assistant") | .message.content[]? | select(.type? == "tool_use") |
-    if .name == "Agent" then (select(.input.subagent_type? == "checker") | "C"),
+    if .name == "Agent" then (select(.input.subagent_type? == "checker") | "C \(.id)"),
       (select(.input.subagent_type? == "implementer") | .input.prompt? // "" | match($planpath; "g") | "P " + .string),
       (select(.input.subagent_type? == "dry-runner" and (.input.prompt? // "" | test($plan))) | "R \(.id)"),
       (select(.input.subagent_type? == "implementer" and (.input.prompt? // "" | [skips] | any(. == "review"))) | "R \(.id)")
@@ -54,6 +54,8 @@ keep_existing_plans() {
   while IFS= read -r line; do
     if [[ $line != "P "* ]]; then printf '%s\n' "$line"; continue; fi
     plan=${line#P }
+    # PLAN_PATH captures markdown or bracket decoration in front of the path (`**docs/plans/x.md**`).
+    while [[ $plan == [\*\(\<]* ]]; do plan=${plan:1}; done
     case $plan in
       \~/*) plan=$HOME/${plan#\~/} ;;
       /*) ;;
@@ -67,7 +69,7 @@ MISSING=$(printf '%s\n' "$EVENTS" "$PROMPT_EVENTS" \
   | keep_existing_plans \
   | awk '$0 == "H" { h = 1; c = sc = sk = ss = 0; delete cs; delete ks; delete es; next }
     $0 == "O" { delete rs; p = 0; next }
-    $0 == "P" { p = 1 } $0 == "C" { c = 1 } $1 == "C" && NF == 2 { cs[$2] = 1 } $1 == "K" { ks[$2] = 1 } $1 == "E" { es[$2] = 1; delete rs[$2] } $1 == "R" { rs[$2] = 1 }
+    $0 == "P" { p = 1 } $1 == "C" && NF == 2 { cs[$2] = 1 } $1 == "K" { ks[$2] = 1 } $1 == "E" { es[$2] = 1; delete rs[$2] } $1 == "R" { rs[$2] = 1 }
     $0 == "S check" { sc = 1 } $0 == "S commit" { sk = 1 } $0 == "S step" { ss = 1 } $0 == "S review" { sr = 1 }
     END {
       review = sr

@@ -4,7 +4,7 @@ SID=$(jq -r '.session_id // empty')
 
 # Nudge counters (review-lenses-*, inline-calls-*) track work done, not context, so compaction must not reset them.
 rm -f "/tmp/claude-docs-ctx-$SID" \
-  "/tmp/claude-hydrogen-ctx-$SID" \
+  "/tmp/claude-hydrogen-ctx-$SID-"* \
   "/tmp/claude-plan-mode-$SID" \
   "/tmp/claude-review-routing-$SID" \
   "/tmp/claude-harness-ctx-$SID-"* \

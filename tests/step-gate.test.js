@@ -113,6 +113,17 @@ test('step gate', async (t) => {
     assert.equal(run([...STEP_DONE, dispatch('Explore'), bash('git commit -m "step 1"')]).code, 2);
   });
 
+  await t.test('an errored checker is not the check', () => {
+    const checker = dispatch('checker', 'Run pnpm lint.', 'tu-check');
+    const commit = bash('git commit -m "step 1"');
+    const denied = toolResult('PreToolUse:Agent hook error: checker runs on haiku', true, 'tu-check');
+    const { code, stderr } = run([...STEP_DONE, checker, denied, commit]);
+    assert.equal(code, 2);
+    assert.match(stderr, /handed back with no check from/);
+    const launched = toolResult('Async agent launched successfully. agentId: c1', false, 'tu-check');
+    assertQuiet(run([...STEP_DONE, checker, launched, commit]));
+  });
+
   await t.test('git -C with a quoted path still counts as a commit', () => {
     assertQuiet(run([...STEP_DONE, bash('node --test tests/a.test.js'), bash('git -C "/p" commit -m "step 1"')]));
   });
@@ -335,7 +346,7 @@ test('step gate', async (t) => {
   });
 
   await t.test('silent after a denied dispatch', () => {
-    assertQuiet(run([...DRY_RUN, dispatch('implementer'), toolResult('PreToolUse:Agent hook error: build not approved')]));
+    assertQuiet(run([...DRY_RUN, dispatch('implementer'), toolResult('PreToolUse:Agent hook error: build not approved', true)]));
   });
 
   await t.test('a hand-back from another agent kind is no anchor', () => {
@@ -379,6 +390,20 @@ test('step gate', async (t) => {
     assert.equal(code, 2);
     assert.match(stderr, /handed back with no check or commit from this thread since/);
     assertQuiet(run(relative, { ...followUp, cwd: tmpDir }));
+  });
+
+  await t.test('a plan path in bold or brackets latches the build', () => {
+    const workDir = path.join(tmpDir, 'work');
+    writePlan('work', 'docs', 'plans', 'rel.md');
+    const followUp = { prompt: 'Fix the typo in a.ts.', cwd: workDir };
+    for (const named of ['**docs/plans/rel.md**', '(docs/plans/rel.md).', '<docs/plans/rel.md>', `**${PLAN_FILE}**`]) {
+      const decorated = [...DRY_RUN, dispatch('implementer', `Implement step 1 of ${named}`), LAUNCHED, handBack()];
+      const { code, stderr } = run(decorated, followUp);
+      assert.equal(code, 2, named);
+      assert.match(stderr, /handed back with no check or commit from this thread since/);
+    }
+    const decoratedGhost = [...DRY_RUN, dispatch('implementer', 'Mirror the fixture at **docs/plans/ghost.md**.'), LAUNCHED, handBack()];
+    assertQuiet(run(decoratedGhost, followUp));
   });
 
   await t.test('a leading ~ in a plans-dir path expands to HOME', () => {

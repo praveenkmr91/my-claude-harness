@@ -8,7 +8,9 @@
 INPUT=$(cat)
 python3 - "$INPUT" <<'PY'
 import json,sys,re,subprocess,os
-inp=json.loads(sys.argv[1])
+try: inp=json.loads(sys.argv[1])
+except ValueError: sys.exit(0)
+if not isinstance(inp,dict): sys.exit(0)
 report=inp.get('tool_name')=='SendMessage'
 # The header is the first line minus markdown and quote marks, so `**[REPORT d step 1]**` and `[Report …]` are gated; a NOTE that quotes a header later in its text is not.
 def is_report(m):
@@ -63,7 +65,9 @@ commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+comm
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
 commit_line=re.compile(r'^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]',re.M)
 # Twin of the implementer hand-back selects (user and attachment) in hooks/step-gate.sh EVENTS.
-for line in open(path):
+try: transcript=open(path)
+except OSError: sys.exit(0)
+for line in transcript:
     try: r=json.loads(line)
     except: continue
     t=r.get('type')

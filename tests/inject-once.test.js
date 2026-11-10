@@ -162,6 +162,26 @@ test('inject-once hook', async (t) => {
     fs.rmSync(counter);
   });
 
+  await t.test("compaction clears the session's Hydrogen section flags only", () => {
+    const sid = newSession();
+    const otherSid = newSession();
+    const hydrogenFlag = (session, section) => `/tmp/claude-hydrogen-ctx-${session}-${section}`;
+    const ownFlags = [hydrogenFlag(sid, 'map'), hydrogenFlag(sid, 'workflows')];
+    const otherFlag = hydrogenFlag(otherSid, 'map');
+    for (const flag of [...ownFlags, otherFlag]) fs.writeFileSync(flag, '');
+    flags.push(...ownFlags, otherFlag);
+    const resetHook = path.resolve(__dirname, '..', 'hooks', 'reset-context-flags.sh');
+
+    const noSession = spawnSync('bash', [resetHook], { input: '{}', encoding: 'utf8' });
+    assert.equal(noSession.status, 0);
+    assert.ok([...ownFlags, otherFlag].every((flag) => fs.existsSync(flag)));
+
+    const reset = spawnSync('bash', [resetHook], { input: JSON.stringify({ session_id: sid }), encoding: 'utf8' });
+    assert.equal(reset.status, 0);
+    assert.deepEqual(ownFlags.filter((flag) => fs.existsSync(flag)), []);
+    assert.ok(fs.existsSync(otherFlag));
+  });
+
   await t.test('missing session id is silent', () => {
     assert.equal(run('subagent-tiers.md', { tool_name: 'Agent', tool_input: {} }), '');
   });

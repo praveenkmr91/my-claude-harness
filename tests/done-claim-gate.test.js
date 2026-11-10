@@ -900,6 +900,14 @@ test('done-claim gate', async (t) => {
     assert.equal(spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ tool_name: 'SendMessage', tool_input: {} }), encoding: 'utf8' }).status, 0);
   });
 
+  await t.test('empty stdin or a missing transcript exits 0 with no output', () => {
+    const missingTranscript = JSON.stringify({ transcript_path: path.join(os.tmpdir(), 'done-claim-gate-no-such-transcript.jsonl') });
+    for (const input of ['', 'null', missingTranscript]) {
+      const res = spawnSync('bash', [HOOK_PATH], { input, encoding: 'utf8' });
+      assert.deepEqual([res.status, res.stdout, res.stderr], [0, '', ''], input);
+    }
+  });
+
   await t.test('skips the retry after a block', () => {
     assert.equal(run('Done.', { stopHookActive: true }), 0);
   });

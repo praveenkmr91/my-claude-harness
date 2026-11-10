@@ -9,8 +9,9 @@ process.stdin.on('end', () => {
   const ti = input.tool_input || {};
   const file = ti.file_path || '';
   if (!/\.(tsx?|jsx?|mjs|cjs|mts|cts|sh|vue|svelte|css|scss|swift|kts?|dart)$/.test(file)) return;
-  const count = (s) =>
-    (s || '').split('\n').filter((l) => /^\s*(\/\/(?!\/)|\/\*|\*\s|#(?!!)|<!--)/.test(l)).length;
+  const isShell = file.endsWith('.sh');
+  const isCommentLine = (l) => /^\s*(\/\/(?!\/)|\/\*|\*\s|<!--)/.test(l) || (isShell && /^\s*#(?!!)/.test(l));
+  const count = (s) => (s || '').split('\n').filter(isCommentLine).length;
   const added = input.tool_name === 'Write'
     ? count(ti.content)
     : count(ti.new_string) - count(ti.old_string);

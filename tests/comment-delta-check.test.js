@@ -54,6 +54,12 @@ test('comment delta check', async (t) => {
     assert.doesNotMatch(out, /shortcut: marker/);
   });
 
+  await t.test('a leading # counts as a comment in shell files only', () => {
+    assert.equal(edit('/repo/src/layout.css', '#header { color: red; }\n#footer { color: blue; }'), '');
+    assert.equal(edit('/repo/src/store.ts', '  #count = 0;\n  #items = [];'), '');
+    assert.match(context(edit('/repo/scripts/build.sh', '# a\n# b')), /added 2 comment lines to build\.sh/);
+  });
+
   await t.test('both warnings arrive in one parseable JSON line', () => {
     const stdout = edit('/repo/src/theme.ts', `${MARKER}\n// see the token table.`);
     assert.equal(stdout.trim().split('\n').length, 1);
