@@ -90,4 +90,38 @@ test('new dependency gate', async (t) => {
       assert.equal(bash(command)?.permissionDecision, 'ask', command);
     }
   });
+
+  await t.test('asks when npm pkg set adds a dependency', () => {
+    assert.equal(bash('npm pkg set dependencies.zod=^3.23.0')?.permissionDecision, 'ask');
+  });
+
+  await t.test('asks when npm pkg set adds a quoted scoped devDependency', () => {
+    assert.equal(bash("npm pkg set 'devDependencies.@graphql-codegen/cli=5.0.0'")?.permissionDecision, 'ask');
+  });
+
+  await t.test('asks when npm pkg set changes a peerDependency after a cd', () => {
+    assert.equal(bash('cd app && npm pkg set peerDependencies.react=19')?.permissionDecision, 'ask');
+  });
+
+  await t.test('passes npm pkg set on scripts', () => {
+    assert.equal(bash('npm pkg set scripts.build=vite'), '');
+  });
+
+  await t.test('passes npm pkg set on overrides', () => {
+    assert.equal(bash('npm pkg set overrides.axios=1.21.1'), '');
+  });
+
+  await t.test('passes npm pkg set on a first-party @additiv package', () => {
+    assert.equal(bash('npm pkg set dependencies.@additiv-hydrogen/ui.theme=1.0.2'), '');
+  });
+
+  await t.test('passes npm pkg get, which reads what pkg set writes', () => {
+    assert.equal(bash('npm pkg get dependencies'), '');
+  });
+
+  await t.test('empty stdin exits 0 with no output', () => {
+    const res = spawnSync('node', [HOOK_PATH], { input: '', encoding: 'utf8' });
+    assert.equal(res.status, 0);
+    assert.equal(res.stdout, '');
+  });
 });

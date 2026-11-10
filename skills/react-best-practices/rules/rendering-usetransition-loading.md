@@ -70,6 +70,6 @@ function SearchResults() {
 - **Automatic pending state**: No need to manually manage `setIsLoading(true/false)`
 - **Error resilience**: Pending state correctly resets even if the transition throws
 - **Better responsiveness**: Keeps the UI responsive during updates
-- **Interrupt handling**: New transitions automatically cancel pending ones
+- **No request cancellation**: a new transition does not abort the earlier request; abort it or ignore its stale result yourself
 
 Reference: [useTransition](https://react.dev/reference/react/useTransition)

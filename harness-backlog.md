@@ -184,3 +184,17 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** the hook blocks the shapes sessions use. The rewrite (token scan, one plain form for the backup push, 17 more `if` entries) went through two cold reads and still had open gaps.
 - **Fix:** extend the one pattern the new shape belongs to, as was done for bulk staging behind `-C`. The full rewrite only when several shapes turn up.
 - **Worth it when:** a transcript shows a missed shape staging, pushing or deleting something it should not have.
+
+### Hydrogen reference cites three widgets the monorepo does not hold, and the map predates the audit date
+
+- **Evidence:** `plans/usage-fixes.research.md` row H5: `ls -d ~/Documents/projects/hydrogen/hydrogen/widgets/*/*` holds no `maturing-bonds`, `compliance-breach` or `funds-list`, which `hydrogen-reference.md` cites under `widgets/wealth`. `hydrogen.md:5` dates the last full audit 2026-07-09, while hera's last commit to `hydrogen-component-map.json` is 2026-03-17, though the audit tripwire requires regenerating the map.
+- **Why parked:** a consuming app may hold the three widgets, which the monorepo alone cannot settle.
+- **Fix:** locate each widget in the apps or delete its citation, then re-date the audit.
+- **Worth it when:** a session follows one of the three citations to nothing.
+
+### react-best-practices keeps rules that contradict code-craft.md
+
+- **Evidence:** `plans/harness-sweep.research.md` section 5: bare `catch {}` in `rules/client-localstorage-schema.md`, a module-level login cache in `rules/js-cache-function-results.md:60-76`, `rules/bundle-barrel-imports.md` rated critical on Next/webpack numbers, and `rules/advanced-use-latest.md` titled "useEffectEvent for Stable Callback Refs" though the function `useEffectEvent` returns changes identity every render.
+- **Why parked:** no session hit them.
+- **Fix:** rewrite the bare `catch` examples, drop the module-level login cache, re-rate barrel imports for Vite, and retitle `advanced-use-latest`.
+- **Worth it when:** a review cites one of them.

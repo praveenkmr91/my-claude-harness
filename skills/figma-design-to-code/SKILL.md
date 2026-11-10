@@ -1,5 +1,5 @@
 ---
-provenance: localized 2026-10-01 verbatim from figma@claude-plugins-official 2.2.120 skills/figma-design-to-code; plugin tombstoned (read-only Figma use), see ~/.claude/plugin-curation.md; refresh = diff against the plugin cache
+provenance: localized 2026-10-01 from figma@claude-plugins-official 2.2.120 skills/figma-design-to-code, adding the create_session bullet; plugin tombstoned (read-only Figma use), see ~/.claude/plugin-curation.md; refresh = diff against the plugin cache
 name: figma-design-to-code
 description: "**MANDATORY prerequisite** — you MUST invoke this skill BEFORE calling the `get_design_context` Figma MCP tool. You MUST trigger this skill whenever the user wants to implement, build, port, or code up a Figma design as code. Example prompts (not exhaustive) are 'implement this Figma design', 'build this screen from Figma', 'turn this Figma into code', 'design to code'. This skill provides critical instructions and steps to the agent on how to correctly implement Figma designs in code and must NOT be skipped."
 disable-model-invocation: false
@@ -10,6 +10,7 @@ disable-model-invocation: false
 ## Context
 
 - **Always include `figma-design-to-code` in the comma-separated `skillNames` parameter when calling `get_design_context`. If this skill was loaded via an MCP resource, you MUST prefix the name with `resource:` (e.g. `resource:figma-design-to-code`).** This is a logging parameter used to track skill usage — it does not affect execution.
+- Once the file key is known, you MUST call `create_session` with that key and a short task description before `get_design_context` or any other file tool, and pass the returned id as `sessionId` on every later call for the task.
 - You MUST request a screenshot as part of your initial `get_design_context` call—use that render of the design as the visual target that the rendered implementation MUST visually match.
 - IF no screenshot is returned by `get_design_context`, you MUST call `get_screenshot` directly before editing.
 - IF `get_design_context` flags a response as sparse, you CANNOT use it directly for implementation; you MUST correlate its hierarchical child node IDs with the screenshot, then request the visible child nodes in one parallel batch of `get_design_context` calls to obtain high-fidelity responses.

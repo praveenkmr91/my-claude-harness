@@ -11,9 +11,11 @@ const LOCAL_SPEC = /^(workspace|file|link):/;
 const INTERNAL = /^@additiv(-[\w-]+)?\//;
 // The `2` of `pnpm install 2>&1` reads as a package name, and `pnpm <script> add` as an install, unless both are excluded.
 const JS_INSTALL = /\b(npm|pnpm|yarn|bun)(?:\s+(?:-{1,2}\w[\w-]*(?:=\S+)?(?:\s+(?!(?:add|install|i)\s)[^-\s;&|]\S*)?|workspace\s+\S+))*\s+(add|install|i)\s+(?:-\S+\s+)*(?!\d*[<>])[@A-Za-z0-9_]/;
+const PKG_SET = /\bnpm\s+pkg\s+set\b/;
 const PUB_ADD = /\b(flutter|dart)\s+pub\s+add\s+[A-Za-z0-9_]/;
 
-const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+let input;
+try { input = JSON.parse(fs.readFileSync(0, 'utf8')); } catch { process.exit(0); }
 const { tool_name: tool, tool_input: args = {}, cwd = '' } = input;
 
 function ask(what) {
@@ -53,6 +55,16 @@ function addedPackages() {
 function installsThirdParty() {
   const command = args.command ?? '';
   const installs = command.split(/&&|\|\||[;|]/).filter((part) => JS_INSTALL.test(part) || PUB_ADD.test(part));
+  const depKey = new RegExp(`^['"]?(${DEP_FIELDS.join('|')})\\.`);
+  const setNames = command.split(/&&|\|\||[;|]/)
+    .filter((part) => PKG_SET.test(part))
+    .flatMap((part) => part.trim().split(/\s+/))
+    .filter((word) => depKey.test(word))
+    .map((word) => word.replace(depKey, '').split(/[='"]/)[0]);
+  if (setNames.length && !setNames.every((name) => INTERNAL.test(name))) {
+    if (new RegExp(`^${TMP_DIR}`).test(cwd)) return false;
+    return !new RegExp(`^\\s*cd\\s+${TMP_DIR}`).test(command);
+  }
   if (!installs.length) return false;
   // A flag value such as `-w apps/web` reads as a package name here, so it keeps the gate closed rather than open.
   const packages = installs.flatMap((part) => {

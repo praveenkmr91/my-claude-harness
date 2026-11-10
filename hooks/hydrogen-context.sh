@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 IN=$(cat)
 case "$IN" in
-  *hydrogen*|*Workflow*|*useProcessState*|*ProtectRoutes*|*milestone*|*StepContent*|*ProcessContent*|*ContentBox*|*Accordion*|*ui.layouts*|*keepPreviousData*|*cacheTime*|*staleTime*|*usePortfoliosData*|*useSecurityResearchData*|*useTableControl*|*TableFilter*|*createTableState*|*FieldsType*|*customCells*|*ui.components.table*|*HydrogenForms*|*DecimalInput*|*TextfieldWrap*|*useFieldArray*|*listKeyDataSource*|*eject-script*|*ejected*|*resolve.dedupe*|*@teambit*) ;;
+  *hydrogen*|*Workflow*|*useProcessState*|*ProtectRoutes*|*milestone*|*StepContent*|*ProcessContent*|*ContentBox*|*Accordion*|*ui.layouts*|*keepPreviousData*|*cacheTime*|*staleTime*|*usePortfoliosData*|*useSecurityResearchData*|*useTableControl*|*TableFilter*|*createTableState*|*FieldsType*|*customCells*|*ui.components.table*|*HydrogenForms*|*DecimalInput*|*TextfieldWrap*|*useFieldArray*|*listKeyDataSource*|*eject-script*|*ejected*|*resolve.dedupe*|*@teambit*|*ui.theme*|*getColor*) ;;
   *) exit 0 ;;
 esac
 
@@ -37,6 +37,7 @@ case "$IN" in *eject:hydrogen*|*eject-script*|*ejected*|*resolve.dedupe*|*@teamb
 case "$IN" in *StepContent*|*ProcessContent*|*ContentBox*|*Accordion*|*ui.layouts*) inject layouts '## Layouts' ;; esac
 case "$IN" in *Workflow*|*useProcessState*|*ProtectRoutes*|*/workflows/*|*milestone*) inject workflows '## Workflows' ;; esac
 case "$IN" in *keepPreviousData*|*cacheTime*|*staleTime*|*usePortfoliosData*|*useSecurityResearchData*) inject data '## Data & caching' ;; esac
+case "$IN" in *ui.theme*|*getColor*) inject theming '## Theming' ;; esac
 case "$IN" in *useTableControl*|*TableFilter*|*createTableState*|*FieldsType*|*customCells*|*ui.components.table*) inject tables '## Tables' ;; esac
 case "$IN" in *HydrogenForms*|*hydrogen-forms*|*DecimalInput*|*TextfieldWrap*|*useFieldArray*|*listKeyDataSource*) inject forms '## Forms' ;; esac
 

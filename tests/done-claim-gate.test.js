@@ -913,6 +913,8 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, last_assistant_message: final, ...input }), encoding: 'utf8', env });
   };
   const turn = (blocks, final) => [prompt('plan it'), assistant(...blocks), assistant({ type: 'text', text: final })];
+  const onModel = (model, records) => records.map((r) => (r.type === 'assistant' ? { ...r, message: { ...r.message, model } } : r));
+  const interrupt = { type: 'assistant', message: { model: '<synthetic>', content: [] } };
 
   await t.test('blocks an implement ask on a plan nobody reviewed, and a reply that only waits stays quiet', () => {
     const records = (final) => turn([writePlan()], final);
@@ -977,5 +979,39 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     assert.equal(empty.status, 0, empty.stderr);
     const noAsk = runPlan(turn([writePlan()], 'The plan is written to x.md.'), 'The plan is written to x.md.');
     assert.equal(noAsk.status, 0, noAsk.stderr);
+  });
+
+  await t.test('a Fable thread\'s plan ask needs no advisor consult', () => {
+    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.say)), interrupt];
+    const quiet = runPlan(records, asks.say);
+    assert.equal(quiet.status, 0, quiet.stderr);
+  });
+
+  await t.test('a Fable thread\'s plan ask still needs a review after the last edit', () => {
+    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`), editPlan()], asks.say)), interrupt];
+    const fires = runPlan(records, asks.say);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(A\)/);
+    assert.doesNotMatch(fires.stderr, /\(B\)/);
+  });
+
+  await t.test('an Opus thread\'s plan ask still needs the advisor consult', () => {
+    const fires = runPlan(onModel('claude-opus-5-5', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.say)), asks.say);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(B\)/);
+  });
+
+  await t.test('a reply that defers approval is not an implement ask', () => {
+    const deferred = [
+      'So: in `-99`, approve the `git commit --amend` that the safety check blocked. Then the builder commits and reports, and I detail chunk 2 with 134 translation keys for your `implement`.',
+      'So: the plan isn\'t ready for you to approve yet. Once the check reports, I\'ll fix anything it finds, run the advisor review, and then present the plan for your "implement".',
+      'So: everything is paused. Say "resume" and I\'ll apply those two fixes, then present the plan for your "implement".',
+    ];
+    for (const reply of deferred) {
+      const quiet = runPlan(turn([writePlan()], reply), reply);
+      assert.equal(quiet.status, 0, `${reply}\n${quiet.stderr}`);
+    }
+    const ask = 'So: type "implement" and the build starts.';
+    assert.equal(runPlan(turn([writePlan()], ask), ask).status, 2);
   });
 });
