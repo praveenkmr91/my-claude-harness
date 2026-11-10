@@ -2,7 +2,6 @@
 provenance: copied 2026-09-19 from mattpocock/skills@c55ee46 skills/engineering/improve-codebase-architecture; plugin not installed, see ~/.claude/plugin-curation.md
 name: improve-codebase-architecture
 description: Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.
-disable-model-invocation: true
 ---
 
 # Improve Codebase Architecture
