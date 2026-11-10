@@ -198,3 +198,66 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** no session hit them.
 - **Fix:** rewrite the bare `catch` examples, drop the module-level login cache, re-rate barrel imports for Vite, and retitle `advanced-use-latest`.
 - **Worth it when:** a review cites one of them.
+
+### Gates match words in prose where they mean commands
+
+- **Evidence:** `plans/harness-sweep.research.md` sections 1-2 and its usage census: done-claim evidence, commit and in-place-write detection match quoted text; a denied, interrupted or backgrounded run counts as evidence; plan-review coverage matches a plan's basename inside another name; negated Fable and Sonnet mentions count as asks. The census counted the gate's blocks (review-not-run about 250, done-claim about 90) but not these false-fire shapes.
+- **Why parked:** no count shows a session hit one; the two shapes that were counted shipped in `3a0191a`.
+- **Fix:** match at command position with quoted spans blanked; treat a denied or backgrounded run as no evidence; match the plan name on a path boundary.
+- **Worth it when:** a transcript shows one of these shapes passing or blocking a turn wrongly.
+
+### Dependency, secrets and shell-write guards miss wrapped forms
+
+- **Evidence:** usage census, 2026-11-10: installs behind `env`, `command`, `nohup` or a shell `-c` 0 calls; `npx expo install` 0; a quoted package spec 1 (a scratch probe); `diff`/`sed` on a secret file about 1; `perl -pi` 49 against 563 allowed `sed -i`; `tee` to a source file 2; `node --eval` 0.
+- **Why parked:** sessions do not use the shapes; `npm pkg set`, the one that was used, shipped in `3a0191a`.
+- **Fix:** start the dependency gate behind wrapper words; apply the secrets allowlist per path token; deny `perl -pi` and `tee` writes to source as `sed -i` is not.
+- **Worth it when:** a session installs behind a wrapper, or `perl -pi` edits source that a write-time hook should have seen.
+
+### Six hooks each carry their own list of source extensions
+
+- **Evidence:** usage census: Write/Edit by extension `.tsx` 5,345, `.ts` 4,461, against `.cts` 28, `.html` 14, `.py` 10, `.mts` 4, `.kts` 0, the ones some lists omit.
+- **Why parked:** 56 writes in about 9,800 fall outside a list.
+- **Fix:** one shared list under `hooks/lib/` read by all six hooks.
+- **Worth it when:** a repo with `.mts`, `.cts` or `.kts` source becomes regular work.
+
+### Rule docs disagree with each other in small ways
+
+- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `README.md` omits five hooks and misdescribes `opus-write-nudge`; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; `subagent-tiers.md` names the advisor as Fable 5.1 while `settings.json` may differ; dated incidents sit in `agents/implementer.md` and `review-battery.md`; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
+- **Why parked:** doc drift with no counted fault; the entry `Build gate needs the typed word, not a yes to the proposal` above is settled by `plan-mode.md` and can go with this work.
+- **Fix:** one pass over the docs named, each edit checked against the hook it describes.
+- **Worth it when:** a session follows one of the stale lines, or the next doc edit touches one of these files.
+
+### Three more skills describe options and files they do not have
+
+- **Evidence:** `plans/harness-sweep.research.md` section 5; skill calls in the usage census: `a11y-audit` 0, `improve-codebase-architecture` 0, `systematic-debugging` 1, `verification-before-completion` 2, `tdd` 0.
+- **Why parked:** the skills are almost never invoked.
+- **Fix:** `a11y-audit` usage rewritten from its scripts' real options and its dead references deleted; `systematic-debugging` trigger and `find-polluter.sh` failure fixed; `improve-codebase-architecture` names its agent; thresholds in `verification-before-completion` match `tdd`.
+- **Worth it when:** one of them is invoked for real work and misleads.
+
+### Some hook tests cannot fail
+
+- **Evidence:** `plans/harness-sweep.research.md` section 7: surviving mutants in the browser guard, plan-mode injector, learn-due and glob-quoting tests; tests that read the live `~/.claude`; three hooks with no behaviour test (`harness-context.sh`, `hydrogen-util-guard.sh`, `plugin-drift-guard.sh`); branches listed there as untested.
+- **Why parked:** test debt, no fault in use; overlaps `Existing hook tests lack quiet-twin and empty-input cases` above.
+- **Fix:** one case per surviving mutant, a behaviour test per untested hook, checkout copies in place of live reads.
+- **Worth it when:** one of those hooks is next edited.
+
+### Unpinned browser server, duplicate allow entries, untracked scripts
+
+- **Evidence:** `plans/harness-sweep.research.md` section 4: the browser MCP server in `~/.claude.json` has no exact version; `settings.json` holds duplicate allow entries; `scripts/` is untracked.
+- **Why parked:** `~/.claude.json` sits outside the repo and `settings.json` carries uncommitted changes of the owner's.
+- **Fix:** pin the server, remove the duplicates, track `scripts/`.
+- **Worth it when:** `settings.json` is next cleaned up, or a browser server update breaks a session.
+
+### Plan lint fires on interface wording
+
+- **Evidence:** usage census: 555 lint blocks, P6 218, P4 50, P1 42, P9 3. P6 samples are dates and names, as intended; the false P1 fires (`re.I`, "initially collapsed", "not-found page", "I/O") are at most part of 42. Two were hit on 2026-11-10 while writing `plans/usage-fixes.md`.
+- **Why parked:** each false fire costs one reworded line.
+- **Fix:** the journal-word and first-person checks skip code spans and the listed interface phrases; the Open-item length check reads any heading that opens with Open.
+- **Worth it when:** a plan needs a third reword for the same phrase.
+
+### Smaller sweep leftovers
+
+- **Evidence:** `plans/harness-sweep.research.md`: `CLAUDE.md` sits exactly at its 1,399-word ceiling, so any added rule needs another moved out; the review join for "an ask naming shared state, public API or a money-moving mutation" has no code behind it; `evals/results.md` is overwritten each run, so evidence a rule doc cites does not survive.
+- **Why parked:** which rule leaves `CLAUDE.md` is the owner's choice; the other two have no counted fault.
+- **Fix:** move one `CLAUDE.md` rule into the doc it points to; implement or delete the review join; date-stamp eval results.
+- **Worth it when:** the next rule has to be added to `CLAUDE.md`.
