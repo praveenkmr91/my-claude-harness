@@ -110,7 +110,7 @@ Reference these guidelines when:
 - `advanced-effect-event-deps` - Do Not Put Effect Events in Dependency Arrays
 - `advanced-event-handler-refs` - Store Event Handlers in Refs
 - `advanced-init-once` - Initialize App Once, Not Per Mount
-- `advanced-use-latest` - useEffectEvent for Stable Callback Refs
+- `advanced-use-latest` - useEffectEvent for Latest Values in Effects
 
 A rule that names a package (better-all, swr, lru-cache) applies only where the repo already installs it; otherwise use the installed mechanism or the platform.
 

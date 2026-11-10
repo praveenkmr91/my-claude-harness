@@ -327,6 +327,48 @@ test('audit-due: lands the newest weekly report once, on startup or resume', () 
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+test('audit-due: a symlink on the landing path skips the landing', () => {
+  const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'audit-'));
+  const hook = path.join(ROOT, 'hooks', 'audit-due.sh');
+  const env = { ...process.env, HOME: home };
+  const outside = path.join(home, 'outside');
+  fs.mkdirSync(outside);
+  const victim = path.join(outside, 'victim.md');
+  const repoWith = (name, link) => {
+    const repo = path.join(home, name);
+    fs.mkdirSync(repo);
+    execFileSync('git', ['init', '-q'], { cwd: repo });
+    const reports = path.join(home, '.claude', 'state', 'audits', name);
+    fs.mkdirSync(reports, { recursive: true });
+    fs.writeFileSync(path.join(reports, '2026-10-12.md'), 'report');
+    link(repo);
+    return execFileSync('bash', [hook], { input: JSON.stringify({ source: 'resume', cwd: repo }), encoding: 'utf8', env });
+  };
+  fs.writeFileSync(victim, 'mine');
+  const old = new Date(Date.now() - 86400 * 1000);
+  fs.utimesSync(victim, old, old);
+  const viaFile = repoWith('file-link', (repo) => {
+    fs.mkdirSync(path.join(repo, 'docs', 'audits'), { recursive: true });
+    fs.symlinkSync(victim, path.join(repo, 'docs', 'audits', 'audit.md'));
+  });
+  assert.doesNotMatch(viaFile, /landed/);
+  assert.equal(fs.readFileSync(victim, 'utf8'), 'mine');
+  for (const [name, at] of [['dir-link', ['docs', 'audits']], ['docs-link', ['docs']]]) {
+    const out = repoWith(name, (repo) => {
+      fs.mkdirSync(path.join(repo, ...at.slice(0, -1)), { recursive: true });
+      fs.symlinkSync(outside, path.join(repo, ...at));
+    });
+    assert.doesNotMatch(out, /landed/, name);
+  }
+  assert.deepEqual(fs.readdirSync(outside), ['victim.md']);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test('audit-due: empty input exits 0 with no output', () => {
+  const out = execFileSync('bash', [path.join(ROOT, 'hooks', 'audit-due.sh')], { input: '{}', encoding: 'utf8' });
+  assert.equal(out, '');
+});
+
 test('review-lens-nudge: names lenses on a code edit, once per turn and lens set', () => {
   const home = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'lens-'));
   const repo = path.join(home, 'repo');

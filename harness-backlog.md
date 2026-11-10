@@ -76,8 +76,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Existing hook tests lack quiet-twin and empty-input cases
 
-- **Evidence:** `harness.md` requires both, applied to a hook when next touched. Untested so far for empty input: `new-dep-gate.js`.
-- **Why parked:** the rule applies on touch; a retro-audit of every hook has no failure behind it yet.
+- **Evidence:** `harness.md` requires both, applied to a hook when next touched.- **Why parked:** the rule applies on touch; a retro-audit of every hook has no failure behind it yet.
 - **Fix:** per hook, feed `{}`, a missing transcript and an unmatched command, and assert the documented fail-open or fail-closed outcome.
 
 ### Workers write source through interpreter scripts, unseen by write-time hooks
@@ -171,13 +170,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** `ALLOW` names `Skill(delete-audit)`, `Skill(improve-codebase-architecture)`, `Skill(a11y-audit)`, `Bash(python3 $SCRIPTS/contrast_checker.py *)` and `Bash(python3 $SCRIPTS/a11y_scanner.py *)`; a `-p` probe confirms the three skills still run and another skill is denied.
 - **Worth it when:** before the next audited repo outside Praveen's own, or the first audit report that names a skill outside the three.
 
-### audit-due.sh copies the report through a repo symlink
-
-- **Evidence:** `hooks/audit-due.sh:25` runs `cp "$REPORT" "$TOP/docs/audits/audit.md"`, and `cp` writes through a destination symlink (scratchpad probe). A repo that tracks `docs/audits/audit.md` as a symlink to, say, `~/.claude/CLAUDE.md` gets that file overwritten with last week's report at the next session start there, report text the repo can steer.
-- **Why parked:** found by the weekly-automation review outside that plan's scope; the one audited repo is Praveen's own.
-- **Fix:** skip the landing when `docs/audits` or `docs/audits/audit.md` is a symlink, or its resolved path falls outside `$TOP`. Firing / near-twin / empty-input test triple.
-- **Worth it when:** before the next audited repo outside Praveen's own.
-
 ### Git guard misses command shapes that sessions do not use
 
 - **Evidence:** replayed through `hooks/block-dangerous-git.sh`, 19 commands that should be denied pass (commit `-a` after the message, `git add -- .`, a forced branch delete written `-d -f`, `mv` or `unlink` of a lockfile, a push from the backup repo to another remote or behind `stdbuf`), 5 harmless ones are denied (a message or search pattern that mentions a guarded command), and the guard is not started behind `env`, `command`, `nohup`, `bash -c` or `eval`. A census of 57,796 Bash calls in 3,380 transcripts holds none of those shapes but one, `git -C <dir> add -A` (11 calls), which the guard now denies.
@@ -194,9 +186,9 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### react-best-practices keeps rules that contradict code-craft.md
 
-- **Evidence:** `plans/harness-sweep.research.md` section 5: bare `catch {}` in `rules/client-localstorage-schema.md`, a module-level login cache in `rules/js-cache-function-results.md:60-76`, `rules/bundle-barrel-imports.md` rated critical on Next/webpack numbers, and `rules/advanced-use-latest.md` titled "useEffectEvent for Stable Callback Refs" though the function `useEffectEvent` returns changes identity every render.
+- **Evidence:** `plans/harness-sweep.research.md` section 5: bare `catch {}` in `rules/client-localstorage-schema.md`, a module-level login cache in `rules/js-cache-function-results.md:60-76`, and `rules/bundle-barrel-imports.md` rated critical on Next/webpack numbers.
 - **Why parked:** no session hit them.
-- **Fix:** rewrite the bare `catch` examples, drop the module-level login cache, re-rate barrel imports for Vite, and retitle `advanced-use-latest`.
+- **Fix:** rewrite the bare `catch` examples, drop the module-level login cache, and re-rate barrel imports for Vite.
 - **Worth it when:** a review cites one of them.
 
 ### Gates match words in prose where they mean commands
@@ -222,7 +214,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Rule docs disagree with each other in small ways
 
-- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `README.md` omits five hooks and misdescribes `opus-write-nudge`; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; `subagent-tiers.md` names the advisor as Fable 5.1 while `settings.json` may differ; dated incidents sit in `agents/implementer.md` and `review-battery.md`; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
+- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; dated incidents sit in `agents/implementer.md` and `review-battery.md`; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
 - **Why parked:** doc drift with no counted fault; the entry `Build gate needs the typed word, not a yes to the proposal` above is settled by `plan-mode.md` and can go with this work.
 - **Fix:** one pass over the docs named, each edit checked against the hook it describes.
 - **Worth it when:** a session follows one of the stale lines, or the next doc edit touches one of these files.

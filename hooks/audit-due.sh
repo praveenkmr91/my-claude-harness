@@ -22,7 +22,10 @@ TOP=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 if [ "$1" != --stamp ]; then
   REPORT=$(ls -t "$HOME/.claude/state/audits/$(basename "$TOP")"/*.md 2>/dev/null | head -1)
   LANDED="$TOP/docs/audits/audit.md"
-  if [ -n "$REPORT" ] && [ "$REPORT" -nt "$LANDED" ] && mkdir -p "$TOP/docs/audits" && cp "$REPORT" "$LANDED"; then
+  # cp writes through a symlink, and the repo decides where one points, so a symlink anywhere on the path skips the landing.
+  SYMLINKED=false
+  for p in "$TOP/docs" "$TOP/docs/audits" "$LANDED"; do [ -L "$p" ] && SYMLINKED=true; done
+  if [ -n "$REPORT" ] && [ "$SYMLINKED" = false ] && [ "$REPORT" -nt "$LANDED" ] && mkdir -p "$TOP/docs/audits" && cp "$REPORT" "$LANDED"; then
     jq -n --arg m "Weekly audit $(basename "$REPORT" .md) landed in docs/audits/audit.md — review and commit it." '{systemMessage: $m}'
     exit 0
   fi
