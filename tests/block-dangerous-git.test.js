@@ -179,10 +179,29 @@ test('block dangerous git hook', async (t) => {
   });
 
   await t.test('bulk staging is denied with the explicit-path alternative', () => {
-    const { status, stderr } = run('git add -A');
-    assert.equal(status, 2);
-    assert.match(stderr, /Do not bulk-stage/);
-    assert.match(stderr, /git commit --only/);
+    for (const command of [
+      'git add -A',
+      'git -C /tmp/wt add -A',
+      'git -C /tmp/wt add -A src package.json',
+      'git -C /tmp/wt add .',
+      'git --no-pager add --all',
+    ]) {
+      const { status, stderr } = run(command);
+      assert.equal(status, 2, command);
+      assert.match(stderr, /Do not bulk-stage/);
+      assert.match(stderr, /git commit --only/);
+    }
+    for (const command of ['git -C /tmp/wt add -- src/a.ts', 'git -C /tmp/wt add src/a.ts', 'git -C /tmp/wt status']) {
+      assert.equal(run(command).status, 0, command);
+    }
+  });
+
+  await t.test('an empty payload passes with no output', () => {
+    for (const input of ['{}', '']) {
+      const res = spawnSync('bash', [HOOK_PATH], { input, encoding: 'utf8', env });
+      assert.equal(res.status, 0, JSON.stringify(input));
+      assert.equal(res.stdout, '', JSON.stringify(input));
+    }
   });
 
   await t.test('git push passes only when the repo origin is on the whitelist', () => {
