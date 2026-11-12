@@ -271,6 +271,10 @@ test('block dangerous git hook', async (t) => {
     spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', 'feat', mine], { env });
     spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', 'other', theirs], { env });
     spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', reused, 'existing'], { env });
+    const twin = `${repo}-twin`;
+    spawnSync('git', ['init', '-q', twin], { env });
+    spawnSync('git', ['-C', twin, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init'], { env });
+    spawnSync('git', ['-C', twin, 'branch', 'feat'], { env });
 
     const bashCall = (command, timestamp) => ({
       type: 'assistant',
@@ -286,6 +290,7 @@ test('block dangerous git hook', async (t) => {
         bashCall(`git worktree add -b other ${theirs}`, anHourAgo),
         bashCall(`false && git worktree add -b existing ${reused}`, aMinuteAhead),
         bashCall(`git worktree add -b ${base} ${repo}`, justBefore),
+        bashCall(`git worktree add -b fresh ${repo}`, justBefore),
         { type: 'user', cwd: repo, timestamp: justBefore, message: { content: `please run git worktree add -b other ${theirs}` } },
       ]
         .map((entry) => JSON.stringify(entry))
@@ -293,8 +298,14 @@ test('block dangerous git hook', async (t) => {
     );
     const empty = path.join(repo, 'empty.jsonl');
     fs.writeFileSync(empty, '');
-    const reset = (command, cwd, transcriptPath = transcript) =>
-      spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ tool_input: { command }, cwd, transcript_path: transcriptPath }), encoding: 'utf8', env }).status;
+    const unreadable = path.join(repo, 'unreadable.jsonl');
+    fs.writeFileSync(unreadable, `${fs.readFileSync(transcript, 'utf8')}\n{"type":"assistant","note":"worktree`);
+    const reset = (command, cwd, transcriptPath = transcript, agentId = undefined) =>
+      spawnSync('bash', [HOOK_PATH], {
+        input: JSON.stringify({ tool_input: { command }, cwd, transcript_path: transcriptPath, agent_id: agentId }),
+        encoding: 'utf8',
+        env,
+      }).status;
 
     try {
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo), 0, 'own worktree, named with -C');
@@ -314,14 +325,31 @@ test('block dangerous git hook', async (t) => {
       assert.equal(reset(`git -C ${theirs} branch -D feat`, '/Users/me/not-a-repo'), 0, 'delete it from another worktree of the same repo');
       assert.equal(reset('git branch -D feat existing', repo), 2, 'its branch plus one it did not create');
       assert.equal(reset('git branch -D feat', repo, empty), 2, 'delete with an empty transcript');
+      assert.equal(reset(`{ cd ${repo}; git reset --hard main; }`, mine), 2, 'a cd inside a brace group');
+      assert.equal(reset(`if [ -d ${repo} ]; then cd ${repo}; fi; git reset --hard main`, mine), 2, 'a cd after then');
+      assert.equal(reset(`builtin cd ${repo} && git reset --hard main`, mine), 2, 'a cd behind builtin');
+      assert.equal(reset(`git --work-tree=${repo} reset --hard main`, mine), 2, '--work-tree= hides where the reset lands');
+      assert.equal(reset(`git --git-dir=${repo}/.git reset --hard main`, mine), 2, '--git-dir= hides where the reset lands');
+      assert.equal(reset(`GIT_INDEX_FILE=${repo}/.git/index git reset --hard main`, mine), 2, 'GIT_INDEX_FILE moves what the reset rewrites');
+      assert.equal(reset(`git -C ${mine} reset --hard main`, repo, transcript, 'agent-1'), 2, 'a subagent owns nothing');
+      assert.equal(reset(`git -C ${mine} reset --hard main`, repo, unreadable), 2, 'a transcript that cannot be read');
+      assert.equal(reset(`cd ${twin} && git branch -D feat`, repo), 2, 'a cd hides where the delete lands');
+      assert.equal(reset(`GIT_DIR=${twin}/.git git branch -D feat`, repo), 2, 'GIT_DIR hides where the delete lands');
+      assert.equal(reset(`git --git-dir ${twin}/.git branch -D feat`, repo), 2, '--git-dir hides where the delete lands');
+      assert.equal(reset(`git -C ${twin} branch -D feat`, repo), 2, 'a same-named branch born just now in another repo');
+      assert.equal(reset(`git -C ${repo} branch -D other`, repo, unreadable), 2, 'delete with a transcript that cannot be read');
+      assert.equal(reset(`git -C ${repo} branch -D feat`, repo, ''), 2, 'delete with no transcript');
       spawnSync('git', ['-C', mine, 'switch', '-q', '-c', 'elsewhere'], { env });
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo), 2, 'own folder, now on a branch the session did not create there');
+      spawnSync('git', ['-C', repo, 'switch', '-q', '-c', 'fresh'], { env });
+      assert.equal(reset('git reset --hard main', repo), 2, 'the shared checkout, even on a branch born when a call claims it');
     } finally {
       for (const wt of [mine, theirs, reused]) {
         spawnSync('git', ['-C', repo, 'worktree', 'remove', '--force', wt], { env });
         fs.rmSync(wt, { recursive: true, force: true });
       }
       fs.rmSync(repo, { recursive: true, force: true });
+      fs.rmSync(twin, { recursive: true, force: true });
     }
   });
 });

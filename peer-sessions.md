@@ -38,7 +38,7 @@
 
 ## Review
 
-- Review lenses the builder dispatches carry the effort the HANDOFF or Praveen's review ask states as the dispatch `effort`; with none stated, they run at the agent's default (`subagent-tiers.md`).
+- Review lenses the builder dispatches carry the effort the HANDOFF or Praveen's review ask states as the dispatch `effort`; with none stated, `review-routing.md` sets it.
 - The builder verifies each finding at source, fixes and folds the confirmed ones (`committing.md`), and reports them; a fix that changes behaviour, reverses a Decided line or settles an Open item goes as PROPOSE instead; the planner's GO gates the shipping commit.
 
 ## Conflicts

@@ -11,10 +11,13 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 # <path>`, and git's reflog shows that branch was created within ten minutes after that call. The transcript alone is
 # not proof: a call that failed, or never ran behind a `false &&`, is recorded just the same. The owner may
 # `git reset --hard` there while that path still has that branch checked out, and may `git branch -D` that branch.
-# A `cd`, a wrapper word, a `GIT_DIR`-style variable or a `--git-dir`/`--work-tree` flag hides where a reset lands,
-# so those stay blocked; name the worktree with `-C`.
+# A `cd` anywhere in the command, a wrapper word, any `GIT_*` variable or a `--git-dir`/`--work-tree` flag hides where
+# the reset or delete lands, so those stay blocked; name the worktree with `-C`. The shared checkout is never owned,
+# and neither is anything for a subagent, whose hook input carries the parent session's transcript. A transcript that
+# cannot be read owns nothing.
 SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 DANGER=$(python3 -c '
 import json, os, re, shlex, subprocess, sys
 from datetime import datetime
@@ -23,15 +26,15 @@ GLOBAL_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--con
 WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "xargs", "nice"}
 SHELLS = {"bash", "sh", "zsh"}
 OPERATOR_CHARS = "();<>|&\n"
-SESSION_CWD, TRANSCRIPT = sys.argv[2], sys.argv[3]
-STATE = {"relocated": bool(re.search(r"\bGIT_(DIR|WORK_TREE|COMMON_DIR)\b", sys.argv[1]))}
+SESSION_CWD, TRANSCRIPT, AGENT_ID = sys.argv[2:5]
+STATE = {"relocated": bool(re.search(r"\bGIT_[A-Z_]+\b", sys.argv[1]))}
 
 def git_call(argv, cwd):
     i, repo, located = 0, cwd, True
     while i < len(argv) and argv[i].startswith("-"):
         if argv[i] == "-C" and i + 1 < len(argv):
             repo = os.path.join(repo, os.path.expanduser(argv[i + 1]))
-        elif argv[i] in GLOBAL_WITH_ARG and argv[i] != "-c":
+        elif argv[i].split("=")[0] in GLOBAL_WITH_ARG - {"-C", "-c"}:
             located = False
         i += 2 if argv[i] in GLOBAL_WITH_ARG else 1
     return (repo, located, argv[i], argv[i + 1:]) if i < len(argv) else None
@@ -63,23 +66,38 @@ def created_worktrees():
                     call = git_call(words[1:], entry.get("cwd") or SESSION_CWD) if words and os.path.basename(words[0]) == "git" else None
                     added = added_worktree(call[0], call[3][1:]) if call and call[2] == "worktree" and call[3][:1] == ["add"] else None
                     if added:
-                        created.add(added + (datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp(),))
+                        asked = datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp()
+                        created.add(added + (asked, call[0]))
     return created
 
 def git_output(repo, *args):
     return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout.strip()
 
+def git_dir(repo, which):
+    found = git_output(repo, "rev-parse", "--path-format=absolute", which)
+    return os.path.realpath(found) if found else None
+
 def created_by_session(repo, branch, path=None):
+    if AGENT_ID:
+        return False
     oldest = git_output(repo, "log", "-g", "--date=unix", "--format=%gd %gs", "refs/heads/" + branch, "--").splitlines()[-1:]
     born = re.match(r"\S+@\{(\d+)\} branch: Created from ", oldest[0]) if oldest else None
-    return bool(born) and any(
-        name == branch and path in (None, made_at) and -2 <= int(born.group(1)) - asked <= 600
-        for made_at, name, asked in created_worktrees()
+    try:
+        created = created_worktrees() if born else ()
+    except Exception:
+        return False
+    return any(
+        name == branch
+        and path in (None, made_at)
+        and -2 <= int(born.group(1)) - asked <= 600
+        and git_dir(added_from, "--git-common-dir") == git_dir(repo, "--git-common-dir")
+        for made_at, name, asked, added_from in created
     )
 
 def owns_worktree(repo):
     top, branch = git_output(repo, "rev-parse", "--show-toplevel"), git_output(repo, "symbolic-ref", "--short", "HEAD")
-    return bool(top and branch) and created_by_session(repo, branch, os.path.realpath(top))
+    linked = git_dir(repo, "--git-dir") != git_dir(repo, "--git-common-dir")
+    return bool(top and branch) and linked and created_by_session(repo, branch, os.path.realpath(top))
 
 def worktree_branch(repo, path):
     target = os.path.realpath(os.path.join(repo, os.path.expanduser(path)))
@@ -110,7 +128,8 @@ def git_danger(argv, freed_branches):
             freed_branches.add(branch)
     if sub == "branch" and any(re.fullmatch(r"-[a-zA-Z]*D[a-zA-Z]*", a) for a in rest):
         names = {a for a in rest if not a.startswith("-")}
-        if not names or not (names <= freed_branches or all(n in freed_branches or created_by_session(repo, n) for n in names)):
+        owner = located and not STATE["relocated"]
+        if not names or not all(n in freed_branches or (owner and created_by_session(repo, n)) for n in names):
             return "git branch -D"
     if sub in ("checkout", "restore") and any(a in (".", "./") for a in rest):
         return f"git {sub} ."
@@ -126,7 +145,7 @@ def segment_danger(words, freed_branches):
     if not words:
         return None
     program = os.path.basename(words[0])
-    if program in ("cd", "pushd"):
+    if {"cd", "pushd", "popd", "chdir"} & set(words):
         STATE["relocated"] = True
     if program == "git":
         return git_danger(words[1:], freed_branches)
@@ -179,7 +198,7 @@ try:
     print(scan(sys.argv[1]) or "")
 except Exception:
     sys.exit(3)
-' "$COMMAND" "$SESSION_CWD" "$TRANSCRIPT") || DANGER=$(echo "$COMMAND" | grep -oE 'git push|reset --hard|git clean -f|git branch -D|git (checkout|restore) \.|--no-verify' | head -1)
+' "$COMMAND" "$SESSION_CWD" "$TRANSCRIPT" "$AGENT_ID") || DANGER=$(echo "$COMMAND" | grep -oE 'git push|reset --hard|git clean -f|git branch -D|git (checkout|restore) \.|--no-verify' | head -1)
 
 # Push is allowed only to a whitelisted remote: personal backups Praveen owns alone, pushed with every commit.
 # Every `-C <dir>` in the command must point at a whitelisted repo; with none, the session cwd must. A wrapper, subshell,
