@@ -262,21 +262,31 @@ test('block dangerous git hook', async (t) => {
   await t.test('reset --hard passes only in a worktree whose folder and branch this session created', () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-own-'));
     const [mine, theirs, reused] = [`${repo}-mine`, `${repo}-theirs`, `${repo}-reused`];
+    const secondsFromNow = (seconds) => new Date(Date.now() + seconds * 1000).toISOString();
+    const [justBefore, anHourAgo, aMinuteAhead] = [secondsFromNow(-2), secondsFromNow(-3600), secondsFromNow(60)];
     spawnSync('git', ['init', '-q', repo], { env });
     spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init'], { env });
+    const base = spawnSync('git', ['-C', repo, 'symbolic-ref', '--short', 'HEAD'], { env, encoding: 'utf8' }).stdout.trim();
     spawnSync('git', ['-C', repo, 'branch', 'existing'], { env });
     spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', 'feat', mine], { env });
     spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', 'other', theirs], { env });
     spawnSync('git', ['-C', repo, 'worktree', 'add', '-q', reused, 'existing'], { env });
 
-    const bashCall = (command) => ({ type: 'assistant', cwd: repo, message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } });
+    const bashCall = (command, timestamp) => ({
+      type: 'assistant',
+      cwd: repo,
+      timestamp,
+      message: { content: [{ type: 'tool_use', name: 'Bash', input: { command } }] },
+    });
     const transcript = path.join(repo, 'session.jsonl');
     fs.writeFileSync(
       transcript,
       [
-        bashCall(`git worktree add -b feat ${mine} main && cp a b`),
-        bashCall(`git worktree add ${reused} existing`),
-        { type: 'user', cwd: repo, message: { content: `please run git worktree add -b other ${theirs}` } },
+        bashCall(`git worktree add -b feat ${mine} main && cp a b`, justBefore),
+        bashCall(`git worktree add -b other ${theirs}`, anHourAgo),
+        bashCall(`false && git worktree add -b existing ${reused}`, aMinuteAhead),
+        bashCall(`git worktree add -b ${base} ${repo}`, justBefore),
+        { type: 'user', cwd: repo, timestamp: justBefore, message: { content: `please run git worktree add -b other ${theirs}` } },
       ]
         .map((entry) => JSON.stringify(entry))
         .join('\n'),
@@ -289,16 +299,19 @@ test('block dangerous git hook', async (t) => {
     try {
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo), 0, 'own worktree, named with -C');
       assert.equal(reset('git reset --hard main', mine), 0, 'own worktree as the session cwd');
-      assert.equal(reset(`git -C ${theirs} reset --hard main`, repo), 2, 'a worktree only a user message names');
-      assert.equal(reset(`git -C ${reused} reset --hard main`, repo), 2, 'a worktree added on a branch that already existed');
-      assert.equal(reset('git reset --hard main', repo), 2, 'the shared checkout');
+      assert.equal(reset(`git -C ${theirs} reset --hard main`, repo), 2, 'a branch born long after the call that claims it');
+      assert.equal(reset(`git -C ${reused} reset --hard main`, repo), 2, 'a branch that existed before the call that claims it');
+      assert.equal(reset('git reset --hard main', repo), 2, 'the shared checkout, even when a call claims it');
       assert.equal(reset(`cd ${repo} && git reset --hard main`, mine), 2, 'a cd hides where the reset lands');
       assert.equal(reset(`git --git-dir ${repo}/.git reset --hard main`, mine), 2, '--git-dir hides where the reset lands');
+      assert.equal(reset(`GIT_DIR=${repo}/.git git reset --hard main`, mine), 2, 'GIT_DIR hides where the reset lands');
+      assert.equal(reset(`env -C ${repo} git reset --hard main`, mine), 2, 'a wrapper hides where the reset lands');
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo, empty), 2, 'empty transcript');
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo, ''), 2, 'no transcript');
       assert.equal(reset('git branch -D feat', repo), 0, 'delete the branch this session created');
-      assert.equal(reset('git branch -D other', repo), 2, 'delete a branch only a user message names');
-      assert.equal(reset('git branch -D existing', repo), 2, 'delete a branch that already existed');
+      assert.equal(reset('git branch -D other', repo), 2, 'delete a branch born long after the call that claims it');
+      assert.equal(reset('git branch -D existing', repo), 2, 'delete a branch that existed before the call that claims it');
+      assert.equal(reset(`git -C ${theirs} branch -D feat`, '/Users/me/not-a-repo'), 0, 'delete it from another worktree of the same repo');
       assert.equal(reset('git branch -D feat existing', repo), 2, 'its branch plus one it did not create');
       assert.equal(reset('git branch -D feat', repo, empty), 2, 'delete with an empty transcript');
       spawnSync('git', ['-C', mine, 'switch', '-q', '-c', 'elsewhere'], { env });

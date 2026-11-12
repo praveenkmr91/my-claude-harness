@@ -8,21 +8,23 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 # `git branch -D` passes only for the branch of a worktree removed earlier in the same `&&` chain: git refuses to remove
 # a dirty worktree, and the `&&` then stops the delete. `--force` removal frees nothing.
 # A session owns a worktree it created: its own transcript holds the Bash call that ran `git worktree add -b <branch>
-# <path>`. The owner may `git reset --hard` there while that path still has that branch checked out, and may
-# `git branch -D` that branch. A `cd` earlier in the command or a `--git-dir`/`--work-tree` flag hides where a reset
-# lands, so those stay blocked; name the worktree with `-C`. Ownership is by branch name: a branch another session
-# re-created under the same name after the owner removed its worktree still counts as the owner's.
+# <path>`, and git's reflog shows that branch was created within ten minutes after that call. The transcript alone is
+# not proof: a call that failed, or never ran behind a `false &&`, is recorded just the same. The owner may
+# `git reset --hard` there while that path still has that branch checked out, and may `git branch -D` that branch.
+# A `cd`, a wrapper word, a `GIT_DIR`-style variable or a `--git-dir`/`--work-tree` flag hides where a reset lands,
+# so those stay blocked; name the worktree with `-C`.
 SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 DANGER=$(python3 -c '
 import json, os, re, shlex, subprocess, sys
+from datetime import datetime
 
 GLOBAL_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--exec-path"}
 WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "xargs", "nice"}
 SHELLS = {"bash", "sh", "zsh"}
 OPERATOR_CHARS = "();<>|&\n"
 SESSION_CWD, TRANSCRIPT = sys.argv[2], sys.argv[3]
-STATE = {"changed_dir": False}
+STATE = {"relocated": bool(re.search(r"\bGIT_(DIR|WORK_TREE|COMMON_DIR)\b", sys.argv[1]))}
 
 def git_call(argv, cwd):
     i, repo, located = 0, cwd, True
@@ -37,7 +39,7 @@ def git_call(argv, cwd):
 def added_worktree(repo, args):
     branch, path, i = None, None, 0
     while i < len(args):
-        if args[i] in ("-b", "-B") and i + 1 < len(args):
+        if args[i] == "-b" and i + 1 < len(args):
             branch, i = args[i + 1], i + 2
         else:
             path = path if path or args[i].startswith("-") else args[i]
@@ -59,18 +61,25 @@ def created_worktrees():
                     continue
                 for words, _ in segments((block.get("input") or {}).get("command", "")):
                     call = git_call(words[1:], entry.get("cwd") or SESSION_CWD) if words and os.path.basename(words[0]) == "git" else None
-                    if call and call[2] == "worktree" and call[3][:1] == ["add"]:
-                        created.add(added_worktree(call[0], call[3][1:]))
+                    added = added_worktree(call[0], call[3][1:]) if call and call[2] == "worktree" and call[3][:1] == ["add"] else None
+                    if added:
+                        created.add(added + (datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp(),))
     return created
 
-def created_branches():
-    return {created[1] for created in created_worktrees() if created}
+def git_output(repo, *args):
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout.strip()
+
+def created_by_session(repo, branch, path=None):
+    oldest = git_output(repo, "log", "-g", "--date=unix", "--format=%gd %gs", "refs/heads/" + branch, "--").splitlines()[-1:]
+    born = re.match(r"\S+@\{(\d+)\} branch: Created from ", oldest[0]) if oldest else None
+    return bool(born) and any(
+        name == branch and path in (None, made_at) and -2 <= int(born.group(1)) - asked <= 600
+        for made_at, name, asked in created_worktrees()
+    )
 
 def owns_worktree(repo):
-    def git(*args):
-        return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout.strip()
-    top, branch = git("rev-parse", "--show-toplevel"), git("symbolic-ref", "--short", "HEAD")
-    return bool(top and branch) and (os.path.realpath(top), branch) in created_worktrees()
+    top, branch = git_output(repo, "rev-parse", "--show-toplevel"), git_output(repo, "symbolic-ref", "--short", "HEAD")
+    return bool(top and branch) and created_by_session(repo, branch, os.path.realpath(top))
 
 def worktree_branch(repo, path):
     target = os.path.realpath(os.path.join(repo, os.path.expanduser(path)))
@@ -91,7 +100,7 @@ def git_danger(argv, freed_branches):
     if sub == "push":
         return "git push"
     if sub == "reset" and "--hard" in rest:
-        return None if located and not STATE["changed_dir"] and owns_worktree(repo) else "git reset --hard"
+        return None if located and not STATE["relocated"] and owns_worktree(repo) else "git reset --hard"
     if sub == "clean" and any(a == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a) for a in rest):
         return "git clean -f"
     if sub == "worktree" and rest[:1] == ["remove"] and not {"-f", "--force"} & set(rest):
@@ -101,7 +110,7 @@ def git_danger(argv, freed_branches):
             freed_branches.add(branch)
     if sub == "branch" and any(re.fullmatch(r"-[a-zA-Z]*D[a-zA-Z]*", a) for a in rest):
         names = {a for a in rest if not a.startswith("-")}
-        if not names or not (names <= freed_branches or names <= freed_branches | created_branches()):
+        if not names or not (names <= freed_branches or all(n in freed_branches or created_by_session(repo, n) for n in names)):
             return "git branch -D"
     if sub in ("checkout", "restore") and any(a in (".", "./") for a in rest):
         return f"git {sub} ."
@@ -111,13 +120,14 @@ def segment_danger(words, freed_branches):
     while words and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0]):
         words = words[1:]
     if words and words[0] in WRAPPERS:
+        STATE["relocated"] = True
         git_at = next((i for i, w in enumerate(words) if os.path.basename(w) == "git"), None)
         words = words[git_at:] if git_at is not None else []
     if not words:
         return None
     program = os.path.basename(words[0])
     if program in ("cd", "pushd"):
-        STATE["changed_dir"] = True
+        STATE["relocated"] = True
     if program == "git":
         return git_danger(words[1:], freed_branches)
     if program in SHELLS and "-c" in words[1:-1]:
