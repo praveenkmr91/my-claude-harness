@@ -7,15 +7,65 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 # heredocs fed to a shell are still found. Unparseable input falls back to a raw substring scan (fail closed).
 # `git branch -D` passes only for the branch of a worktree removed earlier in the same `&&` chain: git refuses to remove
 # a dirty worktree, and the `&&` then stops the delete. `--force` removal frees nothing.
+# `git reset --hard` passes only in a worktree this session owns: its own transcript holds the Bash call that ran
+# `git worktree add -b <branch> <path>`, and that path still has that branch checked out. A `cd` earlier in the command
+# or a `--git-dir`/`--work-tree` flag hides where the reset lands, so those stay blocked; name the worktree with `-C`.
 SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 DANGER=$(python3 -c '
-import os, re, shlex, subprocess, sys
+import json, os, re, shlex, subprocess, sys
 
 GLOBAL_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--exec-path"}
 WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "xargs", "nice"}
 SHELLS = {"bash", "sh", "zsh"}
 OPERATOR_CHARS = "();<>|&\n"
-SESSION_CWD = sys.argv[2]
+SESSION_CWD, TRANSCRIPT = sys.argv[2], sys.argv[3]
+STATE = {"changed_dir": False}
+
+def git_call(argv, cwd):
+    i, repo, located = 0, cwd, True
+    while i < len(argv) and argv[i].startswith("-"):
+        if argv[i] == "-C" and i + 1 < len(argv):
+            repo = os.path.join(repo, os.path.expanduser(argv[i + 1]))
+        elif argv[i] in GLOBAL_WITH_ARG and argv[i] != "-c":
+            located = False
+        i += 2 if argv[i] in GLOBAL_WITH_ARG else 1
+    return (repo, located, argv[i], argv[i + 1:]) if i < len(argv) else None
+
+def added_worktree(repo, args):
+    branch, path, i = None, None, 0
+    while i < len(args):
+        if args[i] in ("-b", "-B") and i + 1 < len(args):
+            branch, i = args[i + 1], i + 2
+        else:
+            path = path if path or args[i].startswith("-") else args[i]
+            i += 1
+    return (os.path.realpath(os.path.join(repo, os.path.expanduser(path))), branch) if path and branch else None
+
+def created_worktrees():
+    created = set()
+    with open(TRANSCRIPT) as lines:
+        for line in lines:
+            if "worktree" not in line:
+                continue
+            entry = json.loads(line)
+            content = (entry.get("message") or {}).get("content")
+            if entry.get("type") != "assistant" or not isinstance(content, list):
+                continue
+            for block in content:
+                if block.get("type") != "tool_use" or block.get("name") != "Bash":
+                    continue
+                for words, _ in segments((block.get("input") or {}).get("command", "")):
+                    call = git_call(words[1:], entry.get("cwd") or SESSION_CWD) if words and os.path.basename(words[0]) == "git" else None
+                    if call and call[2] == "worktree" and call[3][:1] == ["add"]:
+                        created.add(added_worktree(call[0], call[3][1:]))
+    return created
+
+def owns_worktree(repo):
+    def git(*args):
+        return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout.strip()
+    top, branch = git("rev-parse", "--show-toplevel"), git("symbolic-ref", "--short", "HEAD")
+    return bool(top and branch) and (os.path.realpath(top), branch) in created_worktrees()
 
 def worktree_branch(repo, path):
     target = os.path.realpath(os.path.join(repo, os.path.expanduser(path)))
@@ -27,20 +77,16 @@ def worktree_branch(repo, path):
     return None
 
 def git_danger(argv, freed_branches):
-    i, repo = 0, SESSION_CWD
-    while i < len(argv) and argv[i].startswith("-"):
-        if argv[i] == "-C" and i + 1 < len(argv):
-            repo = os.path.join(repo, os.path.expanduser(argv[i + 1]))
-        i += 2 if argv[i] in GLOBAL_WITH_ARG else 1
-    if i >= len(argv):
+    call = git_call(argv, SESSION_CWD)
+    if call is None:
         return None
-    sub, rest = argv[i], argv[i + 1:]
+    repo, located, sub, rest = call
     if "--no-verify" in rest:
         return "--no-verify"
     if sub == "push":
         return "git push"
     if sub == "reset" and "--hard" in rest:
-        return "git reset --hard"
+        return None if located and not STATE["changed_dir"] and owns_worktree(repo) else "git reset --hard"
     if sub == "clean" and any(a == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a) for a in rest):
         return "git clean -f"
     if sub == "worktree" and rest[:1] == ["remove"] and not {"-f", "--force"} & set(rest):
@@ -65,6 +111,8 @@ def segment_danger(words, freed_branches):
     if not words:
         return None
     program = os.path.basename(words[0])
+    if program in ("cd", "pushd"):
+        STATE["changed_dir"] = True
     if program == "git":
         return git_danger(words[1:], freed_branches)
     if program in SHELLS and "-c" in words[1:-1]:
@@ -92,26 +140,31 @@ def scan(text):
         hit = scan(inner)
         if hit:
             return hit
+    freed_branches = set()
+    for words, operator in segments(text):
+        hit = segment_danger(words, freed_branches)
+        if hit:
+            return hit
+        if operator != "&&":
+            freed_branches = set()
+    return None
+
+def segments(text):
     lexer = shlex.shlex(drop_heredoc_bodies(text), posix=True, punctuation_chars=OPERATOR_CHARS)
     lexer.whitespace, lexer.whitespace_split, lexer.commenters = " \t\r", True, ""
-    words, freed_branches = [], set()
+    words = []
     for token in list(lexer) + [";"]:
         if token and set(token) <= set(OPERATOR_CHARS):
-            hit = segment_danger(words, freed_branches)
-            if hit:
-                return hit
+            yield words, token
             words = []
-            if token != "&&":
-                freed_branches = set()
         else:
             words.append(token)
-    return None
 
 try:
     print(scan(sys.argv[1]) or "")
 except Exception:
     sys.exit(3)
-' "$COMMAND" "$SESSION_CWD") || DANGER=$(echo "$COMMAND" | grep -oE 'git push|reset --hard|git clean -f|git branch -D|git (checkout|restore) \.|--no-verify' | head -1)
+' "$COMMAND" "$SESSION_CWD" "$TRANSCRIPT") || DANGER=$(echo "$COMMAND" | grep -oE 'git push|reset --hard|git clean -f|git branch -D|git (checkout|restore) \.|--no-verify' | head -1)
 
 # Push is allowed only to a whitelisted remote: personal backups Praveen owns alone, pushed with every commit.
 # Every `-C <dir>` in the command must point at a whitelisted repo; with none, the session cwd must. A wrapper, subshell,
@@ -137,6 +190,7 @@ if [ "$DANGER" = "--no-verify" ]; then
   exit 2
 elif [ -n "$DANGER" ]; then
   echo "BLOCKED: '$COMMAND' runs '$DANGER'. The user has prevented you from doing this." >&2
+  [ "$DANGER" = "git reset --hard" ] && echo "A worktree this session created with 'git worktree add -b' resets as plain 'git -C <worktree> reset --hard <ref>'; anywhere else it stays denied." >&2
   [ "$DANGER" = "git push" ] && echo "A whitelisted backup remote pushes as plain 'git -C <repo> push …'; a cd, subshell or wrapper word at command position is denied regardless." >&2
   exit 2
 fi
