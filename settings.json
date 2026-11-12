@@ -72,7 +72,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
     "anthropic-skills:xlsx": "name-only",
@@ -88,7 +88,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/reset-context-flags.sh",
+            "command": "bash $HOME/.claude/hooks/reset-context-flags.sh",
             "timeout": 5
           }
         ]
@@ -99,22 +99,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/review-routing-once.sh",
+            "command": "bash $HOME/.claude/hooks/review-routing-once.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/correction-learn.sh",
+            "command": "bash $HOME/.claude/hooks/correction-learn.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "jq -r '.prompt // \"\"' | grep -qE '<task-notification>|\\[SYSTEM NOTIFICATION' || cat /Users/praveenkumar/.claude/persona-core.md",
+            "command": "jq -r '.prompt // \"\"' | grep -qE '<task-notification>|\\[SYSTEM NOTIFICATION' || cat $HOME/.claude/persona-core.md",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inline-call-nudge.sh reset",
+            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh reset",
             "timeout": 5
           }
         ]
@@ -123,7 +123,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-plan-mode.sh UserPromptSubmit",
+            "command": "bash $HOME/.claude/hooks/inject-plan-mode.sh UserPromptSubmit",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/inject-plan-mode.sh UserPromptSubmit plan-build.md",
             "timeout": 5
           }
         ]
@@ -132,7 +137,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/borrowed-account.sh",
+            "command": "bash $HOME/.claude/hooks/borrowed-account.sh",
             "timeout": 5
           }
         ]
@@ -143,17 +148,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"/Users/praveenkumar/.claude/hooks/plugin-drift-guard.sh\"",
+            "command": "bash \"$HOME/.claude/hooks/plugin-drift-guard.sh\"",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/audit-due.sh",
+            "command": "bash $HOME/.claude/hooks/audit-due.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/learn-due.sh",
+            "command": "bash $HOME/.claude/hooks/learn-due.sh",
             "timeout": 5
           }
         ]
@@ -165,22 +170,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/comment-delta-check.js\"",
+            "command": "node \"$HOME/.claude/hooks/comment-delta-check.js\"",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/plan-lint.js\" post",
+            "command": "node \"$HOME/.claude/hooks/plan-lint.js\" post",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/hydrogen-util-guard.sh",
+            "command": "bash $HOME/.claude/hooks/hydrogen-util-guard.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/review-lens-nudge.sh",
+            "command": "bash $HOME/.claude/hooks/review-lens-nudge.sh",
             "timeout": 8
           }
         ]
@@ -190,7 +195,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-plan-mode.sh PostToolUse",
+            "command": "bash $HOME/.claude/hooks/inject-plan-mode.sh PostToolUse",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/inject-plan-mode.sh PostToolUse plan-build.md",
             "timeout": 5
           }
         ]
@@ -200,7 +210,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/audit-due.sh --on-skill",
+            "command": "bash $HOME/.claude/hooks/audit-due.sh --on-skill",
             "timeout": 5
           }
         ]
@@ -210,7 +220,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/commit-trailer-check.sh",
+            "command": "bash $HOME/.claude/hooks/commit-trailer-check.sh",
             "if": "Bash(git:*)",
             "timeout": 5
           }
@@ -221,7 +231,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inline-call-nudge.sh",
+            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh",
             "timeout": 5
           }
         ]
@@ -231,7 +241,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inline-call-nudge.sh reset",
+            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh reset",
             "timeout": 5
           }
         ]
@@ -243,7 +253,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inline-call-nudge.sh",
+            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh",
             "timeout": 5
           }
         ]
@@ -265,22 +275,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/enforce-subagent-model.sh",
+            "command": "bash $HOME/.claude/hooks/enforce-subagent-model.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/build-approval-gate.sh",
+            "command": "bash $HOME/.claude/hooks/build-approval-gate.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/step-gate.sh",
+            "command": "bash $HOME/.claude/hooks/step-gate.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh subagent-tiers.md",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh subagent-tiers.md",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh subagent-tiers-enforcement.md",
             "timeout": 5
           }
         ]
@@ -290,7 +305,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh external-io.md",
             "timeout": 5
           }
         ]
@@ -300,12 +315,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh peer-sessions.md",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh peer-sessions.md",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/done-claim-gate.sh",
+            "command": "bash $HOME/.claude/hooks/done-claim-gate.sh",
             "timeout": 10
           }
         ]
@@ -315,12 +330,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh browser-verify.md",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh browser-verify.md",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/browser-main-guard.sh",
+            "command": "bash $HOME/.claude/hooks/browser-main-guard.sh",
             "timeout": 5
           }
         ]
@@ -330,7 +345,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh code-craft.md '[.](tsx?|jsx?|mjs|cjs|mts|cts|sh|vue|svelte|css|scss|swift|kts?|dart)$'",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh code-craft.md '[.](tsx?|jsx?|mjs|cjs|mts|cts|sh|vue|svelte|css|scss|swift|kts?|dart)$'",
             "timeout": 5
           }
         ]
@@ -340,19 +355,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh committing.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)'",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh committing.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)'",
             "if": "Bash(git:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md '(^|[^[:alnum:]_./-])(gh|curl)([[:space:]]|$)'",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh external-io.md '(^|[^[:alnum:]_./-])(gh|curl)([[:space:]]|$)'",
             "if": "Bash(gh:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-once.sh external-io.md '(^|[^[:alnum:]_./-])(gh|curl)([[:space:]]|$)'",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh external-io.md '(^|[^[:alnum:]_./-])(gh|curl)([[:space:]]|$)'",
             "if": "Bash(curl:*)",
             "timeout": 5
           }
@@ -363,7 +378,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/hydrogen-context.sh",
+            "command": "bash $HOME/.claude/hooks/hydrogen-context.sh",
             "timeout": 5
           }
         ]
@@ -373,7 +388,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/protect-secrets.js\"",
+            "command": "node \"$HOME/.claude/hooks/protect-secrets.js\"",
             "timeout": 5
           }
         ]
@@ -383,72 +398,72 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "command": "$HOME/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(git:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "command": "$HOME/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(gh:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "command": "$HOME/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(cp:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "command": "$HOME/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(rm:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "/Users/praveenkumar/.claude/hooks/block-dangerous-git.sh",
+            "command": "$HOME/.claude/hooks/block-dangerous-git.sh",
             "if": "Bash(grep:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/bash-write-guard.js\"",
+            "command": "node \"$HOME/.claude/hooks/bash-write-guard.js\"",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "if": "Bash(npm:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "if": "Bash(pnpm:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "if": "Bash(yarn:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "if": "Bash(bun:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "if": "Bash(flutter:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "if": "Bash(dart:*)",
             "timeout": 5
           }
@@ -459,7 +474,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/new-dep-gate.js\"",
+            "command": "node \"$HOME/.claude/hooks/new-dep-gate.js\"",
             "timeout": 5
           }
         ]
@@ -469,7 +484,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/harness-context.sh",
+            "command": "bash $HOME/.claude/hooks/harness-context.sh",
             "timeout": 5
           }
         ]
@@ -479,22 +494,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/inject-plan-mode.sh PreToolUse",
+            "command": "bash $HOME/.claude/hooks/inject-plan-mode.sh PreToolUse",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"/Users/praveenkumar/.claude/hooks/plan-lint.js\" pre",
+            "command": "bash $HOME/.claude/hooks/inject-plan-mode.sh PreToolUse plan-build.md",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/plan-lint.js\" pre",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/opus-write-nudge.sh",
+            "command": "bash $HOME/.claude/hooks/opus-write-nudge.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/build-approval-gate.sh",
+            "command": "bash $HOME/.claude/hooks/build-approval-gate.sh",
             "timeout": 5
           }
         ]
@@ -504,7 +524,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/docs-context.sh",
+            "command": "bash $HOME/.claude/hooks/docs-context.sh",
             "timeout": 5
           }
         ]
@@ -515,7 +535,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/done-claim-gate.sh",
+            "command": "bash $HOME/.claude/hooks/done-claim-gate.sh",
             "timeout": 10
           }
         ]
@@ -526,7 +546,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/praveenkumar/.claude/hooks/agent-file-scope.sh",
+            "command": "bash $HOME/.claude/hooks/agent-file-scope.sh",
             "timeout": 10
           }
         ]
@@ -535,7 +555,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash -c 'cols=${COLUMNS:-}; case \"$cols\" in \"\"|*[!0-9]*) cols=$(stty size 2>/dev/null </dev/tty | awk '\"'\"'{print $2}'\"'\"');; esac; case \"$cols\" in \"\"|*[!0-9]*) cols=120;; esac; export COLUMNS=$(( cols > 4 ? cols - 4 : 1 )); plugin_dir=$(ls -d \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}\"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '\"'\"'{ print $(NF-1) \"\\t\" $(0) }'\"'\"' | grep -E '\"'\"'^[0-9]+\\.[0-9]+\\.[0-9]+[[:space:]]'\"'\"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); export CLAUDE_HUD_ALLOW_EXTRA_CMD=1; exec \"/Users/praveenkumar/.bun/bin/bun\" --env-file /dev/null \"${plugin_dir}src/index.ts\" --extra-cmd \"bash /Users/praveenkumar/.claude/statusline/session-address.sh\"'"
+    "command": "CLAUDE_HUD_ALLOW_EXTRA_CMD=1 '/Users/praveenkumar/Library/Application Support/fnm/aliases/default/bin/node' '/Users/praveenkumar/.claude/plugins/claude-hud/statusline.mjs' --extra-cmd 'bash /Users/praveenkumar/.claude/statusline/session-address.sh'"
   },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
@@ -593,13 +613,16 @@
       "effortLevel": "high"
     },
     "claude-opus-5-5": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     },
     "claude-sonnet-5-5": {
       "effortLevel": "high"
+    },
+    "claude-fable-5-2": {
+      "effortLevel": "medium"
     }
   },
-  "advisorModel": "claude-fable-5-1",
+  "advisorModel": "claude-fable-5-2",
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
