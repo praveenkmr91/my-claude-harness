@@ -296,6 +296,11 @@ test('block dangerous git hook', async (t) => {
       assert.equal(reset(`git --git-dir ${repo}/.git reset --hard main`, mine), 2, '--git-dir hides where the reset lands');
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo, empty), 2, 'empty transcript');
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo, ''), 2, 'no transcript');
+      assert.equal(reset('git branch -D feat', repo), 0, 'delete the branch this session created');
+      assert.equal(reset('git branch -D other', repo), 2, 'delete a branch only a user message names');
+      assert.equal(reset('git branch -D existing', repo), 2, 'delete a branch that already existed');
+      assert.equal(reset('git branch -D feat existing', repo), 2, 'its branch plus one it did not create');
+      assert.equal(reset('git branch -D feat', repo, empty), 2, 'delete with an empty transcript');
       spawnSync('git', ['-C', mine, 'switch', '-q', '-c', 'elsewhere'], { env });
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo), 2, 'own folder, now on a branch the session did not create there');
     } finally {

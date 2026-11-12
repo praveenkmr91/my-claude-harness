@@ -7,9 +7,11 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 # heredocs fed to a shell are still found. Unparseable input falls back to a raw substring scan (fail closed).
 # `git branch -D` passes only for the branch of a worktree removed earlier in the same `&&` chain: git refuses to remove
 # a dirty worktree, and the `&&` then stops the delete. `--force` removal frees nothing.
-# `git reset --hard` passes only in a worktree this session owns: its own transcript holds the Bash call that ran
-# `git worktree add -b <branch> <path>`, and that path still has that branch checked out. A `cd` earlier in the command
-# or a `--git-dir`/`--work-tree` flag hides where the reset lands, so those stay blocked; name the worktree with `-C`.
+# A session owns a worktree it created: its own transcript holds the Bash call that ran `git worktree add -b <branch>
+# <path>`. The owner may `git reset --hard` there while that path still has that branch checked out, and may
+# `git branch -D` that branch. A `cd` earlier in the command or a `--git-dir`/`--work-tree` flag hides where a reset
+# lands, so those stay blocked; name the worktree with `-C`. Ownership is by branch name: a branch another session
+# re-created under the same name after the owner removed its worktree still counts as the owner's.
 SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 DANGER=$(python3 -c '
@@ -61,6 +63,9 @@ def created_worktrees():
                         created.add(added_worktree(call[0], call[3][1:]))
     return created
 
+def created_branches():
+    return {created[1] for created in created_worktrees() if created}
+
 def owns_worktree(repo):
     def git(*args):
         return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True).stdout.strip()
@@ -95,8 +100,8 @@ def git_danger(argv, freed_branches):
         if branch:
             freed_branches.add(branch)
     if sub == "branch" and any(re.fullmatch(r"-[a-zA-Z]*D[a-zA-Z]*", a) for a in rest):
-        names = [a for a in rest if not a.startswith("-")]
-        if not (names and set(names) <= freed_branches):
+        names = {a for a in rest if not a.startswith("-")}
+        if not names or not (names <= freed_branches or names <= freed_branches | created_branches()):
             return "git branch -D"
     if sub in ("checkout", "restore") and any(a in (".", "./") for a in rest):
         return f"git {sub} ."
