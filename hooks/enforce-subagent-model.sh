@@ -101,7 +101,7 @@ session_rank=$(rank "$session_model")
 # inherited override tag must not inherit the right to escalate with it.
 if [ -n "$agent_id" ]; then
   case "$child_model" in
-    *fable*) deny "A subagent never dispatches fable (~/.claude/subagent-tiers.md). Do not retry and do not route around this: finish the work that does not depend on the consult, then end your turn with the question for the dispatcher — state the decision, the options you see and what you need ruled on. The dispatcher owns the escalation call." ;;
+    *fable*) deny "A subagent never dispatches fable (~/.claude/subagent-tiers-enforcement.md). Do not retry and do not route around this: finish the work that does not depend on the consult, then end your turn with the question for the dispatcher — state the decision, the options you see and what you need ruled on. The dispatcher owns the escalation call." ;;
   esac
 fi
 
@@ -125,7 +125,7 @@ if [ "$override" != "true" ]; then
   case "$child_model" in
     *fable*)
       if [ "$subagent_type" != "Plan" ] && ! { [ "$is_brain_agent" = true ] && [ "$fable_asked" = true ]; }; then
-        deny "Fable is reserved for reviewing a PLAN, or for code review the user asked for by name in their last message (~/.claude/subagent-tiers.md); \"$subagent_type\" is neither. Code writing is never Fable's. Dispatch the consult as Plan, ask the user for a Fable review, or add \"[tier-override: <why>]\" to the prompt."
+        deny "Fable is reserved for reviewing a PLAN, or for code review the user asked for by name in their last message (~/.claude/subagent-tiers-enforcement.md); \"$subagent_type\" is neither. Code writing is never Fable's. Dispatch the consult as Plan, ask the user for a Fable review, or add \"[tier-override: <why>]\" to the prompt."
       fi ;;
   esac
 fi
@@ -155,7 +155,7 @@ if [ -z "$child_model" ]; then
   # spike and its mechanical reruns (2026-10-25, ~158k tokens). Naming the model forces the
   # choice; opus stays allowed when named, for work whose design is still open.
   if [ "$subagent_type" = "general-purpose" ] && [ "$session_rank" -eq 3 ] && [ "$override" != "true" ]; then
-    deny 'A `general-purpose` dispatch with no `model` inherits Opus from this session (~/.claude/subagent-tiers.md). Settled edits, rebases and spikes on a decided design go to `implementer` (Sonnet); reruns, counts and named checks to `checker` (Haiku). Pass `model: "opus"` only when the brief carries a design call that is still open, and name that call in the prompt.'
+    deny 'A `general-purpose` dispatch with no `model` inherits Opus from this session (~/.claude/subagent-tiers-enforcement.md). Settled edits, rebases and spikes on a decided design go to `implementer` (Sonnet); reruns, counts and named checks to `checker` (Haiku). Pass `model: "opus"` only when the brief carries a design call that is still open, and name that call in the prompt.'
   fi
   exit 0
 fi
@@ -169,9 +169,9 @@ case "$child_model" in
   *fable*)
     [ "$session_rank" -ge 3 ] && exit 0
     if [ "$session_rank" -eq 0 ]; then
-      deny "Fable needs a confirmed Opus session and this session's model could not be read from the transcript (~/.claude/subagent-tiers.md). Re-dispatch from an Opus session, or add \"[tier-override: <why>]\" to the prompt."
+      deny "Fable needs a confirmed Opus session and this session's model could not be read from the transcript (~/.claude/subagent-tiers-enforcement.md). Re-dispatch from an Opus session, or add \"[tier-override: <why>]\" to the prompt."
     fi
-    deny "Fable may only be dispatched from an Opus session (~/.claude/subagent-tiers.md); this session is $session_model. Pick opus, or add \"[tier-override: <why>]\" to the prompt."
+    deny "Fable may only be dispatched from an Opus session (~/.claude/subagent-tiers-enforcement.md); this session is $session_model. Pick opus, or add \"[tier-override: <why>]\" to the prompt."
     ;;
 esac
 

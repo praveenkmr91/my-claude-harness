@@ -9,6 +9,8 @@ const { spawn, spawnSync } = require('node:child_process');
 const HOOK_PATH = path.resolve(__dirname, '..', 'hooks', 'inject-once.sh');
 const SETTINGS_PATH = path.resolve(__dirname, '..', 'settings.json');
 
+const OUTPUT_CEILING = 9800;
+
 const flags = [];
 let seq = 0;
 const newSession = () => `inject-once-test-${process.pid}-${seq++}`;
@@ -130,6 +132,26 @@ test('inject-once hook', async (t) => {
         const sid = newSession();
         assert.equal(run('committing.md', bash(sid, toolInput), pattern), '', JSON.stringify(toolInput));
         assert.match(context(run('committing.md', bash(sid, { command: 'git status' }), pattern)), /committing\.md — injected once/);
+      }
+    }
+  });
+
+  await t.test('one hook group holds both tier docs', () => {
+    const groups = Object.values(JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')).hooks).flat();
+    const tierGroups = groups.filter((group) => group.hooks.some((h) => /inject-once\.sh subagent-tiers\.md$/.test(h.command)));
+    assert.equal(tierGroups.length, 1);
+    assert.ok(tierGroups[0].hooks.some((h) => /inject-once\.sh subagent-tiers-enforcement\.md$/.test(h.command)));
+  });
+
+  await t.test('every wired doc injects under the hook output ceiling', () => {
+    const patternInputs = [{ file_path: 'x.ts' }, { command: 'git status' }, { command: 'gh pr view 1' }];
+    for (const { doc, pattern } of entries) {
+      const outputs = (pattern ? patternInputs : [{}])
+        .map((toolInput) => run(doc, { session_id: newSession(), tool_name: 'Bash', tool_input: toolInput }, pattern))
+        .filter((out) => out !== '');
+      assert.notEqual(outputs.length, 0, `${doc} injects nothing`);
+      for (const out of outputs) {
+        assert.ok(Buffer.byteLength(out) < OUTPUT_CEILING, `${doc} emits ${Buffer.byteLength(out)} bytes, ceiling ${OUTPUT_CEILING}`);
       }
     }
   });

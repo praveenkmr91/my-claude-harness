@@ -6,6 +6,7 @@ SID=$(jq -r '.session_id // empty')
 rm -f "/tmp/claude-docs-ctx-$SID" \
   "/tmp/claude-hydrogen-ctx-$SID-"* \
   "/tmp/claude-plan-mode-$SID" \
+  "/tmp/claude-plan-mode-$SID-"* \
   "/tmp/claude-review-routing-$SID" \
   "/tmp/claude-harness-ctx-$SID-"* \
   /tmp/claude-inject-*-"$SID"-*

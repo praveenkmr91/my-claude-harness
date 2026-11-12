@@ -205,7 +205,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 ### Rule docs disagree with each other in small ways
 
 - **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; dated incidents sit in `agents/implementer.md` and `review-battery.md`; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
-- **Why parked:** doc drift with no counted fault; the entry `Build gate needs the typed word, not a yes to the proposal` above is settled by `plan-mode.md` and can go with this work.
+- **Why parked:** doc drift with no counted fault; the entry `Build gate needs the typed word, not a yes to the proposal` above is settled by `plan-build.md` and can go with this work.
 - **Fix:** one pass over the docs named, each edit checked against the hook it describes.
 - **Worth it when:** a session follows one of the stale lines, or the next doc edit touches one of these files.
 
@@ -236,3 +236,10 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** which rule leaves `CLAUDE.md` is the owner's choice; the other two have no counted fault.
 - **Fix:** move one `CLAUDE.md` rule into the doc it points to; implement or delete the review join; date-stamp eval results.
 - **Worth it when:** the next rule has to be added to `CLAUDE.md`.
+
+### Hydrogen injector joins every matching section into one output past the hook limit
+
+- **Evidence:** `hooks/hydrogen-context.sh` appends each matching `hydrogen-reference.md` section to one `additionalContext`; a command matching three sections emits 17,976 bytes, and Claude Code replaces a hook output over 10,000 characters with a short preview.
+- **Why parked:** the fix that split the tier and plan docs covers `inject-once.sh` and `inject-plan-mode.sh` only; this injector needs its own fix.
+- **Fix:** keep each hook output under 9,800 bytes, by emitting the matched sections as separate outputs or splitting the reference doc; a ceiling case over the worst-case match, as in `tests/inject-once.test.js`.
+- **Worth it when:** a Hydrogen session reports missing reference text, or a section is added.

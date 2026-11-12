@@ -11,9 +11,11 @@ The hand-authored half of my `~/.claude` directory: the rules, hooks, agents, sk
 | `code-craft.md` | How written code should read: placement, layering, lifecycle, fixtures, comments. Injected on the first source-file touch. |
 | `committing.md` | When to commit, what goes in one commit, squash and undo mechanics, worktrees, no attribution trailers. Injected on the first git command. |
 | `peer-sessions.md` | Roles, message types and turn rules for a planner and builder session. Injected on the first SendMessage. |
-| `plan-mode.md` | Plans are files: criteria → steps → `→ verify:` checks, tiered gates (dry-run, cold read with pre-mortem, consult), chunking, approval semantics. |
+| `plan-mode.md` | Plans are files: criteria → steps → `→ verify:` checks, tiered gates, dry-run, chunking. |
+| `plan-build.md` | Plan review (cold read with pre-mortem, consult), approval semantics and the build gates; injected with `plan-mode.md`. |
 | `review-routing.md`, `review-battery.md` | Which review depth a verb buys (review / battery / harden / trim / audit / verify) and the agent battery behind the heavy tier. |
 | `subagent-tiers.md` | Which model tier each kind of work runs on, enforced by a hook. |
+| `subagent-tiers-enforcement.md` | The Fable-session rules, what each tier hook decides and the tier principle; injected with `subagent-tiers.md`. |
 | `external-io.md`, `library-docs.md`, `browser-verify.md` | Rules for MCP tools, library documentation lookup, and browser verification. |
 | `hydrogen.md`, `hydrogen-reference.md` | Repo-gated guidance for one internal design system; loads only inside repos that depend on it. |
 | `harness.md`, `harness-backlog.md` | How this harness itself is maintained, and parked friction with evidence. |

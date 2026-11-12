@@ -48,7 +48,7 @@ case "$F" in "$HOME/.claude/plugins/"*) ;; "$HOME/.claude/"*) exit 0 ;; esac
 
 case "$MODEL" in *fable*)
   overridden && exit 0
-  printf 'Do not retry this write: the harness blocks it and the same call gets the same denial. This thread runs Fable, and Fable never writes code; dispatch `implementer` with this exact edit, or ask the user to type `[tier-override: <why>]` (~/.claude/subagent-tiers.md).\n' >&2
+  printf 'Do not retry this write: the harness blocks it and the same call gets the same denial. This thread runs Fable, and Fable never writes code; dispatch `implementer` with this exact edit, or ask the user to type `[tier-override: <why>]` (~/.claude/subagent-tiers-enforcement.md).\n' >&2
   exit 2 ;;
 esac
 # Session scratchpad: throwaway probes never ship, so tier routing buys nothing (bash-write-guard.js passes temp-dir output too).

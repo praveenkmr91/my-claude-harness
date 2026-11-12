@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Agent PreToolUse hook, enforcing arm of ~/.claude/plan-mode.md "The build carries the gates"; main thread only, subagents skipped.
+# Agent PreToolUse hook, enforcing arm of ~/.claude/plan-build.md "The build carries the gates"; main thread only, subagents skipped.
 #   Blocks an implementer dispatch in a plan build (this or an earlier implementer prompt since the last HANDOFF names an existing plan file) until this thread, since the last implementer hand-back,
 #   ran a check (lint, type check, tests, or a checker dispatch) and a commit, or the dispatch prompt opens with `step gate: skip — <check|commit|step>: <why>`, one line per gate.
 #   Every plan-build implementer dispatch also needs a non-errored `dry-runner` dispatch on a plan, or a review-skip dispatch (`step gate: skip — review: <why>`), since the last HANDOFF (any time, with no HANDOFF); a dispatch still running and a denied dispatch never gate the next.
@@ -84,8 +84,8 @@ MISSING=$(printf '%s\n' "$EVENTS" "$PROMPT_EVENTS" \
 
 [ -n "$MISSING" ] || exit 0
 if [ "$MISSING" = dry-run ]; then
-  printf 'No dry-runner dispatch on this plan since the HANDOFF (or in this session). Per `plan-mode.md` the plan is dry-run against the current tree before its first step: dispatch `dry-runner` with the plan path, judge its output, then dispatch `implementer`; or open the prompt with `step gate: skip — review: <why>`. A dry run that ran in another session is a skip naming that session; reply text written this turn is not seen, and a plain retry stays blocked.\n' >&2
+  printf 'No dry-runner dispatch on this plan since the HANDOFF (or in this session). Per `plan-build.md` the plan is dry-run against the current tree before its first step: dispatch `dry-runner` with the plan path, judge its output, then dispatch `implementer`; or open the prompt with `step gate: skip — review: <why>`. A dry run that ran in another session is a skip naming that session; reply text written this turn is not seen, and a plain retry stays blocked.\n' >&2
   exit 2
 fi
-printf 'The last `implementer` step handed back with no %s from this thread since. Per `plan-mode.md` each step verifies, lints, type-checks and commits before the next dispatch. Run the step'\''s checks (or dispatch `checker`) and commit, or open the dispatch prompt with `step gate: skip — <check|commit>: <why>`, one line per gate (`commit: same-step fix` for a review fix before the commit; `step: <question answered>` when the hand-back was a question); reply text written this turn is not seen, and a plain retry stays blocked.\n' "$MISSING" >&2
+printf 'The last `implementer` step handed back with no %s from this thread since. Per `plan-build.md` each step verifies, lints, type-checks and commits before the next dispatch. Run the step'\''s checks (or dispatch `checker`) and commit, or open the dispatch prompt with `step gate: skip — <check|commit>: <why>`, one line per gate (`commit: same-step fix` for a review fix before the commit; `step: <question answered>` when the hand-back was a question); reply text written this turn is not seen, and a plain retry stays blocked.\n' "$MISSING" >&2
 exit 2
