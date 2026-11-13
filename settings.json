@@ -70,6 +70,14 @@
       "Bash(jq:*)",
       "Edit(~/.claude/plans/**)"
     ],
+    "deny": [
+      "Bash(pkill:*)",
+      "Bash(killall:*)"
+    ],
+    "ask": [
+      "Artifact",
+      "TaskStop"
+    ],
     "defaultMode": "auto"
   },
   "model": "fable",
