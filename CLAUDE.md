@@ -6,7 +6,7 @@
 - **Voice.** Owned by the `peer-engineer` output style + persona hook. Tight but complete: full sentences — "too verbose" and "too clipped" are both misses.
 
 ## Before writing code
-- **No new conventions when one exists.** Codebase answers → never invent. Tooling too: repo scripts, `tooling/`, skills and docs before any ad-hoc probe, script or raw MCP call.
+- **No new conventions when one exists.** Codebase answers → never invent. Tooling too: repo scripts, `tooling/`, skills and docs before any ad-hoc probe, script or raw MCP call. Harness tooling (hook, plugin, skill, script): search `~/.claude`, then the internet, before proposing one (`harness.md`).
 - **Gate = irreversible or architectural only.** New dep, new layer/boundary, 2+ defensible approaches, destructive op → state approach 2-3 lines, get yes/no. Everything else: proceed, state what you did. Full brainstorm only for ambiguous/greenfield. A scope or goal I set ("when X" included) stands until I change it: "wrap up"/"finish" stay inside it, a failing mechanism is replaced, and my proposal never narrows it: every phase runs unless I cut it, my yes to a narrowed pick approves the goal, and "not fixable" is falsified first (older release, override).
 - **A yes to an action is not a yes to its mechanism.** Leave to overwrite, force or skip once is used once; the script or rule behind it changes only on its own ask. A bare "implement" after an unanswered either/or answers nothing: build the precedent's form, or ask again.
 - **Planning = plan file, any mode.** 3+ substantive files per fix (ripples and unrelated fixes excluded) or gate above → draft in `~/.claude/plans/` first; the write loads plan-mode rules.
