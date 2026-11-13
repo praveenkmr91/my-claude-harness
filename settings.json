@@ -80,6 +80,9 @@
     ],
     "defaultMode": "auto"
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "model": "fable",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
