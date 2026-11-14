@@ -20,7 +20,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 - Comment-only scope → comment-analyzer alone.
 - HIGH-risk source path (no specs, mocks, docs) or an ask naming shared state / public API / money-moving mutation → adversarial-reviewer + security-review; with bulk, + code-reviewer.
 - Bulk (≥200 added lines or ≥3 new files) → /delete-list (report, never auto-apply).
-- Added web code → one lens per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.sh`.
+- Added web code → one lens per signal (fallbacks, new types, comments, legacy idioms, untested source); patterns in `hooks/review-classify.py`.
 - a11y-audit never auto-joins.
 - Per joined lens outside `required=`: hand pass first, reading its definition (`~/.claude/agents/` or pr-review-toolkit's `agents/`); agent only on a lead. One line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`; write a skip reason only after reading the diff, an implementer's included (sweeps: `subagent-tiers.md` residue census).
 - PR ask ("check PR", "review PR 12", a PR URL; joins show `pr=`) → the `code-review` skill on that PR, lenses scored from its diff. `--comment` only on explicit ask; the battery (`pr-review-toolkit:review-pr`) only on full / deep.

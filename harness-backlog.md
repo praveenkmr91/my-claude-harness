@@ -36,7 +36,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### High-risk path flag keys on the file name, not the change
 
-- **Evidence:** the query stale-time build (`0a05507a`): a 140-line chunk turned Big because `use-order-portfolio.ts` matched `review-classify.sh`'s risk pattern on "order", for a 3-line `staleTime` removal; 19 review agents ran at chunk end.
+- **Evidence:** the query stale-time build (`0a05507a`): a 140-line chunk turned Big because `use-order-portfolio.ts` matched `review-classify.py`'s risk pattern on "order", for a 3-line `staleTime` removal; 19 review agents ran at chunk end.
 - **Why parked:** one sample, and "order portfolio" may be a real money path, so the flag may have been right and only the hunk trivial. A policy change for every HIGH-risk path was tried and reverted for that reason.
 - **Fix:** score risk on the hunks, not the path: a risky path whose diff only deletes or renames options does not raise the range to Big.
 - **Worth it when:** a second build turns Big on a risky path whose hunks are trivial.
@@ -45,7 +45,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 - **Evidence:** the same build: the planner's HANDOFF asked for "the full Big done bar" at step 1, and its GO repeated it, so the builder ran Big whatever the chunk diff earned (`peer-sessions.md` "the done bar its chunk diff earns").
 - **Why parked:** one sample; that planner's context still held the pre-review-by-size rule text, so it may be stale context, not a rule gap.
-- **Fix:** a HANDOFF or GO never names a tier; the builder classifies the chunk diff with `review-classify.sh` at chunk end.
+- **Fix:** a HANDOFF or GO never names a tier; the builder classifies the chunk diff with `review-classify.py` at chunk end.
 - **Worth it when:** a planner started after review-by-size shipped still names a tier up front.
 
 ### Draft-chunk lint is dodged by dropping the label

@@ -6,7 +6,7 @@ HOOKS=$(cd "$(dirname "$0")" && pwd)
 FILE=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
 grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)$' <<<"$FILE" || exit 0
 cd "$(dirname "$FILE")" 2>/dev/null || exit 0
-CLASSIFIED=$(bash "$HOOKS/review-classify.sh" <<<"$IN")
+CLASSIFIED=$(python3 "$HOOKS/review-classify.py" <<<"$IN")
 LENSES=$(grep -oE 'lenses=[^ ]+' <<<"$CLASSIFIED" | cut -d= -f2)
 [ -n "$LENSES" ] || exit 0
 REQUIRED=$(grep -oE 'required=[^ ]+' <<<"$CLASSIFIED" | cut -d= -f2)

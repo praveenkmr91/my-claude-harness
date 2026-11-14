@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const HOOK_PATH = path.resolve(__dirname, '..', 'hooks', 'review-classify.sh');
+const HOOK_PATH = path.resolve(__dirname, '..', 'hooks', 'review-classify.py');
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-classify-'));
 test.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
@@ -17,7 +17,7 @@ function lensesFor(source, { packageJson, file = 'src.ts' } = {}) {
   execFileSync('git', ['init', '-q'], { cwd: repo });
   fs.writeFileSync(path.join(repo, file), source);
   if (packageJson) fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify(packageJson));
-  const out = execFileSync('bash', [HOOK_PATH], { input: '{}', cwd: repo, encoding: 'utf8' });
+  const out = execFileSync('python3', [HOOK_PATH], { input: '{}', cwd: repo, encoding: 'utf8' });
   return out.match(/lenses=(\S+)/)[1].split(',');
 }
 
@@ -33,7 +33,7 @@ function joinsForEdit({ files, payload = () => ({}), stdin }) {
   git('commit', '-q', '-m', 'init');
   for (const [name, [, modified]] of Object.entries(files)) fs.writeFileSync(path.join(repo, name), modified);
   const input = stdin ?? JSON.stringify(payload(repo));
-  return execFileSync('bash', [HOOK_PATH], { input, cwd: repo, encoding: 'utf8', env });
+  return execFileSync('python3', [HOOK_PATH], { input, cwd: repo, encoding: 'utf8', env });
 }
 
 const cases = [
@@ -82,7 +82,7 @@ function joinsFor(prompt, { source } = {}) {
   const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
   execFileSync('git', ['init', '-q'], { cwd: repo });
   if (source !== undefined) fs.writeFileSync(path.join(repo, 'src.ts'), source);
-  return execFileSync('bash', [HOOK_PATH], { input: JSON.stringify({ prompt }), cwd: repo, encoding: 'utf8' });
+  return execFileSync('python3', [HOOK_PATH], { input: JSON.stringify({ prompt }), cwd: repo, encoding: 'utf8' });
 }
 
 test('review-classify scopes the edited file', async (t) => {
@@ -161,7 +161,7 @@ test('review-classify review_base', async (t) => {
   commit('src/d.ts');
   const transcript = path.join(tmpDir, 'since.jsonl');
   fs.writeFileSync(transcript, `${JSON.stringify({ type: 'user', timestamp: '2020-01-01T00:00:00.000Z' })}\n`);
-  const lensesFrom = (review_base, transcript_path = transcript) => execFileSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path, review_base }), cwd: repo, encoding: 'utf8', env }).match(/lenses=(\S+)/)[1].split(',');
+  const lensesFrom = (review_base, transcript_path = transcript) => execFileSync('python3', [HOOK_PATH], { input: JSON.stringify({ transcript_path, review_base }), cwd: repo, encoding: 'utf8', env }).match(/lenses=(\S+)/)[1].split(',');
 
   await t.test('lenses come from the delta after the base only', () => {
     assert.ok(!lensesFrom(step1).includes('react-best-practices'));
@@ -218,7 +218,7 @@ test('review-classify effort level', async (t) => {
 
   await t.test('non-git dir keeps a stated level', () => {
     const dir = fs.mkdtempSync(path.join(tmpDir, 'plain-'));
-    const run = (prompt) => execFileSync('bash', [HOOK_PATH], { input: JSON.stringify({ prompt }), cwd: dir, encoding: 'utf8' });
+    const run = (prompt) => execFileSync('python3', [HOOK_PATH], { input: JSON.stringify({ prompt }), cwd: dir, encoding: 'utf8' });
     assert.equal(run('review high'), '<review-joins effort=high>\n');
     assert.equal(run('review'), '');
   });
@@ -250,7 +250,7 @@ function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit
     for (const name of unreadable) fs.symlinkSync(path.join(dir, 'missing'), path.join(dir, name));
   }
   const body = stdin ?? JSON.stringify({ transcript_path: transcript, ...input });
-  return execFileSync('bash', [HOOK_PATH], { input: body, cwd: repo, encoding: 'utf8', env });
+  return execFileSync('python3', [HOOK_PATH], { input: body, cwd: repo, encoding: 'utf8', env });
 }
 
 test('review-classify unreviewed source lines', async (t) => {

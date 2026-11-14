@@ -12,7 +12,7 @@ else
   cat "$HOME/.claude/review-routing.md"
 fi
 
-bash "$(dirname "$0")/review-classify.sh" <<<"$IN"
+python3 "$(dirname "$0")/review-classify.py" <<<"$IN"
 # Latch last: a timeout kill drops all output, so an early flag would hide the doc all session.
 [ -n "$SID" ] && touch "$FLAG"
 exit 0

@@ -138,8 +138,13 @@ def classify():
         if base: payload['review_base']=base
         if window_ts: payload['review_cutoff']=window_ts
         # Under the 10s Stop-hook timeout in settings.json; a killed hook blocks nothing.
-        try: joins=subprocess.run(['bash',os.path.expanduser('~/.claude/hooks/review-classify.sh')],input=json.dumps(payload),cwd=cwd,capture_output=True,text=True,timeout=6).stdout
-        except subprocess.TimeoutExpired: joins=''
+        try:
+            res=subprocess.run(['python3',os.path.expanduser('~/.claude/hooks/review-classify.py')],input=json.dumps(payload),cwd=cwd,capture_output=True,text=True,timeout=6)
+            joins=res.stdout
+            if not joins and res.stderr: print('review-classify failed: '+res.stderr.splitlines()[0],file=sys.stderr)
+        except subprocess.TimeoutExpired:
+            print('review-classify timed out after 6s; review joins skipped',file=sys.stderr)
+            joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
         m=re.search(r'code-added=(\d+) required=(\S+)',joins)

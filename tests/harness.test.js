@@ -30,7 +30,7 @@ const RULE_DOCS = [
   'peer-sessions.md',
 ];
 
-const HOOK_SCRIPTS = fs.readdirSync(path.join(ROOT, 'hooks')).filter((f) => /\.(sh|js)$/.test(f));
+const HOOK_SCRIPTS = fs.readdirSync(path.join(ROOT, 'hooks')).filter((f) => /\.(sh|js|py)$/.test(f));
 
 function frontmatter(text) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -121,6 +121,7 @@ test.describe('hook scripts', () => {
     test(`hooks/${script} parses`, () => {
       const abs = path.join(ROOT, 'hooks', script);
       if (script.endsWith('.sh')) execFileSync('bash', ['-n', abs]);
+      else if (script.endsWith('.py')) execFileSync('python3', ['-c', 'import ast,sys; ast.parse(open(sys.argv[1]).read())', abs]);
       else execFileSync('node', ['--check', abs]);
     });
   }
@@ -541,7 +542,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/block-dangerous-git.sh', /updatedInput/, 'CLAUDE.md', /auto-quotes unquoted/],
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
     ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
-    ['hooks/review-classify.sh', /effort=\$EFFORT/, 'review-routing.md', /`effort=` on the joins line/],
+    ['hooks/review-classify.py', /' effort=%s' % effort/, 'review-routing.md', /`effort=` on the joins line/],
     ['hooks/bash-write-guard.js', /Use Write or Edit/, 'harness.md', /bash-write-guard\.js` blocks them/],
     ['hooks/docs-context.sh', /library-docs\.md/, 'CLAUDE.md', /cites `pkg@x\.y\.z`/],
     ['hooks/plan-lint.js', /rephrase as an instruction/, 'plan-mode.md', /plan-lint\.js` refuses/],
@@ -562,7 +563,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/done-claim-gate.sh', /a hand pass does not count/, 'review-routing.md', /hand-written findings line does not count/],
     ['hooks/done-claim-gate.sh', /IMPECCABLE NOT RUN/, 'review-routing.md', /\/impeccable audit <files>/],
     ['hooks/done-claim-gate.sh', /LEARN NOT RUN/, 'review-routing.md', /one `\/learn` pass per build session/],
-    ['hooks/review-classify.sh', /required=\$REQUIRED/, 'review-routing.md', /`required=`/],
+    ['hooks/review-classify.py', /code-added=%d required=%s/, 'review-routing.md', /`required=`/],
     ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-battery.md', /## Required members/],
     ['hooks/enforce-subagent-model.sh', /names its effort/, 'subagent-tiers-enforcement.md', /with no `effort`/],
     ['hooks/step-gate.sh', /No dry-runner dispatch/, 'peer-sessions.md', /step-gate\.sh enforces/],
