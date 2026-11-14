@@ -391,3 +391,23 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.doesNotThrow(() => classifyTranscript({ stdin: '' }));
   });
 });
+
+test('review-classify on bytes outside ASCII', async (t) => {
+  await t.test('an edited path holding U+00C5 still prints its joins line', () => {
+    const name = 'Årsrapport.ts';
+    const files = { [name]: ['export const a = 1;\n', 'export const a = b ?? 1;\n'] };
+    const out = joinsForEdit({ files, payload: (repo) => ({ tool_input: { file_path: path.join(repo, name) } }) });
+    assert.match(out, /lenses=\S*silent-failure-hunter/);
+  });
+
+  await t.test('a package.json with an invalid UTF-8 byte still yields its test script', () => {
+    const manifest = Buffer.from('{"author":"Jos\xe9","scripts":{"test":"vitest"}}', 'latin1');
+    const files = { 'package.json': [manifest, manifest], 'a.ts': ['', 'export const a = 1;\n'] };
+    assert.match(joinsForEdit({ files }), /lenses=\S*pr-test-analyzer/);
+  });
+
+  await t.test('a comment indented with a Unicode space is not a comment-only change', () => {
+    const files = { 'a.ts': ['export const a = 1;\n', 'export const a = 1;\n // note\n'] };
+    assert.match(joinsForEdit({ files }), /lenses=reuse-analyzer/);
+  });
+});
