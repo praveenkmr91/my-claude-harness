@@ -124,7 +124,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 - **Evidence:** a peer session's count, not re-run here: 3 sessions since the cold reader landed, all of which dispatched `implementer` after a plan edit no cold read followed (31 dispatches).
 - **Why parked:** two days of history; most of those edits are wording folds `plan-mode.md` lets through without a re-read.
-- **Fix:** if a re-count a month on still shows dispatches after behaviour folds: a `SubagentStop` hook stamps the cold reader's own `shasum` line (an agent-written stamp is denied by the auto-mode classifier), and `build-approval-gate.sh` re-arms only when the plan changed after the last cold read's report.
+- **Fix:** if a re-count a month on still shows dispatches after behaviour folds: a `SubagentStop` hook stamps the cold reader's own `shasum` line (an agent-written stamp is denied by the auto-mode classifier), and `build-approval-gate.sh` re-arms only when the plan changed after the last cold read's report. Under the per-chunk cap (`plan-build.md` Review) a decision fold needs a dry run, not a cold read, so the re-count keys on either review after the plan's last edit.
 
 ### Cold-read brief passes for async state and unverified failure paths
 
