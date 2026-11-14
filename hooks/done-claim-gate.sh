@@ -131,6 +131,12 @@ if not report:
 # Stop can fire before the final reply is flushed to the transcript, which drops its verdict lines.
 if final.strip() and (not texts or texts[-1].strip()!=final.strip()): texts.append(final)
 cwd=inp.get('cwd') or ''
+warned=[]
+# Claude Code drops a hook's stderr on exit 0, so a skipped classify also goes out once as a systemMessage; nothing else here writes stdout.
+def classify_skipped(why):
+    print(why,file=sys.stderr)
+    if not warned: print(json.dumps({'systemMessage':why}))
+    warned.append(why)
 def classify():
     verb,lenses,required,added='review','reuse-analyzer,placement-analyzer','none','0'
     if cwd and os.path.isdir(cwd):
@@ -141,9 +147,9 @@ def classify():
         try:
             res=subprocess.run(['python3',os.path.expanduser('~/.claude/hooks/review-classify.py')],input=json.dumps(payload),cwd=cwd,capture_output=True,text=True,timeout=6)
             joins=res.stdout
-            if not joins and res.stderr: print('review-classify failed: '+res.stderr.splitlines()[0],file=sys.stderr)
+            if not joins and res.stderr: classify_skipped('review-classify failed: '+res.stderr.splitlines()[0])
         except subprocess.TimeoutExpired:
-            print('review-classify timed out after 6s; review joins skipped',file=sys.stderr)
+            classify_skipped('review-classify timed out after 6s; review joins skipped')
             joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()

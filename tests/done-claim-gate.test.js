@@ -65,7 +65,7 @@ function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = t
 const run = (reply, opts) => runFull(reply, opts).status;
 
 // `send: true` replays the reply as a SendMessage whose tool_use is not yet in the transcript.
-function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since, stopHookActive = false, transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`) } = {}) {
+function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since, stopHookActive = false, home, transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`) } = {}) {
   const lines = [{ type: 'user', timestamp: since, message: { content: 'go' } }];
   const prelude = [];
   if (lint) prelude.push({ type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
@@ -87,7 +87,7 @@ function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.
   if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: `${reply}\n${BASE_VERDICTS}` }] } });
   fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
   const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, cwd, ...(stopHookActive && { stop_hook_active: true }) };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env });
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env: home ? { ...env, HOME: home } : env });
 }
 
 test('done-claim gate', async (t) => {
@@ -1063,6 +1063,16 @@ test('done-claim gate: required review agents', async (t) => {
     blocked(runWithResults(CLAIM, runs, opts(repo)), 'code-reviewer');
     runs[2] = resultOf('review', false, stamp(2));
     quiet(runWithResults(CLAIM, runs, opts(repo)));
+  });
+
+  await t.test('a classifier that fails blocks nothing and warns the user once', () => {
+    const home = fs.mkdtempSync(path.join(tmpDir, 'home-'));
+    fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.claude', 'hooks', 'review-classify.py'), 'import sys\nprint("boom", file=sys.stderr)\n');
+    const repo = scratchRepo();
+    const res = runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), checked(stamp(3))], opts(repo, { home }));
+    assert.equal(res.status, 0, res.stderr);
+    assert.deepEqual(JSON.parse(res.stdout), { systemMessage: 'review-classify failed: boom' });
   });
 
   await t.test('a signalled member is named alone once code-reviewer was dispatched', () => {
