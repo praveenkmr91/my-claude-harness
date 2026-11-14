@@ -17,6 +17,7 @@ child_model=$(echo "$input" | jq -r '.tool_input.model // ""')
 override=$(echo "$input" | jq -r '.tool_input.prompt // "" | test("\\[tier-override:") | tostring')
 transcript=$(echo "$input" | jq -r '.transcript_path // ""')
 agent_id=$(echo "$input" | jq -r '.agent_id // ""')
+effort=$(echo "$input" | jq -r '.tool_input.effort // ""')
 
 [ "$subagent_type" = "fork" ] && exit 0
 
@@ -26,6 +27,14 @@ deny() {
 }
 
 [ -z "$subagent_type" ] && deny 'Name the agent: a dispatch with no `subagent_type` silently becomes `general-purpose`, and a review fan-out or audit flavor is a `fork` (review-routing.md). Pick an agent from ~/.claude/agents/ or a plugin, or name `general-purpose` or `fork`.'
+
+# The seven in NAMED_VERBS['battery'] (hooks/done-claim-gate.sh), plus pr-test-analyzer.
+case "${subagent_type##*:}" in
+  code-reviewer|silent-failure-hunter|type-design-analyzer|reuse-analyzer|placement-analyzer|comment-analyzer|modern-ts-analyzer|pr-test-analyzer)
+    if [ "$override" != "true" ] && [ -z "$effort" ]; then
+      deny "\"${subagent_type##*:}\" was dispatched with no effort: a review dispatch names its effort. Resend with an effort input; the Effort bullet of ~/.claude/review-routing.md sets the level."
+    fi ;;
+esac
 
 inject() {
   echo "$input" | jq --arg m "$1" \

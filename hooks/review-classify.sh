@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb= and lenses= — keep those keys.
+# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_cutoff, the stamp that opens the claiming window, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb= and lenses= — keep those keys.
 IN=$(cat)
 # Scope is the task, not the tree — code is often committed before the review.
 TRANSCRIPT=$(jq -r '.transcript_path // empty' <<<"$IN")
-EDITED=""; SINCE=""
-if [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
-  EDITED=$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name|test("^(Write|Edit|MultiEdit)$"))) | .input.file_path // empty' "$TRANSCRIPT" 2>/dev/null)
-  SINCE=$(jq -r 'select(.timestamp) | .timestamp' "$TRANSCRIPT" 2>/dev/null | head -1)
-fi
-# The PostToolUse nudge runs before this edit reaches the transcript, so the edited file comes from the payload.
+EDITED=""; SINCE=""; CODE_ADDED=0; REQUIRED=none
+# The nudge's own edit joins scope from the payload; its lines are counted from the transcript, which already holds the call.
 EDITED=$(printf '%s\n%s' "$EDITED" "$(jq -r '.tool_input.file_path // empty' <<<"$IN")")
 # A named PR replaces session scope: a colleague's PR has no edits here and a clean tree.
 P=$(jq -r '.prompt // ""' <<<"$IN")
 BASE=$(jq -r '.review_base // empty' <<<"$IN"); REF=HEAD
+CUTOFF=$(jq -r '.review_cutoff // empty' <<<"$IN")
 # Stated forms only: a bare level word also reads "high-risk", "low priority", "--max-findings".
 EFFORT=$(grep -oiE '\beffort[ =:]+(low|medium|x?high|max)\b|\b(low|medium|x?high|max)[ -]effort\b|\b(review|battery|harden|trim|audit|verify) (low|medium|x?high|max)([[:space:].,;:!?]|$)' <<<"$P" \
   | grep -oiE '(low|medium|x?high|max)' | head -1 | tr '[:upper:]' '[:lower:]')
@@ -24,11 +21,91 @@ if grep -qiE '\b(check|review)(ing)? (out |over )?(the |my |this |that |a )?(PR|
   [ -n "$PR" ] || PR=$(grep -oiE '\b(PR|pull request) ?#?[0-9]+' <<<"$P" | grep -oE '[0-9]+$' | head -1)
   PR_DIFF=$(gh pr diff ${PR:+"$PR"} 2>/dev/null) || PR_DIFF=""
 fi
+read -r -d '' SCAN <<'PY'
+import glob, json, os, re, sys
+top, cutoff, main, text_out = sys.argv[1:5]
+top = os.path.realpath(top)
+# Default macOS volumes ignore case; elsewhere two spellings differing in case are two paths.
+fold = str.lower if sys.platform == 'darwin' else str
+NEEDLE = re.compile(rb'"name":"(?:Write|Edit|MultiEdit|Agent|Task)"|"is_error":true')
+# Twin of `code` in done-claim-gate.sh.
+CODE = re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
+WEB = re.compile(r'\.(ts|tsx|js|jsx|mjs|cjs|vue)$')
+TESTISH = re.compile(r'\.(test|spec)\.|__tests__/|^tests/')
+subagents = glob.escape(os.path.splitext(main)[0] + '/subagents')
+since = ''
+calls = []
+failed = set()
+for path in [main] + sorted(glob.glob(subagents + '/agent-*.jsonl')):
+    is_main = path == main
+    try:
+        f = open(path, 'rb')
+    except OSError:
+        continue
+    with f:
+        for raw in f:
+            hit = NEEDLE.search(raw)
+            if not (hit or (is_main and not since)):
+                continue
+            try:
+                rec = json.loads(raw)
+            except ValueError:
+                continue
+            if is_main and not since:
+                since = rec.get('timestamp') or ''
+            content = (rec.get('message') or {}).get('content')
+            if not (hit and isinstance(content, list)):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if rec.get('type') == 'user' and block.get('type') == 'tool_result' and block.get('is_error'):
+                    failed.add(block.get('tool_use_id'))
+                elif rec.get('type') == 'assistant' and block.get('type') == 'tool_use':
+                    calls.append((rec.get('timestamp') or '', block.get('name'), block.get('input') or {}, block.get('id'), is_main))
+review = None
+for ts, name, inp, call_id, is_main in calls:
+    kind = (inp.get('subagent_type') or '').rsplit(':', 1)[-1]
+    if is_main and name in ('Agent', 'Task') and kind == 'code-reviewer' and call_id not in failed and (not cutoff or ts < cutoff):
+        review = ts if review is None else max(review, ts)
+edited = {}
+count = 0
+texts = []
+for ts, name, inp, call_id, is_main in calls:
+    file_path = inp.get('file_path')
+    if name not in ('Write', 'Edit', 'MultiEdit') or not file_path:
+        continue
+    path = os.path.realpath(file_path)
+    if fold(path[:len(top) + 1]) == fold(top + '/'):
+        path = top + path[len(top):]
+    edited[path] = None
+    if call_id in failed or (review is not None and ts <= review) or not path.startswith(top + '/'):
+        continue
+    rel = path[len(top) + 1:]
+    if not CODE.search(rel):
+        continue
+    new = [inp.get('content'), inp.get('new_string')] + [e.get('new_string') for e in inp.get('edits') or []]
+    new = [s for s in new if isinstance(s, str)]
+    count += sum(len(s.splitlines()) for s in new)
+    if WEB.search(rel) and not TESTISH.search(rel):
+        texts += new
+with open(text_out, 'w', encoding='utf-8', errors='replace') as f:
+    f.write('\n'.join(texts))
+print(since)
+print(count)
+print('\n'.join(edited))
+PY
 if [ -n "$PR_DIFF" ]; then
   FILES=$(sed -nE 's#^diff --git a/.* b/(.*)$#\1#p' <<<"$PR_DIFF" | sort -u)
 else
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || no_scope
   TOP=$(git rev-parse --show-toplevel)
+  UNREVIEWED=$(mktemp); trap 'rm -f "$UNREVIEWED"' EXIT
+  if [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    { IFS= read -r SINCE; IFS= read -r CODE_ADDED; SCANNED=$(cat); } < <(python3 -c "$SCAN" "$TOP" "$CUTOFF" "$TRANSCRIPT" "$UNREVIEWED" 2>/dev/null)
+    EDITED=$(printf '%s\n%s' "$EDITED" "$SCANNED")
+    CODE_ADDED=${CODE_ADDED:-0}
+  fi
   # Steps amend into one commit, so --since cannot isolate a step, and the step window outranks session edits.
   if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then REF=$BASE; SINCE=""; EDITED=""; fi
   # The dirty tree often carries another task's in-flight work; it is scope only when this session edited nothing here.
@@ -84,14 +161,22 @@ else
 fi
 has() { grep -qE "$1" <<<"$ADDED_TEXT"; }
 STYLED=no; { grep -qE '\.(css|scss|less|sass)$' <<<"$FILES" || has 'className=|[[:space:]:]class=|[[:space:]:]style=|@apply|css`|[[:space:]]sx='; } && STYLED=yes
-has 'catch[[:space:]]*[({]|\.catch\(|\?\?|\|\|[[:space:]]*(null|undefined|\[\]|\{\}|0|false)([^[:alnum:]_]|$)' && lens silent-failure-hunter
-has '^[[:space:]]*(export[[:space:]]+)?(declare[[:space:]]+)?(type|interface|enum|(abstract[[:space:]]+)?class)[[:space:]]+[A-Z]' && lens type-design-analyzer
-[ "$(grep -cE '^[[:space:]]*(//|/\*|\*)' <<<"$ADDED_TEXT")" -ge 3 ] && lens comment-analyzer
-has '(^|[^.[:alnum:]_$])var[[:space:]]|\.indexOf\([^)]*\)[[:space:]]*[!=<>]=*[[:space:]]*-1|Object\.assign\([[:space:]]*\{\}|\.apply\([[:space:]]*(this|null)|\.substr\(|(^|[^.[:alnum:]_$])require\(' && lens modern-ts-analyzer
+signals() {
+  local text; text=$(cat)
+  grep -qE 'catch[[:space:]]*[({]|\.catch\(|\?\?|\|\|[[:space:]]*(null|undefined|\[\]|\{\}|0|false)([^[:alnum:]_]|$)' <<<"$text" && echo silent-failure-hunter
+  grep -qE '^[[:space:]]*(export[[:space:]]+)?(declare[[:space:]]+)?(type|interface|enum|(abstract[[:space:]]+)?class)[[:space:]]+[A-Z]' <<<"$text" && echo type-design-analyzer
+  [ "$(grep -cE '^[[:space:]]*(//|/\*|\*)' <<<"$text")" -ge 3 ] && echo comment-analyzer
+  grep -qE '(^|[^.[:alnum:]_$])var[[:space:]]|\.indexOf\([^)]*\)[[:space:]]*[!=<>]=*[[:space:]]*-1|Object\.assign\([[:space:]]*\{\}|\.apply\([[:space:]]*(this|null)|\.substr\(|(^|[^.[:alnum:]_$])require\(' <<<"$text" && echo modern-ts-analyzer
+}
+for member in $(signals <<<"$ADDED_TEXT"); do lens "$member"; done
 [ "$STYLED" = yes ] && lens impeccable
 if jq -e '(.scripts.test // "") as $t | $t != "" and ($t | test("no test specified") | not)' "$(git rev-parse --show-toplevel 2>/dev/null)/package.json" >/dev/null 2>&1 \
   && grep -qE '\.(ts|tsx|js|jsx|vue)$' <<<"$FILES" && ! grep -qE '\.(test|spec)\.|__tests__/|(^|/)tests?/' <<<"$FILES"; then
   lens pr-test-analyzer
+fi
+if [ "$CODE_ADDED" -ge 20 ]; then
+  REQUIRED=code-reviewer
+  for member in $(signals <"$UNREVIEWED"); do REQUIRED="$REQUIRED,$member"; done
 fi
 # Comment-only exit: lines are judged alone, never by block state. Directive comments (lint, ts, build hints) change tool output, so they count as code.
 if [ -n "$PR_DIFF" ]; then
@@ -116,6 +201,6 @@ if [ -z "$UNTRACKED" ] && grep -E '^[+-]' <<<"$DIFF_TEXT" | grep -vE '^(\+\+\+|-
   t !~ /\/\*/ && t !~ /[=(]/ && t ~ /\*\/\}?[[:space:]]*$/ { next }
   { code++ }
   END { exit !(n > 0 && code == 0) }'; then
-  VERB=review; LENSES=comment-analyzer
+  VERB=review; LENSES=comment-analyzer; REQUIRED=none
 fi
-echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT high-risk=${RISK:-none} bulk=$BULK added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}${EFFORT:+ effort=$EFFORT}>"
+echo "<review-joins verb=$VERB lenses=$LENSES react=$REACT high-risk=${RISK:-none} bulk=$BULK code-added=$CODE_ADDED required=$REQUIRED added=$ADDED new-files=$NEWFILES${PR_DIFF:+ pr=${PR:-current}}${EFFORT:+ effort=$EFFORT}>"

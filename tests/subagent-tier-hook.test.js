@@ -83,9 +83,10 @@ test.after(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function payload({ subagentType, model, prompt = 'x', transcriptPath, agentId }) {
+function payload({ subagentType, model, prompt = 'x', transcriptPath, agentId, effort = 'medium' }) {
   const tool_input = { subagent_type: subagentType, prompt };
   if (model !== undefined) tool_input.model = model;
+  if (effort) tool_input.effort = effort;
   const obj = { tool_input, transcript_path: transcriptPath };
   if (agentId !== undefined) obj.agent_id = agentId;
   return obj;
@@ -101,7 +102,49 @@ function verdict(payloadObj) {
   throw new Error(`unexpected permissionDecision: ${decision}`);
 }
 
+function denyReason(payloadObj) {
+  const out = execFileSync('bash', [HOOK_PATH], { input: JSON.stringify(payloadObj), encoding: 'utf8' }).trim();
+  return out === '' ? '' : JSON.parse(out).hookSpecificOutput.permissionDecisionReason ?? '';
+}
+
 test.describe('subagent tier hook', () => {
+  test('code-reviewer with no effort, sonnet session -> deny naming the member and the effort rule', () => {
+    const reason = denyReason(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.sonnet, effort: '' }));
+    assert.match(reason, /code-reviewer/);
+    assert.match(reason, /a review dispatch names its effort/);
+    assert.match(reason, /Effort bullet of ~\/\.claude\/review-routing\.md/);
+  });
+
+  test('code-reviewer with an effort, sonnet session -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.sonnet, effort: 'low' })),
+      'inject:opus',
+    );
+  });
+
+  test('pr-test-analyzer with no effort, opus session -> deny', () => {
+    assert.equal(verdict(payload({ subagentType: 'pr-test-analyzer', transcriptPath: transcripts.opus, effort: '' })), 'deny');
+  });
+
+  test('pr-test-analyzer with an effort, opus session -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'pr-test-analyzer', transcriptPath: transcripts.opus })), 'inherit');
+  });
+
+  test('code-reviewer with no effort and a tier-override tag -> inject:opus', () => {
+    assert.equal(
+      verdict(payload({ subagentType: 'code-reviewer', transcriptPath: transcripts.sonnet, effort: '', prompt: '[tier-override: probe] review' })),
+      'inject:opus',
+    );
+  });
+
+  test('implementer with no effort, sonnet session -> inherit', () => {
+    assert.equal(verdict(payload({ subagentType: 'implementer', transcriptPath: transcripts.sonnet, effort: '' })), 'inherit');
+  });
+
+  test('empty input exits 0 with no output', () => {
+    assert.equal(execFileSync('bash', [HOOK_PATH], { input: '', encoding: 'utf8' }), '');
+  });
+
   test('code-reviewer, no model, sonnet session -> inject:opus', () => {
     assert.equal(
       verdict(payload({ subagentType: 'pr-review-toolkit:code-reviewer', transcriptPath: transcripts.sonnet })),

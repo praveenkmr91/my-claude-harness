@@ -223,3 +223,171 @@ test('review-classify effort level', async (t) => {
     assert.equal(run('review'), '');
   });
 });
+
+const stamp = (seconds = 0) => new Date(Date.UTC(2099, 0, 1, 0, 0, seconds)).toISOString();
+const sourceLines = (count, first = 'export const v0 = 0;') => [first, ...Array.from({ length: count - 1 }, (_, i) => `export const v${i + 1} = ${i + 1};`)].join('\n') + '\n';
+const withCatch = 'try { run(); } catch (e) { report(e); }';
+const toolCall = (name, input, { id, at, type = 'assistant' } = {}) => ({ type, ...(at && { timestamp: at }), message: { content: [{ type: 'tool_use', id, name, input }] } });
+const writeOf = (file, content, opts) => toolCall('Write', { file_path: file, content }, opts);
+const editOf = (file, newString, opts) => toolCall('Edit', { file_path: file, old_string: 'x', new_string: newString }, opts);
+const dispatchOf = (subagentType, opts) => toolCall('Agent', { subagent_type: subagentType, description: 'review', prompt: 'review' }, opts);
+const resultOf = (id, { error = false, at } = {}) => ({ type: 'user', timestamp: at, message: { content: [{ type: 'tool_result', tool_use_id: id, ...(error && { is_error: true }), content: 'out' }] } });
+
+function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit = {}, input = {}, stdin }) {
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env });
+  const write = (files) => { for (const [name, source] of Object.entries(files)) fs.writeFileSync(path.join(repo, name), source); };
+  git('init', '-q');
+  if (Object.keys(commit).length) { write(commit); git('add', '.'); git('commit', '-q', '-m', 'init'); }
+  write(onDisk);
+  const transcript = path.join(fs.mkdtempSync(path.join(tmpDir, 'transcript-')), 'main.jsonl');
+  const jsonl = (records) => records.map((record) => `${JSON.stringify(record)}\n`).join('');
+  fs.writeFileSync(transcript, jsonl(main?.(repo) ?? []));
+  if (agents || unreadable.length) {
+    const dir = path.join(path.dirname(transcript), 'main', 'subagents');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const [name, records] of Object.entries(agents ?? {})) fs.writeFileSync(path.join(dir, name), jsonl(records(repo)));
+    for (const name of unreadable) fs.symlinkSync(path.join(dir, 'missing'), path.join(dir, name));
+  }
+  const body = stdin ?? JSON.stringify({ transcript_path: transcript, ...input });
+  return execFileSync('bash', [HOOK_PATH], { input: body, cwd: repo, encoding: 'utf8', env });
+}
+
+test('review-classify unreviewed source lines', async (t) => {
+  const planEdit = (repo) => editOf(path.join(repo, 'plan.md'), 'step one', { at: stamp(0) });
+  const mainOnly = (repo) => [planEdit(repo)];
+
+  await t.test('a subagent transcript writes 30 source lines: code-added counts them and code-reviewer is required', () => {
+    const out = classifyTranscript({ main: mainOnly, agents: { 'agent-a1.jsonl': (repo) => [writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { at: stamp(1) })] } });
+    assert.match(out, / code-added=30 required=code-reviewer /);
+  });
+
+  await t.test('quiet: the same main transcript with no subagents directory counts nothing', () => {
+    assert.match(classifyTranscript({ main: mainOnly }), / code-added=0 required=none /);
+  });
+
+  const written = (file, content) => (repo) => [writeOf(path.join(repo, file), content, { at: stamp(1) })];
+
+  await t.test('a catch in the written source adds silent-failure-hunter to required', () => {
+    const out = classifyTranscript({ main: written('impl.ts', sourceLines(30, withCatch)) });
+    assert.match(out, / required=code-reviewer,silent-failure-hunter /);
+  });
+
+  await t.test('quiet: the same catch in a test file leaves code-reviewer alone', () => {
+    const out = classifyTranscript({ main: written('impl.test.ts', sourceLines(30, withCatch)) });
+    assert.match(out, / code-added=30 required=code-reviewer /);
+  });
+
+  await t.test('quiet: a 5-line source with a catch is under the floor', () => {
+    const out = classifyTranscript({ main: written('impl.ts', sourceLines(5, withCatch)) });
+    assert.match(out, / code-added=5 required=none /);
+  });
+
+  await t.test('required reads the text since the review while lenses keeps the whole session', () => {
+    const out = classifyTranscript({
+      onDisk: { 'first.ts': sourceLines(30, withCatch) },
+      main: (repo) => [
+        writeOf(path.join(repo, 'first.ts'), sourceLines(30, withCatch), { at: stamp(1) }),
+        dispatchOf('code-reviewer', { id: 'review', at: stamp(2) }),
+        writeOf(path.join(repo, 'second.ts'), sourceLines(25), { at: stamp(3) }),
+      ],
+    });
+    assert.match(out, / code-added=25 required=code-reviewer /);
+    assert.match(out, / lenses=\S*silent-failure-hunter /);
+  });
+
+  await t.test('a comment-only change of 30 lines requires nothing', () => {
+    const comments = Array.from({ length: 30 }, (_, i) => `// note ${i}`).join('\n') + '\n';
+    const out = classifyTranscript({ commit: { 'a.ts': 'export const a = 1;\n' }, onDisk: { 'a.ts': `export const a = 1;\n${comments}` }, main: written('a.ts', comments) });
+    assert.match(out, / lenses=comment-analyzer /);
+    assert.match(out, / required=none /);
+  });
+
+  await t.test('quiet: the same 30 lines as code keep code-reviewer required', () => {
+    const code = sourceLines(30);
+    const out = classifyTranscript({ commit: { 'a.ts': 'export const a = 1;\n' }, onDisk: { 'a.ts': `export const a = 1;\n${code}` }, main: written('a.ts', code) });
+    assert.match(out, / required=code-reviewer /);
+  });
+
+  const reviewed = (subagentType, { error = false, id = 'review' } = {}) => (repo) => [
+    writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { at: stamp(1) }),
+    ...(subagentType ? [dispatchOf(subagentType, { id, at: stamp(2) }), ...(error ? [resultOf(id, { error, at: stamp(2) })] : [])] : []),
+    editOf(path.join(repo, 'impl.ts'), sourceLines(5), { at: stamp(3) }),
+  ];
+
+  await t.test('review point: only the lines after a code-reviewer dispatch count', () => {
+    assert.match(classifyTranscript({ main: reviewed('code-reviewer') }), / code-added=5 required=none /);
+  });
+
+  await t.test('review point: a plugin prefix on the dispatch is stripped', () => {
+    assert.match(classifyTranscript({ main: reviewed('pr-review-toolkit:code-reviewer') }), / code-added=5 required=none /);
+  });
+
+  await t.test('review point: a dispatch under the older Task tool name counts too', () => {
+    const main = (repo) => [
+      writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { at: stamp(1) }),
+      toolCall('Task', { subagent_type: 'code-reviewer', prompt: 'review' }, { id: 'review', at: stamp(2) }),
+      editOf(path.join(repo, 'impl.ts'), sourceLines(5), { at: stamp(3) }),
+    ];
+    assert.match(classifyTranscript({ main }), / code-added=5 required=none /);
+  });
+
+  const twins = [
+    ['no dispatch', reviewed(null), {}],
+    ['a dispatch with an errored result', reviewed('code-reviewer', { error: true }), {}],
+    ['a silent-failure-hunter dispatch', reviewed('silent-failure-hunter'), {}],
+    ['a dispatch stamped at the review cutoff', reviewed('code-reviewer'), { review_cutoff: stamp(2) }],
+  ];
+  for (const [name, main, input] of twins) {
+    await t.test(`review point twin: ${name} leaves all 35 lines counted`, () => {
+      assert.match(classifyTranscript({ main, input }), / code-added=35 /);
+    });
+  }
+
+  await t.test('SINCE is the first top-level timestamp, not a nested one', () => {
+    const out = classifyTranscript({
+      commit: { 'a.ts': 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n' },
+      main: () => [{ type: 'user', snapshot: { timestamp: stamp(0) } }, { type: 'user', timestamp: '2020-01-01T00:00:00.000Z' }],
+    });
+    assert.match(out, / added=3 /);
+  });
+
+  await t.test('a record of another type holding the Write block adds nothing', () => {
+    const block = (type) => (repo) => [planEdit(repo), writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { type })];
+    assert.match(classifyTranscript({ main: block('user') }), / code-added=0 /);
+    assert.match(classifyTranscript({ main: block('assistant') }), / code-added=30 /);
+  });
+
+  await t.test('a Write whose result is an error adds no lines but keeps its file in scope', () => {
+    const run = (error) => classifyTranscript({
+      onDisk: { 'a.ts': sourceLines(3), 'b.ts': sourceLines(40) },
+      main: (repo) => [writeOf(path.join(repo, 'a.ts'), sourceLines(30), { id: 'w1', at: stamp(1) }), resultOf('w1', { error, at: stamp(2) })],
+    });
+    assert.match(run(true), / code-added=0 .* added=3 /);
+    assert.match(run(false), / code-added=30 /);
+  });
+
+  await t.test('a Write under an unresolved spelling of the repo path counts; a path outside the repo does not', (sub) => {
+    if (fs.realpathSync(tmpDir) === tmpDir) return sub.skip('tmpDir has no symlink in its path here, so the two spellings are equal');
+    const spelled = (dir, file) => (repo) => [planEdit(repo), writeOf(path.join(tmpDir, dir ?? path.basename(repo), file), sourceLines(30), { at: stamp(1) })];
+    assert.match(classifyTranscript({ main: spelled(null, 'impl.ts') }), / code-added=30 /);
+    assert.match(classifyTranscript({ main: spelled('elsewhere', 'impl.ts') }), / code-added=0 /);
+  });
+
+  const strayString = (repo) => ({ type: 'assistant', timestamp: stamp(0), message: { content: ['stray', { type: 'tool_use', id: 'note', name: 'Edit', input: { file_path: path.join(repo, 'notes.md'), old_string: 'a', new_string: 'b' } }] } });
+
+  await t.test('a string inside a content list does not drop the Write beside it', () => {
+    assert.match(classifyTranscript({ main: (repo) => [strayString(repo), writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { at: stamp(1) })] }), / code-added=30 /);
+    assert.match(classifyTranscript({ main: (repo) => [strayString(repo)] }), / code-added=0 /);
+  });
+
+  await t.test('an unreadable subagent transcript does not drop the one beside it', () => {
+    const write = (repo) => [writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { at: stamp(1) })];
+    assert.match(classifyTranscript({ main: mainOnly, agents: { 'agent-b.jsonl': write }, unreadable: ['agent-a.jsonl'] }), / code-added=30 /);
+    assert.match(classifyTranscript({ main: mainOnly, unreadable: ['agent-a.jsonl'] }), / code-added=0 /);
+  });
+
+  await t.test('empty stdin exits 0', () => {
+    assert.doesNotThrow(() => classifyTranscript({ stdin: '' }));
+  });
+});

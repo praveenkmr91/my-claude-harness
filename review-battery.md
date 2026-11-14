@@ -1,4 +1,4 @@
-# Review battery — recipe (read on the `battery` verb or a Big done bar)
+# Review battery — recipe (read on the `battery` verb, a Big done bar or a `required=` list)
 
 | Member | Tier |
 |---|---|
@@ -10,5 +10,26 @@
 - A model typed with the verb (`fable battery`, `battery sonnet`) goes to every member as `model:`, overriding the table. Sonnet is his cheap pass, never proposed: the launch line says so, since it missed real bugs Opus found in the 2026-10-04 tier eval. Haiku stays denied.
 - HIGH risk flagged by the routing hook → add the adversarial-reviewer agent, plus security-review on the main thread. Bulk flagged → add /delete-list + /shortcut-debt. Neither flag → the members above, nothing more.
 - The launch line names the diff under review (e.g. "plan commit `00b1bfa5`, local, no PR"): the `pr-review-toolkit:` prefix is only the plugin the agents ship in, and it reads as a PR flow when no PR exists.
+- Beyond the required members, add the ones the diff calls for and name each member's effort on the launch line.
 - All output is leads; confirm each at source before relaying.
 - Open: re-run the Opus-vs-session A/B on a frozen diff before moving the multi-hop members to Opus; a diff that moves mid-run invalidates the comparison.
+
+## Required members
+
+- **Unreviewed line.** A source line from a Write, Edit or MultiEdit call, main thread or subagent, written since the last `code-reviewer` dispatch that did not error.
+- **Floor.** Under 20 unreviewed lines `required=` is `none`; at 20 or more it lists `code-reviewer`.
+- **Members.** Beyond `code-reviewer`, `required=` lists silent-failure-hunter, type-design-analyzer, comment-analyzer or modern-ts-analyzer, each only when the unreviewed text itself holds its signal.
+- **Cleared by** an agent dispatch of the member in the claiming turn with no errored result; a typed findings, skip or not-run line never clears one.
+- **Not owed** on a first line opening `Step N`, on a builder's `[REPORT`, or in a window a delivered REPORT opened.
+- **Effort** is set per member on each dispatch (levels: the Effort bullet of `~/.claude/review-routing.md`); a dispatch with none is denied.
+
+## What calls for each member
+
+- **code-reviewer:** new logic or changed control flow.
+- **silent-failure-hunter:** catch blocks, fallbacks, default values.
+- **type-design-analyzer:** new or reshaped types.
+- **reuse-analyzer:** a new function, hook, helper or component.
+- **placement-analyzer:** a new file, moved code, a call across layers.
+- **comment-analyzer:** added comments.
+- **modern-ts-analyzer:** legacy idioms in added TS or JS.
+- **pr-test-analyzer:** source without specs, in a repo with a test runner.
