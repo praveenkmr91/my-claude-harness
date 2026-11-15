@@ -24,7 +24,7 @@ function lensesFor(source, { packageJson, file = 'src.ts' } = {}) {
 // Under the pre-commit hook git exports GIT_INDEX_FILE etc.; inherited, they point the scratch repo at ~/.claude's index.
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
 
-function joinsForEdit({ files, payload = () => ({}), stdin }) {
+function joinsForEdit({ files, payload = () => ({}), stdin, locale }) {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env });
   git('init', '-q');
@@ -33,7 +33,7 @@ function joinsForEdit({ files, payload = () => ({}), stdin }) {
   git('commit', '-q', '-m', 'init');
   for (const [name, [, modified]] of Object.entries(files)) fs.writeFileSync(path.join(repo, name), modified);
   const input = stdin ?? JSON.stringify(payload(repo));
-  return execFileSync('python3', [HOOK_PATH], { input, cwd: repo, encoding: 'utf8', env });
+  return execFileSync('python3', [HOOK_PATH], { input, cwd: repo, encoding: 'utf8', env: locale ? { ...env, LC_ALL: locale } : env });
 }
 
 const cases = [
@@ -396,7 +396,8 @@ test('review-classify on bytes outside ASCII', async (t) => {
   await t.test('an edited path holding U+00C5 still prints its joins line', () => {
     const name = 'Årsrapport.ts';
     const files = { [name]: ['export const a = 1;\n', 'export const a = b ?? 1;\n'] };
-    const out = joinsForEdit({ files, payload: (repo) => ({ tool_input: { file_path: path.join(repo, name) } }) });
+    // The collation crash this guards only exists under a UTF-8 locale.
+    const out = joinsForEdit({ files, locale: 'en_US.UTF-8', payload: (repo) => ({ tool_input: { file_path: path.join(repo, name) } }) });
     assert.match(out, /lenses=\S*silent-failure-hunter/);
   });
 

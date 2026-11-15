@@ -1065,15 +1065,20 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults(CLAIM, runs, opts(repo)));
   });
 
-  await t.test('a classifier that fails blocks nothing and warns the user once', () => {
-    const home = fs.mkdtempSync(path.join(tmpDir, 'home-'));
-    fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true });
-    fs.writeFileSync(path.join(home, '.claude', 'hooks', 'review-classify.py'), 'import sys\nprint("boom", file=sys.stderr)\n');
-    const repo = scratchRepo();
-    const res = runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), checked(stamp(3))], opts(repo, { home }));
-    assert.equal(res.status, 0, res.stderr);
-    assert.deepEqual(JSON.parse(res.stdout), { systemMessage: 'review-classify failed: boom' });
-  });
+  for (const [outcome, stub, warning] of [
+    ['fails', 'import sys\nprint("boom", file=sys.stderr)\n', 'review-classify failed: boom'],
+    ['runs past its limit', 'import time\ntime.sleep(8)\n', 'review-classify timed out after 6s; review joins skipped'],
+  ]) {
+    await t.test(`a classifier that ${outcome} blocks nothing and warns the user once`, () => {
+      const home = fs.mkdtempSync(path.join(tmpDir, 'home-'));
+      fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true });
+      fs.writeFileSync(path.join(home, '.claude', 'hooks', 'review-classify.py'), stub);
+      const repo = scratchRepo();
+      const res = runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), checked(stamp(3))], opts(repo, { home }));
+      assert.equal(res.status, 0, res.stderr);
+      assert.deepEqual(JSON.parse(res.stdout), { systemMessage: warning });
+    });
+  }
 
   await t.test('a signalled member is named alone once code-reviewer was dispatched', () => {
     const repo = scratchRepo();
