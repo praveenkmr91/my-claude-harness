@@ -27,6 +27,7 @@ const RULE_DOCS = [
   'harness.md',
   'code-craft.md',
   'committing.md',
+  'committing-worktrees.md',
   'peer-sessions.md',
 ];
 

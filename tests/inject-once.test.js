@@ -143,6 +143,17 @@ test('inject-once hook', async (t) => {
     assert.ok(tierGroups[0].hooks.some((h) => /inject-once\.sh subagent-tiers-enforcement\.md$/.test(h.command)));
   });
 
+  await t.test('one hook group holds both commit docs', () => {
+    const groups = Object.values(JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')).hooks).flat();
+    const commitGroups = groups.filter((group) => group.hooks.some((h) => /inject-once\.sh committing\.md /.test(h.command)));
+    assert.equal(commitGroups.length, 1);
+    const main = commitGroups[0].hooks.find((h) => /inject-once\.sh committing\.md /.test(h.command));
+    const worktrees = commitGroups[0].hooks.find((h) => /inject-once\.sh committing-worktrees\.md /.test(h.command));
+    assert.ok(worktrees, 'committing-worktrees.md entry missing from the group');
+    assert.equal(worktrees.command.replace('committing-worktrees.md', 'committing.md'), main.command);
+    assert.equal(worktrees.if, main.if);
+  });
+
   await t.test('every wired doc injects under the hook output ceiling', () => {
     const patternInputs = [{ file_path: 'x.ts' }, { command: 'git status' }, { command: 'gh pr view 1' }];
     for (const { doc, pattern } of entries) {
