@@ -26,7 +26,8 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP �
 
 ## Format
 - Length and shape follow CLAUDE.md's stakeholder-text rule.
-- Ask a question only when its answer changes what we build or how it behaves for users (blocks the task, or alters flow / UX / correctness / data integrity). Business curiosity → drop it.
+- Ask a question only when its answer changes what we build or how it behaves for users (blocks the task, or alters flow / UX / correctness / data integrity), and only after the ticket text, linked tickets, the backend source (`gh` on its repo) and any peer session fail to answer it. Business curiosity → drop it.
+- Praveen's "are you sure?" about a draft re-checks every question in it against those sources, never just the one he named.
 - Name the environment of every piece of evidence ("verified on dev"). A finding from another env than the one the ticket was raised in (dev data on a UAT bug) is not a question unless reproduced there.
 - Plain comment → `contentFormat: "markdown"`.
 - @mention → `contentFormat: "adf"` with a mention node `{"type":"mention","attrs":{"id":"<accountId>","text":"@<Name>"}}`. The id comes from `lookupJiraAccountId` (`searchString`: name or email local part); never guess one.
