@@ -41,7 +41,7 @@ Rules that must hold are enforced, not just written down. Each hook is a small s
 ## Tests
 
 ```sh
-node --test ~/.claude/tests/*.test.js
+node --test --test-concurrency=64 ~/.claude/tests/*.test.js
 ```
 
 Checks that every pointer in a rule doc resolves, that each hook agrees with the rule it enforces (`rule and hook agree` pairs), that always-loaded docs stay under their word ceilings (`tests/budget-baseline.json`), that no sentence is duplicated across rule docs, and that every top-level `.md` is tracked. The model for a hook test is a firing case, a near-twin that must stay quiet, and an empty-input case (`tests/bash-write-guard.test.js`); older hooks are brought to that shape when next touched. Run after any edit to a rule doc, hook or `settings.json`.
