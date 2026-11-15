@@ -80,9 +80,6 @@
     ],
     "defaultMode": "auto"
   },
-  "worktree": {
-    "baseRef": "head"
-  },
   "model": "fable",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
@@ -564,6 +561,9 @@
       }
     ]
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "statusLine": {
     "type": "command",
     "command": "CLAUDE_HUD_ALLOW_EXTRA_CMD=1 '/Users/praveenkumar/Library/Application Support/fnm/aliases/default/bin/node' '/Users/praveenkumar/.claude/plugins/claude-hud/statusline.mjs' --extra-cmd 'bash /Users/praveenkumar/.claude/statusline/session-address.sh'"
@@ -620,9 +620,6 @@
   "outputStyle": "peer-engineer",
   "effortLevel": "medium",
   "modelSettings": {
-    "claude-fable-5-1": {
-      "effortLevel": "high"
-    },
     "claude-opus-5-5": {
       "effortLevel": "medium"
     },
