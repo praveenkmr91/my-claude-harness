@@ -57,6 +57,7 @@
       "Bash(yarn run *)",
       "Bash(bun run *)",
       "Bash(node --test ~/.claude/tests/*.test.js)",
+      "Bash(node --test --test-concurrency=64 ~/.claude/tests/*.test.js)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
