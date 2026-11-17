@@ -74,10 +74,12 @@ function flagValues(args, flag) {
   return end === -1 ? rest : rest.slice(0, end);
 }
 
-function denyRules(args) {
+function sessionSettings(args) {
   assert.equal(args.filter((arg) => arg === '--settings').length, 1);
-  return JSON.parse(fs.readFileSync(flagValues(args, '--settings')[0], 'utf8')).permissions.deny;
+  return JSON.parse(fs.readFileSync(flagValues(args, '--settings')[0], 'utf8'));
 }
+
+const denyRules = (args) => sessionSettings(args).permissions.deny;
 
 test('a session loads user settings only and every user allow rule reaches it as a deny', () => {
   const home = makeHome({
@@ -153,6 +155,25 @@ test('a settings rule of any shape reaches the deny file and never the argument 
 
   assert.equal(plain.result.status, 0, plain.result.stderr);
   assert.deepEqual(shapedArgs, plain.callArgs('repo-shaped'));
+});
+
+test('every plugin in the user settings is switched off for the session', () => {
+  const repo = makeRepo('repo-plugins');
+  const home = makeHome({ enabledPlugins: { 'remember@official': true, 'figma@official': false } });
+
+  const withPlugins = runScript(AUDIT, [repo], { home });
+
+  assert.equal(withPlugins.result.status, 0, withPlugins.result.stderr);
+  assert.deepEqual(sessionSettings(withPlugins.callArgs('repo-plugins')).enabledPlugins, {
+    'remember@official': false,
+    'figma@official': false,
+  });
+
+  writeJson(path.join(home, '.claude', 'settings.json'), {});
+  const withoutPlugins = runScript(AUDIT, [repo], { home });
+
+  assert.equal(withoutPlugins.result.status, 0, withoutPlugins.result.stderr);
+  assert.deepEqual(sessionSettings(withoutPlugins.callArgs('repo-plugins')).enabledPlugins, {});
 });
 
 test('a pnpm audit that prints nothing is reported as could not run', () => {
