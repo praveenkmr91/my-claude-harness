@@ -26,6 +26,7 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP â€
 
 ## Format
 - Length and shape follow CLAUDE.md's stakeholder-text rule.
+- A reply to a teammate's question answers it, plus facts that help the asker understand (why, where it shows, how the sibling portal behaves). No offers such as "we could raise a ticket". Before showing the draft, read it against the whole thread: drop points the asker already made, and check each claim against the code.
 - Ask a question only when its answer changes what we build or how it behaves for users (blocks the task, or alters flow / UX / correctness / data integrity), and only after the ticket text, linked tickets, the backend source (`gh` on its repo) and any peer session fail to answer it. Business curiosity â†’ drop it.
 - Praveen's "are you sure?" about a draft re-checks every question in it against those sources, never just the one he named.
 - Name the environment of every piece of evidence ("verified on dev"). A finding from another env than the one the ticket was raised in (dev data on a UAT bug) is not a question unless reproduced there.

@@ -28,7 +28,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses).
 
-Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list (never /simplify: the battery covers it), harden once. Any tier but a plan step also owes the `required=` members; `review-battery.md` holds the rule. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; members run one by one are not a pass; it runs in the push's checkout after a frozen install.
+Done bar scales; never cite a bigger tier's bar on smaller work. Trivial → lint + tsc. Small, and each plan step → + affected specs + lens hand pass. Big (bulk or HIGH-risk) → two review rounds over fresh diffs + battery (unasked, members picked as on "relevant"), /delete-list (never /simplify: the battery covers it), harden once. The tier is read off the full range before the shipping commit, never off one step's slice: a full-range pass on Big work is the battery, not hand lenses. Any tier but a plan step also owes the `required=` members; `review-battery.md` holds the rule. The repo's full gate exiting non-zero blocks a ship claim even on a foreign or untracked file; members run one by one are not a pass; it runs in the push's checkout after a frozen install.
 
 Findings:
 - Score 0-100 before reporting. Pre-existing / linter-catchable / stylistic-not-in-CLAUDE.md / nitpick → 0-50; real defect with a concrete failure scenario → 75-100.
