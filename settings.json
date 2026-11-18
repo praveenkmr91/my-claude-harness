@@ -552,6 +552,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/done-claim-gate.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/model-switch-nudge.sh",
+            "timeout": 10
           }
         ]
       }
