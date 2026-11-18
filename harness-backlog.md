@@ -29,10 +29,10 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 - **Evidence:** census of 169 plan-file edits in three sessions (`plans/peer-plan-review.research.md`). Reviews (cold read, dry run, advisor) start 47%, but the rework came from decisions: in `0bdc42f6` the N/A-key decision flipped three times (Decided list edited 13 times), and one 8,155-char rewrite was then reworked by 16 edits, ending in a step retitled "Reverted".
 - **Why parked:** one session carries the flips; review-by-size (`7c68d52`, `77cffd4`) shipped the same day, and a second change now would confound its measurement.
-- **Fix:** before writing Steps, the planner puts each Decided candidate to Praveen as one short decision round; Steps are drafted only once Decided is settled. `persona-core.md` "plans lead with the minimal version" covers the over-built rewrite but nothing checks it.
+- **Fix:** before writing Steps, the planner puts each Decided candidate to Praveen as one short decision round; Steps are drafted only once Decided is settled. The over-built rewrite is a separate cause with its own rule: `plan-mode.md` "Criteria → steps → checks" holds a Decided entry that adds behaviour to a criterion, and `plan-build.md` "Every reviewer's input" stops a reviewer fold adding scope no criterion needs.
 - **Alternative, drafted:** `plans/peer-plan-review.md` routes planning-time dry runs and cold reads to the bound builder via a REVIEW message. It saves planner context and the duplicate HANDOFF design review, not plan edits.
 - **Worth it when:** a re-run of the plan-churn scan over the next 2–3 plan builds still shows a Decided entry edited 5+ times or a step reverted.
-- **Measure first:** plan-lint P9 (`1621f66`) and review-by-size both landed before that scan; add no further planning or review-tier rule until it runs, so the scan can tell which change moved the numbers.
+- **Scan re-run, 2026-11-18:** 69 plan files edited since plan-lint P9 and review-by-size landed, replayed from transcripts (1,408 edits replayed, 377 could not be). No single Decided entry was edited more than 5 times (one at 5, in `weekly-automation.md`) and no step was retitled Reverted, so the trigger above is met only at its threshold. The Decided section as a whole still took 220 of the replayed edits, up to 36 in one plan: entries are added more than flipped. The Decided-to-criterion rule landed after this scan, so the next scan measures it; the scan script was throwaway session code.
 
 ### High-risk path flag keys on the file name, not the change
 
