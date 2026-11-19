@@ -160,13 +160,13 @@ def classify():
         m=re.search(r'code-added=(\d+) required=(\S+)',joins)
         if m: added,required=m.groups()
     return verb,lenses,required,added
-def required_status(required,added):
+def required_status(required):
     owed=[] if required=='none' else required.split(',')
     last_write=max((e for e,p,i in write_calls if code.search(p) and call_ok(i)),default=0)
     undone=[m for m in owed if not any(n in ('Agent','Task') and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
     if not undone: return owed,None
     if feedback_blocks>=2: return [m for m in owed if m not in undone],None
-    return owed,f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: {added} lines of source (code-added) have had no code-reviewer pass. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count."
+    return owed,f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session has had no agent pass by them. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. Give each everything written since its last run, never the last commit alone."
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
 NAMED_VERBS={
@@ -219,8 +219,8 @@ exempt=(bool(step_claim) and not committed) or report or window_report
 code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)
 if inp.get('stop_hook_active') and not report:
     if not window_report and (feedback_blocks==1 or feedback_blocks<2 and (claim or commit_ask or committed)):
-        _,_,required,added=classify()
-        block=required_status(required,added)[1]
+        _,_,required,_=classify()
+        block=required_status(required)[1]
         if block:
             print(block,file=sys.stderr)
             sys.exit(2)
@@ -235,7 +235,7 @@ if (report and stopped) or not (code_turn or agent_build or (idle_ask or idle_co
     sys.exit(0)
 if not code_turn:
     if not exempt:
-        block=required_status(*(agent_class or classify())[2:])[1]
+        block=required_status((agent_class or classify())[2])[1]
         if block: problems.append(block)
     if problems:
         print('\n'.join(problems),file=sys.stderr)
@@ -298,8 +298,8 @@ lint_cmds=[c for _,c in fresh] if report else cmds
 if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim_word or commit_ask or committed:
-    verb,lenses,required,added=classify()
-    owed,owed_block=([],None) if exempt else required_status(required,added)
+    verb,lenses,required,_=classify()
+    owed,owed_block=([],None) if exempt else required_status(required)
     strict=(built and claim and not step_claim and not report) or ship
     def lens_done(l):
         if l=='impeccable': return l in ran

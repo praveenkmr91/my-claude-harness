@@ -193,7 +193,7 @@ test('done-claim gate: required review agents', async (t) => {
   const checked = (timestamp) => ({ command: 'pnpm lint && node --test tests/*.test.js', output: 'ℹ fail 0', timestamp });
   const committed = (timestamp) => ({ command: 'git commit -m x', output: '', timestamp });
   const feedbackOf = (text) => ({ record: { type: 'user', isMeta: true, message: { content: `Stop hook feedback:\n[bash …/done-claim-gate.sh]: ${text}` } } });
-  const agentFeedback = () => feedbackOf('REVIEW AGENTS NOT RUN for code-reviewer: 30 lines of source (code-added) have had no code-reviewer pass.');
+  const agentFeedback = () => feedbackOf('REVIEW AGENTS NOT RUN for code-reviewer: source written in this session has had no agent pass by them.');
   const opts = (repo, extra) => ({ cwd: repo, since: stamp(0), lint: false, editedFile: null, ...extra });
   const blocked = (res, members) => {
     assert.equal(res.status, 2, res.stderr);
@@ -209,11 +209,42 @@ test('done-claim gate: required review agents', async (t) => {
     const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
     const fires = runWithResults(CLAIM, [thirty, checked(stamp(3))], opts(repo));
     blocked(fires, 'code-reviewer');
-    assert.match(fires.stderr, /: 30 lines of source \(code-added\) have had no code-reviewer pass\. Dispatch each member as an agent with an `effort`/);
+    assert.match(fires.stderr, /: source written in this session has had no agent pass by them\. Dispatch each member as an agent with an `effort`/);
     quiet(runWithResults(CLAIM, [thirty, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo)));
     for (const line of ['code-reviewer: 0 findings', 'code-reviewer: skip — reviewed by hand', 'code-reviewer: not run — small change']) {
       blocked(runWithResults(`${CLAIM}\n${line}`, [thirty, checked(stamp(3))], opts(repo)), 'code-reviewer');
     }
+  });
+
+  const BIG_MEMBERS = ['silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer'];
+
+  await t.test('a claim over 200 unreviewed lines with code-reviewer dispatched is blocked for the four Big members alone', () => {
+    const repo = scratchRepo();
+    const big = writeOf(repo, 'impl.ts', sourceLines(200), stamp(1));
+    const fires = runWithResults(CLAIM, [big, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo));
+    blocked(fires, BIG_MEMBERS.join(', '));
+    const message = fires.stderr.split('\n').find((line) => NOT_RUN.test(line));
+    assert.doesNotMatch(message, /code-reviewer/);
+    assert.match(message, /Give each everything written since its last run, never the last commit alone\.$/);
+  });
+
+  await t.test('a claim over 200 lines is quiet once all five members were dispatched after the write', () => {
+    const repo = scratchRepo();
+    const dispatches = ['code-reviewer', ...BIG_MEMBERS].map((member) => dispatchOf(member, stamp(2)));
+    quiet(runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), ...dispatches, checked(stamp(3))], opts(repo)));
+  });
+
+  await t.test('a later typed turn that only commits is blocked for the four when the earlier turn dispatched code-reviewer alone', () => {
+    const repo = scratchRepo();
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), dispatchOf('code-reviewer', stamp(2)), { prompt: 'next', timestamp: stamp(3) }, committed(stamp(5))];
+    blocked(runWithResults('Committed as abc1234.', runs, opts(repo)), BIG_MEMBERS.join(', '));
+  });
+
+  await t.test('a later typed turn that dispatches the four and commits is quiet', () => {
+    const repo = scratchRepo();
+    const dispatches = BIG_MEMBERS.map((member) => dispatchOf(member, stamp(4)));
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), dispatchOf('code-reviewer', stamp(2)), { prompt: 'next', timestamp: stamp(3) }, ...dispatches, committed(stamp(5))];
+    quiet(runWithResults('Committed as abc1234.', runs, opts(repo)));
   });
 
   await t.test('a dispatch with an errored result leaves its member in the block', () => {

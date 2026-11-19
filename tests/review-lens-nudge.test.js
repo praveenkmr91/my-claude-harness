@@ -134,6 +134,16 @@ test('review-lens-nudge: under the floor the text is the existing one', () => {
   }
 });
 
+test('review-lens-nudge: a 200-line write names the four Big members in the required members', () => {
+  const session = nudgeSession();
+  try {
+    const text = session.nudge(session.write('api.ts', 200));
+    assert.match(text, / Required members: code-reviewer, silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer\. Run each as an agent/);
+  } finally {
+    session.cleanup();
+  }
+});
+
 test('review-lens-nudge: the same key stays silent, and crossing the floor nudges again', () => {
   const session = nudgeSession();
   try {
