@@ -212,6 +212,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/done-claim-gate.sh', /LEARN NOT RUN/, 'review-routing.md', /one `\/learn` pass per build session/],
     ['hooks/review-classify.py', /code-added=%d required=%s/, 'review-routing.md', /`required=`/],
     ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-battery.md', /## Required members/],
+    ['hooks/review-classify.py', /^BIG_MEMBERS = \('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer'\)$/m, 'review-battery.md', /\*\*Big\.\*\* .*silent-failure-hunter, type-design-analyzer, reuse-analyzer and placement-analyzer/],
     ['hooks/enforce-subagent-model.sh', /names its effort/, 'subagent-tiers-enforcement.md', /with no `effort`/],
     ['hooks/step-gate.sh', /No dry-runner dispatch/, 'peer-sessions.md', /step-gate\.sh enforces/],
     ['hooks/step-gate.sh', /No dry-runner dispatch/, 'plan-build.md', /first implementer dispatch until a dry-runner/],
