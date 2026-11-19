@@ -59,7 +59,7 @@ stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 # Plan-review tracking is transcript-wide and never reset(): plan edits and their reviews span turns.
-ev=0; plan_edits={}; plan_reviews=[]; advisor_at=[]; author_review_at=[]; learned=False; model=''
+ev=0; plan_edits={}; plan_reviews=[]; advisor_at=[]; author_review_at=[]; plan_reads=[]; learned=False; model=''
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
 # The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
@@ -112,6 +112,7 @@ for line in transcript:
                 edited=b.get('input',{}).get('file_path','')
                 if re.search(r'/plans/[^/]+\.md$',edited) and not edited.endswith('.research.md'): plan_edits[edited]=ev
             elif b.get('name') in ('Agent','Task') and lens_ran(b) in ('cold-reader','dry-runner'): plan_reviews.append((ev,b.get('input',{}).get('prompt') or ''))
+            elif b.get('name')=='Read': plan_reads.append((ev,b.get('input',{}).get('file_path','')))
             message=b.get('input',{}).get('message')
             # A REPORT's lens and skip lines satisfy the Stop arm after the send.
             if b.get('name')=='SendMessage' and isinstance(message,str) and is_report(message):
@@ -190,7 +191,8 @@ if implement_ask and not re.search(label_open+r'plan gate'+label_close+skip_reas
     unreviewed=[]
     if not any(e>plan_edits[plan_path] for e in covering): unreviewed.append('(A) no cold-reader or dry-runner ran on it after its last edit')
     if covering and 'fable' not in model.lower() and not any(a>covering[0] for a in advisor_at): unreviewed.append('(B) no advisor consult followed its first review')
-    if not pass_review.search(final) and not any(a>=plan_edits[plan_path] for a in author_review_at): unreviewed.append('(C) no `Pass: review` of your own was written after its last edit')
+    read_after=[e for e,p in plan_reads if p==plan_path and e>plan_edits[plan_path]]
+    if not read_after or not (pass_review.search(final) or any(a>=read_after[0] for a in author_review_at)): unreviewed.append('(C) no `Pass: review` of your own followed a Read of the plan after its last edit')
     if unreviewed: problems.append(f"PLAN PRESENTED UNREVIEWED: this reply asks to implement {plan_name}, but {' and '.join(unreviewed)} (plan-build.md Review). Run the missing review, fold it, then present — or write `plan gate: skip — <reason>`.")
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 # A redirect counts by its target only: `node --test x.test.js > out.txt` names code but writes none.
