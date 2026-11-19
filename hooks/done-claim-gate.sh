@@ -166,7 +166,7 @@ def required_status(required):
     undone=[m for m in owed if not any(n in ('Agent','Task') and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
     if not undone: return owed,None
     if feedback_blocks>=2: return [m for m in owed if m not in undone],None
-    return owed,f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session has had no agent pass by them. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. Give each everything written since its last run, never the last commit alone."
+    return owed,f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session still owes each an agent run. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. Give each everything written since its last run, never the last commit alone."
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
 NAMED_VERBS={

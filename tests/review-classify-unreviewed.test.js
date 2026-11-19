@@ -198,10 +198,10 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(out, required(bigFour));
   });
 
-  const bigThenDispatch = (member, { error = false, at = stamp(2) } = {}) => (repo) => [
+  const bigThenDispatch = (member, { error = false } = {}) => (repo) => [
     writeOf(path.join(repo, 'impl.ts'), sourceLines(200), { at: stamp(1) }),
-    dispatchOf(member, { id: 'big', at }),
-    ...(error ? [resultOf('big', { error, at })] : []),
+    dispatchOf(member, { id: 'big', at: stamp(2) }),
+    ...(error ? [resultOf('big', { error, at: stamp(2) })] : []),
   ];
 
   await t.test('big: a reuse-analyzer dispatch after 200 lines clears reuse-analyzer alone', () => {
@@ -210,6 +210,16 @@ test('review-classify unreviewed source lines', async (t) => {
 
   await t.test('big: a silent-failure-hunter dispatch after 200 lines clears silent-failure-hunter alone', () => {
     assert.match(classifyTranscript({ main: bigThenDispatch('silent-failure-hunter') }), allFiveWithout('silent-failure-hunter'));
+  });
+
+  await t.test('big: a silent-failure-hunter dispatch leaves its catch signal listed until code-reviewer runs', () => {
+    const out = classifyTranscript({
+      main: (repo) => [
+        writeOf(path.join(repo, 'impl.ts'), sourceLines(200, withCatch), { at: stamp(1) }),
+        dispatchOf('silent-failure-hunter', { id: 'big', at: stamp(2) }),
+      ],
+    });
+    assert.match(out, allFive);
   });
 
   await t.test('big: 200 more lines after a reuse-analyzer dispatch list reuse-analyzer again', () => {

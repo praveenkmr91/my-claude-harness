@@ -193,7 +193,7 @@ test('done-claim gate: required review agents', async (t) => {
   const checked = (timestamp) => ({ command: 'pnpm lint && node --test tests/*.test.js', output: 'ℹ fail 0', timestamp });
   const committed = (timestamp) => ({ command: 'git commit -m x', output: '', timestamp });
   const feedbackOf = (text) => ({ record: { type: 'user', isMeta: true, message: { content: `Stop hook feedback:\n[bash …/done-claim-gate.sh]: ${text}` } } });
-  const agentFeedback = () => feedbackOf('REVIEW AGENTS NOT RUN for code-reviewer: source written in this session has had no agent pass by them.');
+  const agentFeedback = () => feedbackOf('REVIEW AGENTS NOT RUN for code-reviewer: source written in this session still owes each an agent run.');
   const opts = (repo, extra) => ({ cwd: repo, since: stamp(0), lint: false, editedFile: null, ...extra });
   const blocked = (res, members) => {
     assert.equal(res.status, 2, res.stderr);
@@ -209,7 +209,7 @@ test('done-claim gate: required review agents', async (t) => {
     const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
     const fires = runWithResults(CLAIM, [thirty, checked(stamp(3))], opts(repo));
     blocked(fires, 'code-reviewer');
-    assert.match(fires.stderr, /: source written in this session has had no agent pass by them\. Dispatch each member as an agent with an `effort`/);
+    assert.match(fires.stderr, /: source written in this session still owes each an agent run\. Dispatch each member as an agent with an `effort`/);
     quiet(runWithResults(CLAIM, [thirty, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo)));
     for (const line of ['code-reviewer: 0 findings', 'code-reviewer: skip — reviewed by hand', 'code-reviewer: not run — small change']) {
       blocked(runWithResults(`${CLAIM}\n${line}`, [thirty, checked(stamp(3))], opts(repo)), 'code-reviewer');
