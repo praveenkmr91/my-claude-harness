@@ -1,4 +1,5 @@
 # Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_cutoff, the stamp that opens the claiming window, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, code-added= and required= — keep those keys.
+# Big rule: required= also lists silent-failure-hunter, type-design-analyzer, reuse-analyzer and placement-analyzer, each owed at 20+ non-test lines since its own last dispatch when they reach 200 or a path is high-risk.
 import functools
 import glob
 import json
@@ -53,6 +54,7 @@ COMMENT_LINE = rx(r'^\s*(//|/\*|\*)')
 LEGACY_SYNTAX = rx(r'(^|[^.\w$])var\s|\.indexOf\([^)]*\)\s*[!=<>]=*\s*-1|Object\.assign\(\s*\{\}|\.apply\(\s*(this|null)|\.substr\(|(^|[^.\w$])require\(')
 # Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
 CODE_PATHSPEC = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs', '*.vue', ':!*.test.*', ':!*.spec.*', ':!**/__tests__/**', ':!tests/**']
+BIG_MEMBERS = ('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer')
 
 
 def run(program, *args):
@@ -151,14 +153,16 @@ def scan_transcript(top, cutoff, main):
                         failed.add(block.get('tool_use_id'))
                     elif rec.get('type') == 'assistant' and block.get('type') == 'tool_use':
                         calls.append((rec.get('timestamp') or '', block.get('name'), block.get('input') or {}, block.get('id'), is_main))
-    review = None
+    reviews = {}
     for ts, name, inp, call_id, is_main in calls:
         kind = (inp.get('subagent_type') or '').rsplit(':', 1)[-1]
-        if is_main and name in ('Agent', 'Task') and kind == 'code-reviewer' and call_id not in failed and (not cutoff or ts < cutoff):
-            review = ts if review is None else max(review, ts)
+        if is_main and name in ('Agent', 'Task') and kind in ('code-reviewer',) + BIG_MEMBERS and call_id not in failed and (not cutoff or ts < cutoff):
+            reviews[kind] = max(ts, reviews.get(kind, ts))
+    review = reviews.get('code-reviewer')
     edited = {}
     count = 0
     texts = []
+    big = {member: {} for member in BIG_MEMBERS}
     for ts, name, inp, call_id, is_main in calls:
         file_path = inp.get('file_path')
         if name not in ('Write', 'Edit', 'MultiEdit') or not file_path:
@@ -167,17 +171,23 @@ def scan_transcript(top, cutoff, main):
         if fold(path[:len(top) + 1]) == fold(top + '/'):
             path = top + path[len(top):]
         edited[path] = None
-        if call_id in failed or (review is not None and ts <= review) or not path.startswith(top + '/'):
+        if call_id in failed or not path.startswith(top + '/'):
             continue
         rel = path[len(top) + 1:]
         if not CODE.search(rel):
             continue
         new = [inp.get('content'), inp.get('new_string')] + [e.get('new_string') for e in inp.get('edits') or []]
         new = [s for s in new if isinstance(s, str)]
-        count += sum(len(s.splitlines()) for s in new)
-        if WEB.search(rel) and not TESTISH.search(rel):
-            texts += new
-    return str(since), count, '\n'.join(edited), '\n'.join(texts)
+        written = sum(len(s.splitlines()) for s in new)
+        if review is None or ts > review:
+            count += written
+            if WEB.search(rel) and not TESTISH.search(rel):
+                texts += new
+        if written and not TEST_FILE_ANY.search(rel):
+            for member in BIG_MEMBERS:
+                if member not in reviews or ts > reviews[member]:
+                    big[member][rel] = big[member].get(rel, 0) + written
+    return str(since), count, '\n'.join(edited), '\n'.join(texts), big
 
 
 def log_since(since, flags, pathspec):
@@ -302,6 +312,7 @@ def classify(payload):
     since = ''
     code_added = 0
     unreviewed = ''
+    big = {}
     scoped = ''
     untracked = ''
     scope = []
@@ -319,9 +330,9 @@ def classify(payload):
         top = chomp(run('git', 'rev-parse', '--show-toplevel')[0])
         if transcript and os.access(transcript, os.R_OK):
             try:
-                since, code_added, scanned, unreviewed = scan_transcript(top, cutoff, transcript)
+                since, code_added, scanned, unreviewed, big = scan_transcript(top, cutoff, transcript)
             except Exception:
-                since, code_added, scanned, unreviewed = '', 0, '', ''
+                since, code_added, scanned, unreviewed, big = '', 0, '', '', {}
             edited = chomp(edited + '\n' + scanned)
         # Steps amend into one commit, so --since cannot isolate a step, and the step window outranks session edits.
         if base and run('git', 'cat-file', '-e', base + '^{commit}')[1]:
@@ -415,9 +426,15 @@ def classify(payload):
     if has_test_script(package_top) and any(TESTABLE_FILE.search(line) for line in file_lines) and not any(TEST_FILE_ANY.search(line) for line in file_lines):
         lens('pr-test-analyzer')
 
-    required = 'none'
+    owed = []
     if code_added >= 20:
-        required = ','.join(['code-reviewer'] + signals(unreviewed))
+        owed = ['code-reviewer'] + signals(unreviewed)
+    for member in BIG_MEMBERS:
+        member_paths = big.get(member, {})
+        member_lines = sum(member_paths.values())
+        if member not in owed and member_lines >= 20 and (member_lines >= 200 or high_risk(member_paths)):
+            owed.append(member)
+    required = ','.join(owed) or 'none'
 
     if pr_diff:
         diff_text = pr_diff
