@@ -21,6 +21,7 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
   const editPlan = (file = PLAN) => ({ type: 'tool_use', name: 'Edit', input: { file_path: file } });
   const review = (subagent_type, prompt) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type, prompt } });
   const advisor = { type: 'server_tool_use', name: 'advisor', input: {} };
+  const authorReview = { type: 'text', text: 'Pass: review — steps re-read against the tree, no gaps.' };
   const assistant = (...content) => ({ type: 'assistant', message: { content } });
   const prompt = (text) => ({ type: 'user', message: { content: text } });
   const runPlan = (records, final, input = {}) => {
@@ -48,7 +49,7 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     assert.equal(fires.status, 2, fires.stderr);
     assert.match(fires.stderr, /\(A\)/);
     assert.doesNotMatch(fires.stderr, /\(B\)/);
-    const quiet = runPlan(turn([...blocks, review('cold-reader', PLAN)], asks.typeRepo), asks.typeRepo);
+    const quiet = runPlan(turn([...blocks, review('cold-reader', PLAN), authorReview], asks.typeRepo), asks.typeRepo);
     assert.equal(quiet.status, 0, quiet.stderr);
   });
 
@@ -58,14 +59,14 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     assert.equal(fires.status, 2, fires.stderr);
     assert.match(fires.stderr, /\(B\)/);
     assert.doesNotMatch(fires.stderr, /\(A\)/);
-    assert.equal(runPlan(turn([...blocks, advisor], asks.say), asks.say).status, 0);
+    assert.equal(runPlan(turn([...blocks, advisor, authorReview], asks.say), asks.say).status, 0);
   });
 
   await t.test('a review that names another plan does not cover this one, and a plugin-prefixed reviewer type counts', () => {
     const other = runPlan(turn([writePlan(), review('cold-reader', '/repo/docs/plans/other.md'), advisor], asks.type), asks.type);
     assert.equal(other.status, 2, other.stderr);
     assert.match(other.stderr, /\(A\)/);
-    const prefixed = runPlan(turn([writePlan(), review('hera:cold-reader', `Cold-read ${PLAN}`), advisor], asks.type), asks.type);
+    const prefixed = runPlan(turn([writePlan(), review('hera:cold-reader', `Cold-read ${PLAN}`), advisor, authorReview], asks.type), asks.type);
     assert.equal(prefixed.status, 0, prefixed.stderr);
   });
 
@@ -82,7 +83,7 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
   });
 
   await t.test('tracking spans turns: a review in turn 1 covers an ask in turn 2, a plan edit in turn 2 voids it', () => {
-    const turn1 = [prompt('plan it'), assistant(writePlan(), review('cold-reader', PLAN), advisor), assistant({ type: 'text', text: 'Plan is ready.' })];
+    const turn1 = [prompt('plan it'), assistant(writePlan(), review('cold-reader', PLAN), advisor, authorReview), assistant({ type: 'text', text: 'Plan is ready.' })];
     const quiet = runPlan([...turn1, prompt('looks good'), assistant({ type: 'text', text: asks.type })], asks.type);
     assert.equal(quiet.status, 0, quiet.stderr);
     const fires = runPlan([...turn1, prompt('change step 2'), assistant(editPlan()), assistant({ type: 'text', text: asks.type })], asks.type);
@@ -98,7 +99,7 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
   });
 
   await t.test('a Fable thread\'s plan ask needs no advisor consult', () => {
-    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.say)), interrupt];
+    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`), authorReview], asks.say)), interrupt];
     const quiet = runPlan(records, asks.say);
     assert.equal(quiet.status, 0, quiet.stderr);
   });
@@ -115,6 +116,27 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     const fires = runPlan(onModel('claude-opus-5-5', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.say)), asks.say);
     assert.equal(fires.status, 2, fires.stderr);
     assert.match(fires.stderr, /\(B\)/);
+  });
+
+  await t.test('blocks a reviewed plan with no `Pass: review` of its own after the last edit, on every model', () => {
+    const blocks = [writePlan(), review('dry-runner', `Dry-run ${PLAN}`), advisor];
+    const fires = runPlan(turn(blocks, asks.type), asks.type);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(C\)/);
+    assert.doesNotMatch(fires.stderr, /\(A\)/);
+    assert.doesNotMatch(fires.stderr, /\(B\)/);
+    assert.equal(runPlan(turn([...blocks, authorReview], asks.type), asks.type).status, 0);
+    const stale = runPlan(turn([writePlan(), authorReview, review('dry-runner', `Dry-run ${PLAN}`), advisor, editPlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.type), asks.type);
+    assert.equal(stale.status, 2, stale.stderr);
+    assert.match(stale.stderr, /\(C\)/);
+    assert.doesNotMatch(stale.stderr, /\(A\)/);
+    assert.doesNotMatch(stale.stderr, /\(B\)/);
+    const withLine = `Pass: review — no gaps.\n\n${asks.type}`;
+    const unflushed = runPlan([prompt('plan it'), assistant(...blocks)], withLine);
+    assert.equal(unflushed.status, 0, unflushed.stderr);
+    const fable = runPlan(onModel('claude-fable-5-2', turn(blocks, asks.type)), asks.type);
+    assert.equal(fable.status, 2, fable.stderr);
+    assert.match(fable.stderr, /\(C\)/);
   });
 
   await t.test('a reply that defers approval is not an implement ask', () => {
