@@ -105,12 +105,15 @@ test('block dangerous git hook: worktree', async (t) => {
     fs.writeFileSync(empty, '');
     const unreadable = path.join(repo, 'unreadable.jsonl');
     fs.writeFileSync(unreadable, `${fs.readFileSync(transcript, 'utf8')}\n{"type":"assistant","note":"worktree`);
-    const reset = (command, cwd, transcriptPath = transcript, agentId = undefined) =>
+    const hook = (command, cwd, transcriptPath = transcript, agentId = undefined) =>
       spawnSync('bash', [HOOK_PATH], {
         input: JSON.stringify({ tool_input: { command }, cwd, transcript_path: transcriptPath, agent_id: agentId }),
         encoding: 'utf8',
         env,
-      }).status;
+      });
+    const reset = (...args) => hook(...args).status;
+    const envFile = path.join(repo, 'env.sh');
+    fs.writeFileSync(envFile, `export GIT_DIR=${repo}/.git\nexport GIT_WORK_TREE=${repo}\n`);
 
     try {
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo), 0, 'own worktree, named with -C');
@@ -142,8 +145,56 @@ test('block dangerous git hook: worktree', async (t) => {
       assert.equal(reset(`GIT_DIR=${twin}/.git git branch -D feat`, repo), 2, 'GIT_DIR hides where the delete lands');
       assert.equal(reset(`git --git-dir ${twin}/.git branch -D feat`, repo), 2, '--git-dir hides where the delete lands');
       assert.equal(reset(`git -C ${twin} branch -D feat`, repo), 2, 'a same-named branch born just now in another repo');
-      assert.equal(reset(`git -C ${repo} branch -D other`, repo, unreadable), 2, 'delete with a transcript that cannot be read');
+      assert.equal(reset(`git -C ${repo} branch -D feat`, repo, unreadable), 2, 'delete with a transcript that cannot be read');
       assert.equal(reset(`git -C ${repo} branch -D feat`, repo, ''), 2, 'delete with no transcript');
+      spawnSync('sh', ['-c', `git -C ${repo} update-ref --create-reflog -m "$(printf 'caf\\351')" refs/heads/undecodable HEAD`], { env });
+      assert.equal(reset(`git -C ${repo} branch -D undecodable`, repo), 2, 'delete of a branch whose reflog cannot be decoded');
+
+      const resetHard = `git -C ${mine} reset --hard`;
+      const resetMine = `${resetHard} main`;
+      const denied = [
+        ['bypass 1: a cd after the reset inside a loop', `for i in 1 2\ndo\ngit reset --hard main\ncd ${repo}\ndone`],
+        ['bypass 2: a cd before a function that resets', `f() {\ngit reset --hard main\n}\ncd ${repo}\nf`],
+        ['bypass 3: GIT_DIR named through quotes', `export "GIT"_DIR=${repo}/.git "GIT"_WORK_TREE=${repo}; git reset --hard main`],
+        ['bypass 4: GIT_DIR named through a backslash', `export GI\\T_DIR=${repo}/.git GI\\T_WORK_TREE=${repo}; git reset --hard main`],
+        ['bypass 5: a cd word built by expansion', `\${x:-cd} ${repo}; git reset --hard main`],
+        ['bypass 6: a cd word built by command substitution', `$(printf c)d ${repo}; git reset --hard main`],
+        ['bypass 7: GIT_DIR exported by a sourced file', `. ${envFile}; git reset --hard main`],
+        ['a plain reset chained to a second command', `${resetMine}; git -C ${mine} log`],
+        ['a plain reset redirected', `${resetMine} > /dev/null`],
+        ['a plain reset inside command substitution', `echo $(${resetMine})`],
+        ['a plain reset inside sh -c', `sh -c "${resetMine}"`],
+        ['a forced removal followed by the delete', `git worktree remove --force ${mine} && git branch -D feat`],
+        ['a plain delete followed by a second command', 'git branch -D feat; git status'],
+        ['a reset ref with a $', `${resetHard} $REF`],
+        ['a reset ref in quotes', `${resetHard} "main"`],
+        ['a reset ref with a backslash', `${resetHard} mai\\n`],
+        ['a reset ref with an =', `${resetMine}=x`],
+        ['a reset ref with a glob character', `${resetHard} mai?`],
+        ['a reset piped to cat', `${resetMine} | cat`],
+        ['a reset with a tab between words', `git -C ${mine}\treset --hard main`],
+        ['a reset ref ending in ~+', `${resetMine}~+`],
+      ];
+      assert.deepEqual(
+        denied.filter(([, command]) => reset(command, mine) !== 2).map(([label]) => label),
+        [],
+        'commands that were allowed',
+      );
+      assert.equal(reset(`${resetMine} -q`, repo), 0, 'a plain reset with -q after the ref');
+      assert.equal(reset(`${resetMine}@{1}`, repo), 0, 'a plain reset to a reflog ref');
+      assert.equal(reset(`${resetHard} HEAD~2`, repo), 0, 'a plain reset to an ancestor ref');
+      const hintedReset = hook(`${resetMine}; git -C ${mine} log`, repo);
+      assert.equal(hintedReset.status, 2, 'a chained reset');
+      assert.match(hintedReset.stderr, /whole command/, 'the denied reset names the plain form');
+      const fallbackReset = hook(`${resetMine} # it's stale`, repo);
+      assert.equal(fallbackReset.status, 2, 'a reset the tokenizer cannot split');
+      assert.match(fallbackReset.stderr, /whole command/, 'a reset denied by the fallback scan names the plain form');
+      const hintedDelete = hook('git branch -D feat; git status', repo);
+      assert.equal(hintedDelete.status, 2, 'a chained delete');
+      assert.match(hintedDelete.stderr, /whole command.*git worktree remove/s, 'the denied delete names the plain form and the removal chain');
+      const subagentReset = hook(`${resetMine}; git -C ${mine} log`, repo, transcript, 'agent-1');
+      assert.equal(subagentReset.status, 2, 'a subagent chained reset');
+      assert.equal(subagentReset.stderr.trim().split('\n').length, 1, 'a subagent denial prints no hint');
       spawnSync('git', ['-C', mine, 'switch', '-q', '-c', 'elsewhere'], { env });
       assert.equal(reset(`git -C ${mine} reset --hard main`, repo), 2, 'own folder, now on a branch the session did not create there');
       spawnSync('git', ['-C', repo, 'switch', '-q', '-c', 'fresh'], { env });

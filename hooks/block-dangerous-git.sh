@@ -10,11 +10,15 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 # A session owns a worktree it created: its own transcript holds the Bash call that ran `git worktree add -b <branch>
 # <path>`, and git's reflog shows that branch was created within ten minutes after that call. The transcript alone is
 # not proof: a call that failed, or never ran behind a `false &&`, is recorded just the same. The owner may
-# `git reset --hard` there while that path still has that branch checked out, and may `git branch -D` that branch.
-# A `cd` anywhere in the command, a wrapper word, any `GIT_*` variable or a `--git-dir`/`--work-tree` flag hides where
-# the reset or delete lands, so those stay blocked; name the worktree with `-C`. The shared checkout is never owned,
-# and neither is anything for a subagent, whose hook input carries the parent session's transcript. A transcript that
-# cannot be read owns nothing.
+# `git reset --hard` there while that path still has that branch checked out, and may `git branch -D` that branch, only
+# as one plain command: the whole command is `git [-C <path>] reset --hard [<ref>]` (`-q` allowed) or
+# `git [-C <path>] branch -D <name>…`, in letters, digits, spaces and `_ . / ^ @ -`, plus `@{…}` and `~N` in a ref and a
+# leading `~/` in a path. Anything in the command text the shell could expand or run first (a chain, redirect, quote,
+# `$`, `cd`, wrapper, `GIT_*`, `--git-dir`) is not plain. Only the text is checked: an environment a startup file
+# exports, git config that runs commands, or a path swapped after the check is not. The rule also assumes zsh's
+# EXTENDED_GLOB stays off, which would make `^` and `~` glob operators. The shared checkout is
+# never owned, and neither is anything for a subagent, whose hook input carries the parent session's transcript. A
+# transcript that cannot be read owns nothing.
 SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
@@ -27,17 +31,40 @@ WRAPPERS = {"sudo", "env", "command", "nohup", "time", "exec", "xargs", "nice"}
 SHELLS = {"bash", "sh", "zsh"}
 OPERATOR_CHARS = "();<>|&\n"
 SESSION_CWD, TRANSCRIPT, AGENT_ID = sys.argv[2:5]
-STATE = {"relocated": bool(re.search(r"\bGIT_[A-Z_]+\b", sys.argv[1]))}
+PLAIN_PATH = r"~/[A-Za-z0-9_./^@-]*|[A-Za-z0-9_./^@][A-Za-z0-9_./^@-]*"
+PLAIN_NAME = r"[A-Za-z0-9_./^@][A-Za-z0-9_./^@-]*"
+PLAIN_REF = r"[A-Za-z0-9_./^@](?:[A-Za-z0-9_./^@-]|@\{[A-Za-z0-9]+\}|~[0-9]+)*"
+
+def plain_owner_command(command):
+    text = command.strip(" ")
+    if not re.fullmatch(r"[A-Za-z0-9_./^@{}~ -]+", text):
+        return False
+    words = text.split()
+    if words[0] != "git":
+        return False
+    words = words[1:]
+    if words[:1] == ["-C"]:
+        if len(words) < 2 or not re.fullmatch(PLAIN_PATH, words[1]):
+            return False
+        words = words[2:]
+    sub, args = (words[0], words[1:]) if words else (None, [])
+    if sub == "reset":
+        quiet = [a for a in args if a in ("-q", "--quiet")]
+        args = [a for a in args if a not in ("-q", "--quiet")]
+        return len(quiet) <= 1 and args[:1] == ["--hard"] and (len(args) == 1 or (len(args) == 2 and re.fullmatch(PLAIN_REF, args[1]) is not None))
+    if sub == "branch":
+        return args[:1] == ["-D"] and len(args) > 1 and all(re.fullmatch(PLAIN_NAME, a) for a in args[1:])
+    return False
+
+PLAIN = plain_owner_command(sys.argv[1])
 
 def git_call(argv, cwd):
-    i, repo, located = 0, cwd, True
+    i, repo = 0, cwd
     while i < len(argv) and argv[i].startswith("-"):
         if argv[i] == "-C" and i + 1 < len(argv):
             repo = os.path.join(repo, os.path.expanduser(argv[i + 1]))
-        elif argv[i].split("=")[0] in GLOBAL_WITH_ARG - {"-C", "-c"}:
-            located = False
         i += 2 if argv[i] in GLOBAL_WITH_ARG else 1
-    return (repo, located, argv[i], argv[i + 1:]) if i < len(argv) else None
+    return (repo, argv[i], argv[i + 1:]) if i < len(argv) else None
 
 def added_worktree(repo, args):
     branch, path, i = None, None, 0
@@ -64,7 +91,7 @@ def created_worktrees():
                     continue
                 for words, _ in segments((block.get("input") or {}).get("command", "")):
                     call = git_call(words[1:], entry.get("cwd") or SESSION_CWD) if words and os.path.basename(words[0]) == "git" else None
-                    added = added_worktree(call[0], call[3][1:]) if call and call[2] == "worktree" and call[3][:1] == ["add"] else None
+                    added = added_worktree(call[0], call[2][1:]) if call and call[1] == "worktree" and call[2][:1] == ["add"] else None
                     if added:
                         asked = datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp()
                         created.add(added + (asked, call[0]))
@@ -80,24 +107,27 @@ def git_dir(repo, which):
 def created_by_session(repo, branch, path=None):
     if AGENT_ID:
         return False
-    oldest = git_output(repo, "log", "-g", "--date=unix", "--format=%gd %gs", "refs/heads/" + branch, "--").splitlines()[-1:]
-    born = re.match(r"\S+@\{(\d+)\} branch: Created from ", oldest[0]) if oldest else None
     try:
+        oldest = git_output(repo, "log", "-g", "--date=unix", "--format=%gd %gs", "refs/heads/" + branch, "--").splitlines()[-1:]
+        born = re.match(r"\S+@\{(\d+)\} branch: Created from ", oldest[0]) if oldest else None
         created = created_worktrees() if born else ()
+        return any(
+            name == branch
+            and path in (None, made_at)
+            and -2 <= int(born.group(1)) - asked <= 600
+            and git_dir(added_from, "--git-common-dir") == git_dir(repo, "--git-common-dir")
+            for made_at, name, asked, added_from in created
+        )
     except Exception:
         return False
-    return any(
-        name == branch
-        and path in (None, made_at)
-        and -2 <= int(born.group(1)) - asked <= 600
-        and git_dir(added_from, "--git-common-dir") == git_dir(repo, "--git-common-dir")
-        for made_at, name, asked, added_from in created
-    )
 
 def owns_worktree(repo):
-    top, branch = git_output(repo, "rev-parse", "--show-toplevel"), git_output(repo, "symbolic-ref", "--short", "HEAD")
-    linked = git_dir(repo, "--git-dir") != git_dir(repo, "--git-common-dir")
-    return bool(top and branch) and linked and created_by_session(repo, branch, os.path.realpath(top))
+    try:
+        top, branch = git_output(repo, "rev-parse", "--show-toplevel"), git_output(repo, "symbolic-ref", "--short", "HEAD")
+        linked = git_dir(repo, "--git-dir") != git_dir(repo, "--git-common-dir")
+        return bool(top and branch) and linked and created_by_session(repo, branch, os.path.realpath(top))
+    except Exception:
+        return False
 
 def worktree_branch(repo, path):
     target = os.path.realpath(os.path.join(repo, os.path.expanduser(path)))
@@ -112,13 +142,13 @@ def git_danger(argv, freed_branches):
     call = git_call(argv, SESSION_CWD)
     if call is None:
         return None
-    repo, located, sub, rest = call
+    repo, sub, rest = call
     if "--no-verify" in rest:
         return "--no-verify"
     if sub == "push":
         return "git push"
     if sub == "reset" and "--hard" in rest:
-        return None if located and not STATE["relocated"] and owns_worktree(repo) else "git reset --hard"
+        return None if PLAIN and owns_worktree(repo) else "git reset --hard"
     if sub == "clean" and any(a == "--force" or re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a) for a in rest):
         return "git clean -f"
     if sub == "worktree" and rest[:1] == ["remove"] and not {"-f", "--force"} & set(rest):
@@ -128,8 +158,7 @@ def git_danger(argv, freed_branches):
             freed_branches.add(branch)
     if sub == "branch" and any(re.fullmatch(r"-[a-zA-Z]*D[a-zA-Z]*", a) for a in rest):
         names = {a for a in rest if not a.startswith("-")}
-        owner = located and not STATE["relocated"]
-        if not names or not all(n in freed_branches or (owner and created_by_session(repo, n)) for n in names):
+        if not names or not all(n in freed_branches or (PLAIN and created_by_session(repo, n)) for n in names):
             return "git branch -D"
     if sub in ("checkout", "restore") and any(a in (".", "./") for a in rest):
         return f"git {sub} ."
@@ -139,14 +168,11 @@ def segment_danger(words, freed_branches):
     while words and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[0]):
         words = words[1:]
     if words and words[0] in WRAPPERS:
-        STATE["relocated"] = True
         git_at = next((i for i, w in enumerate(words) if os.path.basename(w) == "git"), None)
         words = words[git_at:] if git_at is not None else []
     if not words:
         return None
     program = os.path.basename(words[0])
-    if {"cd", "pushd", "popd", "chdir"} & set(words):
-        STATE["relocated"] = True
     if program == "git":
         return git_danger(words[1:], freed_branches)
     if program in SHELLS and "-c" in words[1:-1]:
@@ -224,7 +250,8 @@ if [ "$DANGER" = "--no-verify" ]; then
   exit 2
 elif [ -n "$DANGER" ]; then
   echo "BLOCKED: '$COMMAND' runs '$DANGER'. The user has prevented you from doing this." >&2
-  [ "$DANGER" = "git reset --hard" ] && echo "A worktree this session created with 'git worktree add -b' resets as plain 'git -C <worktree> reset --hard <ref>'; anywhere else it stays denied." >&2
+  [ "${DANGER#git }" = "reset --hard" ] && [ -z "$AGENT_ID" ] && echo "A worktree this session created with 'git worktree add -b' resets only as the whole command 'git [-C <worktree>] reset --hard [<ref>]', nothing chained, piped, quoted or redirected; anywhere else it stays denied." >&2
+  [ "$DANGER" = "git branch -D" ] && [ -z "$AGENT_ID" ] && echo "A branch this session created is deleted only as the whole command 'git [-C <worktree>] branch -D <branch>'; a worktree and its branch go as 'git worktree remove <path> && git branch -D <branch>'." >&2
   [ "$DANGER" = "git push" ] && echo "A whitelisted backup remote pushes as plain 'git -C <repo> push …'; a cd, subshell or wrapper word at command position is denied regardless." >&2
   exit 2
 fi
