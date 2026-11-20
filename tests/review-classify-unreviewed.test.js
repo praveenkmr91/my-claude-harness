@@ -297,6 +297,26 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(reuseRun({ shown: ['a.ts', 'b.ts'] }), allFiveWithout('reuse-analyzer'));
   });
 
+  const styledSource = "export const A = () => <div className='p-4' />;\n";
+  const audit = (at) => toolCall('Skill', { skill: 'impeccable:impeccable', args: 'audit a.tsx' }, { id: `audit-${at}`, at: stamp(at) });
+  const joinsImpeccable = (main) => / lenses=[^ ]*impeccable/.test(classifyTranscript({ onDisk: { 'a.tsx': styledSource }, main }));
+
+  await t.test('impeccable: a styled write with no audit in the session joins impeccable', () => {
+    assert.ok(joinsImpeccable((repo) => [writeOf(path.join(repo, 'a.tsx'), styledSource, { at: stamp(1) })]));
+  });
+
+  await t.test('impeccable: an audit after the last styled write drops impeccable', () => {
+    assert.ok(!joinsImpeccable((repo) => [writeOf(path.join(repo, 'a.tsx'), styledSource, { at: stamp(1) }), audit(2)]));
+  });
+
+  await t.test('impeccable: a styled write after the audit joins impeccable again', () => {
+    assert.ok(joinsImpeccable((repo) => [audit(1), writeOf(path.join(repo, 'a.tsx'), styledSource, { at: stamp(2) })]));
+  });
+
+  await t.test('impeccable: a .less stylesheet written after the audit joins impeccable again', () => {
+    assert.ok(joinsImpeccable((repo) => [audit(1), writeOf(path.join(repo, 'a.less'), '.a { color: red; }\n', { at: stamp(2) })]));
+  });
+
   const worktreeFiles = { '.claude/worktrees/wt/a.ts': sourceLines(200), '.claude/worktrees/wt/b.ts': sourceLines(200) };
 
   await t.test('quiet: files written in a worktree clear when the run names them by their path inside it', () => {

@@ -124,7 +124,7 @@ def scan_transcript(top, cutoff, main):
     top = os.path.realpath(top)
     # Default macOS volumes ignore case; elsewhere two spellings differing in case are two paths.
     fold = str.lower if sys.platform == 'darwin' else str
-    NEEDLE = re.compile(rb'"name":"(?:Write|Edit|MultiEdit|Agent|Task)"|"is_error":true')
+    NEEDLE = re.compile(rb'"name":"(?:Write|Edit|MultiEdit|Agent|Task|Skill)"|"is_error":true')
     # Twin of `agent_id` in done-claim-gate.sh, narrowed to a filename-safe id.
     AGENT_ID = re.compile(r'agentId: ([A-Za-z0-9_-]+)')
     # Twin of `code` in done-claim-gate.sh.
@@ -224,6 +224,10 @@ def scan_transcript(top, cutoff, main):
     texts = []
     big = {member: {} for member in BIG_MEMBERS}
     owed_big = {member: {} for member in BIG_MEMBERS}
+    # The impeccable join reads every commit since the session began, so one styled edit would owe an
+    # audit on every later claim; once an audit has run, only styling written after it owes another.
+    audits = [ts for ts, name, inp, call_id, is_main in calls if is_main and name == 'Skill' and (inp.get('skill') or '').rsplit(':', 1)[-1] == 'impeccable' and call_id not in failed]
+    restyled = None if not audits else False
     for ts, name, inp, call_id, is_main in calls:
         file_path = inp.get('file_path')
         if name not in ('Write', 'Edit', 'MultiEdit') or not file_path:
@@ -235,10 +239,12 @@ def scan_transcript(top, cutoff, main):
         if call_id in failed or not path.startswith(top + '/'):
             continue
         rel = path[len(top) + 1:]
-        if not CODE.search(rel):
-            continue
         new = [inp.get('content'), inp.get('new_string')] + [e.get('new_string') for e in inp.get('edits') or []]
         new = [s for s in new if isinstance(s, str)]
+        if audits and ts > audits[-1] and not TEST_FILE_ANY.search(rel) and (STYLE_FILE.search(rel) or any(STYLE_TEXT.search(s) for s in new)):
+            restyled = True
+        if not CODE.search(rel):
+            continue
         written = sum(len(s.splitlines()) for s in new)
         if review is None or ts > review:
             count += written
@@ -250,7 +256,7 @@ def scan_transcript(top, cutoff, main):
                     big[member][rel] = big[member].get(rel, 0) + written
                 if not cleared(ts, rel, points[member]):
                     owed_big[member][rel] = owed_big[member].get(rel, 0) + written
-    return str(since), count, '\n'.join(edited), '\n'.join(texts), big, owed_big
+    return str(since), count, '\n'.join(edited), '\n'.join(texts), big, owed_big, restyled
 
 
 def log_since(since, flags, pathspec):
@@ -382,6 +388,7 @@ def classify(payload):
     unreviewed = ''
     big = {}
     owed_big = {}
+    restyled = None
     scoped = ''
     untracked = ''
     scope = []
@@ -399,9 +406,9 @@ def classify(payload):
         top = chomp(run('git', 'rev-parse', '--show-toplevel')[0])
         if transcript and os.access(transcript, os.R_OK):
             try:
-                since, code_added, scanned, unreviewed, big, owed_big = scan_transcript(top, cutoff, transcript)
+                since, code_added, scanned, unreviewed, big, owed_big, restyled = scan_transcript(top, cutoff, transcript)
             except Exception:
-                since, code_added, scanned, unreviewed, big, owed_big = '', 0, '', '', {}, {}
+                since, code_added, scanned, unreviewed, big, owed_big, restyled = '', 0, '', '', {}, {}, None
             edited = chomp(edited + '\n' + scanned)
         # Steps amend into one commit, so --since cannot isolate a step, and the step window outranks session edits.
         if base and run('git', 'cat-file', '-e', base + '^{commit}')[1]:
@@ -487,6 +494,8 @@ def classify(payload):
     added_text_lines = added_text.split('\n')
 
     styled = any(STYLE_FILE.search(line) for line in file_lines) or any(STYLE_TEXT.search(line) for line in added_text_lines)
+    if restyled is not None and not pr_diff:
+        styled = restyled
     for member in signals(added_text):
         lens(member)
     if styled:
