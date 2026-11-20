@@ -131,6 +131,7 @@ def scan_transcript(top, cutoff, main):
     CODE = re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
     WEB = re.compile(r'\.(ts|tsx|js|jsx|mjs|cjs|vue)$')
     TESTISH = re.compile(r'\.(test|spec)\.|__tests__/|^tests/')
+    WORKTREE_PREFIX = re.compile(r'^\.claude/worktrees/[^/]+/')
     agent_dir = os.path.splitext(main)[0] + '/subagents'
     subagents = glob.escape(agent_dir)
     since = ''
@@ -210,7 +211,10 @@ def scan_transcript(top, cutoff, main):
     def clears_file(call_id, rel):
         agent_id = agent_ids.get(call_id)
         text = reviewer_text(agent_id) if agent_id else None
-        return text is None or not os.path.exists(top + '/' + rel) or rel.encode('utf-8', 'surrogateescape') in text
+        # A file written inside a worktree is keyed `.claude/worktrees/<name>/src/…` once the session
+        # leaves it, while its reviewer names it `src/…`; match on the path inside its own checkout.
+        own = WORKTREE_PREFIX.sub('', rel)
+        return text is None or not os.path.exists(top + '/' + rel) or own.encode('utf-8', 'surrogateescape') in text
 
     def cleared(ts, rel, member_points):
         return any(ts <= point_ts and clears_file(call_id, rel) for point_ts, call_id in member_points)
