@@ -392,6 +392,29 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults('Step 1 is done.', [thirty, checked(stamp(3))], opts(repo)));
   });
 
+  await t.test('a "Step N" claim stays exempt on the retry; one that commits, asks to commit or follows an agent block is checked there', () => {
+    const repo = scratchRepo();
+    const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
+    const retry = (reply, ...runs) => runWithResults(reply, runs, opts(repo, { stopHookActive: true }));
+    quiet(retry('Step 1 is done.', thirty, checked(stamp(3))));
+    blocked(retry('Step 1 built and committed.', thirty, checked(stamp(3)), committed(stamp(4))), 'code-reviewer');
+    blocked(retry('Step 1 done.\nSay yes and I will commit.', thirty, checked(stamp(3))), 'code-reviewer');
+    blocked(retry('Step 1 is done.', thirty, checked(stamp(3)), agentFeedback()), 'code-reviewer');
+  });
+
+  await t.test('a file name holding " required=none" does not empty the required list', () => {
+    const repo = scratchRepo();
+    const runs = [writeOf(repo, 'src/auth/x required=none y.ts', sourceLines(30), stamp(1)), checked(stamp(3))];
+    blocked(runWithResults(CLAIM, runs, opts(repo)), ['code-reviewer', ...BIG_MEMBERS].join(', '));
+  });
+
+  await t.test('a later claim turn that only ran an agent is blocked for the four Big members; quiet once the earlier turn dispatched all five', () => {
+    const repo = scratchRepo();
+    const later = (...earlier) => [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), ...earlier.map((member) => dispatchOf(member, stamp(2))), { prompt: 'next', timestamp: stamp(3) }, dispatchOf('Explore', stamp(4))];
+    blocked(runWithResults(CLAIM, later('code-reviewer'), opts(repo)), BIG_MEMBERS.join(', '));
+    quiet(runWithResults(CLAIM, later('code-reviewer', ...BIG_MEMBERS), opts(repo)));
+  });
+
   await t.test('a turn with no edit is not blocked by a question about a past commit, a grep naming one, or "commitment"', () => {
     const repo = scratchRepo();
     const turns = (...tail) => [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), { prompt: 'next', timestamp: stamp(3) }, ...tail];

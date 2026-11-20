@@ -2,7 +2,7 @@
 # Stop hook, and PreToolUse SendMessage on a `[REPORT` send (window = since the previous sent REPORT, not the typed prompt, so a typed "granted" cannot empty it).
 # Claim = first line of the final reply (or the REPORT) only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
 # One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which also runs on the retry while fewer than two such blocks are in the window, so the block message must carry the exact verdict format; a blocked REPORT re-blocks until it changes.
-# Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The REVIEW AGENTS NOT RUN check alone also runs on a turn that commits or asks to without a code edit. A `Pass: <verb>` line in the reply is checked on every turn.
+# Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The REVIEW AGENTS NOT RUN check alone also runs on a turn that commits or asks to without a code edit, and on one that ran an agent and claims done while `required=` lists a member. A `Pass: <verb>` line in the reply is checked on every turn.
 # A plan build's done-claim or shipping commit also needs one `/learn` pass in the transcript (typed or Skill) or a `learn: skip — <reason>` line: of 84 build sessions, 13 ran /learn (measured 2026-11-06).
 
 INPUT=$(cat)
@@ -142,7 +142,7 @@ def classify_skipped(why):
     if not warned: print(json.dumps({'systemMessage':why}))
     warned.append(why)
 def classify():
-    verb,lenses,required,added='review','reuse-analyzer,placement-analyzer','none','0'
+    verb,lenses,required='review','reuse-analyzer,placement-analyzer','none'
     if cwd and os.path.isdir(cwd):
         payload=dict(inp)
         if base: payload['review_base']=base
@@ -157,9 +157,9 @@ def classify():
             joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
-        m=re.search(r'code-added=(\d+) required=(\S+)',joins)
-        if m: added,required=m.groups()
-    return verb,lenses,required,added
+        m=re.search(r'code-added=\d+ required=(\S+)',joins)
+        if m: required=m.group(1)
+    return verb,lenses,required
 def required_status(required):
     owed=[] if required=='none' else required.split(',')
     last_write=max((e for e,p,i in write_calls if code.search(p) and call_ok(i)),default=0)
@@ -218,8 +218,10 @@ step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
 exempt=(bool(step_claim) and not committed) or report or window_report
 code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)
 if inp.get('stop_hook_active') and not report:
-    if not window_report and (feedback_blocks==1 or feedback_blocks<2 and (claim or commit_ask or committed)):
-        _,_,required,_=classify()
+    # A step claim is exempt here only as it was on the first run: once an agent block is in the window, or the reply asks to commit, rewording to "Step N" must not pass.
+    step_exempt=bool(step_claim) and not (committed or commit_ask or feedback_blocks)
+    if not (window_report or step_exempt) and (feedback_blocks==1 or feedback_blocks<2 and (claim or commit_ask or committed)):
+        _,_,required=classify()
         block=required_status(required)[1]
         if block:
             print(block,file=sys.stderr)
@@ -227,7 +229,7 @@ if inp.get('stop_hook_active') and not report:
     sys.exit(0)
 agent_ran=any(n in ('Agent','Task') for n,_,_ in lens_calls)
 agent_class=classify() if not (code_turn or exempt) and agent_ran and (claim or idle_ask or idle_committed) else None
-agent_build=bool(agent_class) and int(agent_class[3])>=20
+agent_build=bool(agent_class) and agent_class[2]!='none'
 if (report and stopped) or not (code_turn or agent_build or (idle_ask or idle_committed) and not report):
     if problems:
         print('\n'.join(problems),file=sys.stderr)
@@ -298,7 +300,7 @@ lint_cmds=[c for _,c in fresh] if report else cmds
 if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim_word or commit_ask or committed:
-    verb,lenses,required,_=classify()
+    verb,lenses,required=classify()
     owed,owed_block=([],None) if exempt else required_status(required)
     strict=(built and claim and not step_claim and not report) or ship
     def lens_done(l):
