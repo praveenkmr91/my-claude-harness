@@ -63,7 +63,12 @@ const resultOf = (id, { error = false, at, content = 'out' } = {}) => ({ type: '
 function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit = {}, input = {}, stdin }) {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env });
-  const write = (files) => { for (const [name, source] of Object.entries(files)) fs.writeFileSync(path.join(repo, name), source); };
+  const write = (files) => {
+    for (const [name, source] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true });
+      fs.writeFileSync(path.join(repo, name), source);
+    }
+  };
   git('init', '-q');
   if (Object.keys(commit).length) { write(commit); git('add', '.'); git('commit', '-q', '-m', 'init'); }
   write(onDisk);

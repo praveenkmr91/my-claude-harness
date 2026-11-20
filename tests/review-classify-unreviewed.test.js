@@ -297,6 +297,18 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(reuseRun({ shown: ['a.ts', 'b.ts'] }), allFiveWithout('reuse-analyzer'));
   });
 
+  const worktreeFiles = { '.claude/worktrees/wt/a.ts': sourceLines(200), '.claude/worktrees/wt/b.ts': sourceLines(200) };
+
+  await t.test('quiet: files written in a worktree clear when the run names them by their path inside it', () => {
+    assert.match(reuseRun({ files: worktreeFiles, shown: ['a.ts', 'b.ts'] }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('shown: a worktree file the run never names stays owed under its worktree path', () => {
+    const out = reuseRun({ files: worktreeFiles, shown: ['a.ts'] });
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'reuse-analyzer'), '.claude/worktrees/wt/b.ts');
+  });
+
   await t.test('shown: before the review cutoff reuse-analyzer lists both files, owed-files keeps b.ts only', () => {
     const out = reuseRun({ input: { review_cutoff: stamp(2) } });
     assert.match(out, allFive);
