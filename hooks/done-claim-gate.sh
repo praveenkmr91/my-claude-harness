@@ -53,7 +53,9 @@ def handback(origin):
     global built,built_blind,hb_at
     built=True; hb_at=len(cmds)
     files=agent_edits(agent_out.get(origin.get('from'),''))
-    if files: edits.extend(files)
+    if files:
+        edits.extend(files)
+        write_calls.extend((ev,f,None) for f in files)
     else: built_blind=True
 stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')

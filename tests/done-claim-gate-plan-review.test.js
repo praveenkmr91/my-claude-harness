@@ -334,6 +334,41 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults(reply, runs, opts(repo)));
   });
 
+  const workerEdit = (repo, file) => {
+    const out = path.join(tmpDir, `wk${nextSeq()}.output`);
+    const id = path.basename(out, '.output');
+    fs.writeFileSync(out, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(repo, file) } }] } }));
+    const hb = handBack('implementer');
+    hb.origin.from = id;
+    return {
+      dispatch: { blocks: [{ type: 'tool_use', id: `dispatch-${id}`, name: 'Agent', input: { subagent_type: 'implementer' } }], timestamp: stamp(2) },
+      result: { record: { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: `dispatch-${id}`, content: `Async agent launched.\noutput_file: ${out}` }] } } },
+      handback: { handback: hb },
+    };
+  };
+  const workerReply = `Done: step 1 landed.\n${LENS_SKIPS}\n${LEARN_SKIP}`;
+
+  await t.test('a worker edit to code after a code-reviewer dispatch re-owes it', () => {
+    const repo = scratchRepo();
+    const worker = workerEdit(repo, 'more.ts');
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), worker.dispatch, worker.result, dispatchOf('code-reviewer', stamp(3)), worker.handback, checked(stamp(4))];
+    blocked(runWithResults(workerReply, runs, opts(repo)), 'code-reviewer');
+  });
+
+  await t.test('a worker edit to code before the code-reviewer dispatch leaves it quiet', () => {
+    const repo = scratchRepo();
+    const worker = workerEdit(repo, 'more.ts');
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), worker.dispatch, worker.result, worker.handback, dispatchOf('code-reviewer', stamp(3)), checked(stamp(4))];
+    quiet(runWithResults(workerReply, runs, opts(repo)));
+  });
+
+  await t.test('a worker edit to a non-code file after the code-reviewer dispatch leaves it quiet', () => {
+    const repo = scratchRepo();
+    const worker = workerEdit(repo, 'notes.md');
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), worker.dispatch, worker.result, dispatchOf('code-reviewer', stamp(3)), worker.handback, checked(stamp(4))];
+    quiet(runWithResults(workerReply, runs, opts(repo)));
+  });
+
   await t.test('the retry blocks once more while a member is still missing', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
