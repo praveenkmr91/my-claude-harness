@@ -237,6 +237,153 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer'), input: { review_cutoff: stamp(2) } }), allFive);
   });
 
+  const linkedRun = (member) => [
+    dispatchOf(member, { id: 'run', at: stamp(2) }),
+    resultOf('run', { at: stamp(3), content: [{ type: 'text', text: 'done\nagentId: r1 (use SendMessage to continue)' }] }),
+  ];
+  const attachment = (body) => ({ type: 'attachment', attachment: body });
+  const reviewer = (shown, { brief = 'review the change', blob = brief, instructions = 'house rules', gitStatus = 'clean', after = [] } = {}) => ({
+    'agent-r1.jsonl': () => [
+      { type: 'user', message: { role: 'user', content: brief } },
+      { type: 'user', isMeta: true, message: { role: 'user', content: '<system-reminder>\nYour final report goes through the handback tool.\n</system-reminder>' } },
+      attachment({ type: 'instructions', files: [{ path: '/home/CLAUDE.md', type: 'User', content: instructions }] }),
+      attachment({ type: 'session_context', context: { gitStatus } }),
+      { type: 'api-request-blob', hash: 'h1', message: { role: 'user', content: [{ type: 'text', text: blob }] } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: `opened ${shown.join(' ')}` }] } },
+      ...after,
+    ],
+  });
+  const writesThenRun = (files, member) => (repo) => [
+    ...Object.entries(files).map(([name, content]) => writeOf(path.join(repo, name), content, { at: stamp(1) })),
+    ...(member ? linkedRun(member) : []),
+  ];
+  const owedFor = (out, member) => (out.match(/ owed-files=([^\s>]*)>/)?.[1] ?? '').split(';').find((entry) => entry.startsWith(`${member}:`))?.slice(member.length + 1);
+  const twoFiles = { 'a.ts': sourceLines(200), 'b.ts': sourceLines(200) };
+  const reuseRun = ({ files = twoFiles, onDisk = files, shown = ['a.ts'], ...rest } = {}) => classifyTranscript({ onDisk, main: writesThenRun(files, 'reuse-analyzer'), agents: reviewer(shown), ...rest });
+
+  await t.test('shown: a linked run that was shown a.ts only leaves reuse-analyzer listed with b.ts owed', () => {
+    const out = reuseRun();
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
+  });
+
+  const owesB = (out) => {
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
+  };
+
+  await t.test('shown: a path named only in the reviewer brief does not clear its file', () => {
+    owesB(reuseRun({ agents: reviewer(['a.ts'], { brief: 'review a.ts and b.ts' }) }));
+  });
+
+  await t.test('shown: a brief repeated in an api-request-blob record does not clear its file', () => {
+    owesB(reuseRun({ agents: reviewer(['a.ts'], { blob: 'review a.ts and b.ts' }) }));
+  });
+
+  await t.test('shown: an instructions attachment naming the path does not clear its file', () => {
+    owesB(reuseRun({ agents: reviewer(['a.ts'], { instructions: 'rules for b.ts' }) }));
+  });
+
+  await t.test('shown: a session_context gitStatus naming the path does not clear its file', () => {
+    owesB(reuseRun({ agents: reviewer(['a.ts'], { gitStatus: 'M b.ts' }) }));
+  });
+
+  await t.test('quiet: a path in a tool_result clears its file', () => {
+    const agents = reviewer(['a.ts'], { after: [resultOf('t1', { content: [{ type: 'text', text: 'src listing: b.ts' }] })] });
+    assert.match(reuseRun({ agents }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('quiet: a run shown both paths drops reuse-analyzer', () => {
+    assert.match(reuseRun({ shown: ['a.ts', 'b.ts'] }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('shown: before the review cutoff reuse-analyzer lists both files, owed-files keeps b.ts only', () => {
+    const out = reuseRun({ input: { review_cutoff: stamp(2) } });
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
+  });
+
+  await t.test('shown: a run before the review cutoff shown a.ts only keeps reuse-analyzer listed and owes b.ts', () => {
+    const out = reuseRun({ input: { review_cutoff: stamp(5) } });
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
+  });
+
+  await t.test('quiet: before the review cutoff, a run shown both paths lists reuse-analyzer with no entry for it', () => {
+    const out = reuseRun({ shown: ['a.ts', 'b.ts'], input: { review_cutoff: stamp(2) } });
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'reuse-analyzer'), undefined);
+  });
+
+  await t.test('quiet: a file no longer on disk is cleared by the later run', () => {
+    assert.match(reuseRun({ onDisk: { 'a.ts': twoFiles['a.ts'] } }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('quiet: a run whose result holds no agentId clears both files', () => {
+    const main = (repo) => [...writesThenRun(twoFiles)(repo), dispatchOf('reuse-analyzer', { id: 'run', at: stamp(2) }), resultOf('run', { at: stamp(3) })];
+    assert.match(classifyTranscript({ onDisk: twoFiles, main }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('quiet: a linked id with no agent-r1.jsonl clears both files', () => {
+    assert.match(classifyTranscript({ onDisk: twoFiles, main: writesThenRun(twoFiles, 'reuse-analyzer') }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('quiet: a linked id whose agent-r1.jsonl cannot be read clears both files', () => {
+    assert.match(classifyTranscript({ onDisk: twoFiles, main: writesThenRun(twoFiles, 'reuse-analyzer'), unreadable: ['agent-r1.jsonl'] }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('quiet: 30 lines left unshown are under 200, so reuse-analyzer is dropped', () => {
+    assert.match(reuseRun({ files: { 'a.ts': sourceLines(250), 'b.ts': sourceLines(30) } }), allFiveWithout('reuse-analyzer'));
+  });
+
+  await t.test('owed-files: seven owed files print the five largest, largest first, then +2', () => {
+    const lineCounts = { 'f1.ts': 30, 'f2.ts': 40, 'f3.ts': 35, 'f4.ts': 50, 'f5.ts': 45, 'f6.ts': 32, 'f7.ts': 60 };
+    const files = Object.fromEntries(Object.entries(lineCounts).map(([name, count]) => [name, sourceLines(count)]));
+    const out = classifyTranscript({ onDisk: files, main: writesThenRun(files) });
+    assert.equal(owedFor(out, 'reuse-analyzer'), 'f7.ts,f4.ts,f5.ts,f2.ts,f3.ts,+2');
+  });
+
+  await t.test('owed-files: a path with a space is percent-encoded', () => {
+    const files = { 'my file.ts': sourceLines(200) };
+    assert.equal(owedFor(classifyTranscript({ onDisk: files, main: writesThenRun(files) }), 'reuse-analyzer'), 'my%20file.ts');
+  });
+
+  await t.test('owed-files: a path holding the list delimiters and % is percent-encoded', () => {
+    const files = { 'a,b;c:d+e%f.ts': sourceLines(200) };
+    assert.equal(owedFor(classifyTranscript({ onDisk: files, main: writesThenRun(files) }), 'reuse-analyzer'), 'a%2Cb%3Bc%3Ad%2Be%25f.ts');
+  });
+
+  await t.test('owed-files: a silent-failure-hunter run shown a.ts only leaves b.ts owed', () => {
+    const files = { 'a.ts': sourceLines(200, withCatch), 'b.ts': sourceLines(200) };
+    const out = classifyTranscript({ onDisk: files, main: writesThenRun(files, 'silent-failure-hunter'), agents: reviewer(['a.ts']) });
+    assert.equal(owedFor(out, 'silent-failure-hunter'), 'b.ts');
+  });
+
+  await t.test('guard: a catch file shown to silent-failure-hunter stays required by signal with no owed entry', () => {
+    const files = { 'a.ts': sourceLines(200, withCatch) };
+    const out = classifyTranscript({ onDisk: files, main: writesThenRun(files, 'silent-failure-hunter'), agents: reviewer(['a.ts']) });
+    assert.match(out, allFive);
+    assert.equal(owedFor(out, 'silent-failure-hunter'), undefined);
+  });
+
+  await t.test('guard: with no Big member owed the joins line holds no owed-files', () => {
+    const files = { 'a.ts': sourceLines(200) };
+    const main = (repo) => [
+      ...writesThenRun(files)(repo),
+      ...bigFour.flatMap((member, i) => [dispatchOf(member, { id: `big${i}`, at: stamp(2) }), resultOf(`big${i}`, { at: stamp(3) })]),
+    ];
+    const out = classifyTranscript({ onDisk: files, main });
+    assert.match(out, / required=code-reviewer /);
+    assert.doesNotMatch(out, /owed-files=/);
+  });
+
+  await t.test('guard: a comment-only change of 200 lines prints required=none and no owed-files', () => {
+    const comments = Array.from({ length: 200 }, (_, i) => `// note ${i}`).join('\n') + '\n';
+    const out = classifyTranscript({ commit: { 'a.ts': 'export const a = 1;\n' }, onDisk: { 'a.ts': `export const a = 1;\n${comments}` }, main: written('a.ts', comments) });
+    assert.match(out, / required=none /);
+    assert.doesNotMatch(out, /owed-files=/);
+  });
+
   await t.test('guard: a scan that raises still prints the joins line with nothing required', () => {
     const out = classifyTranscript({
       onDisk: { 'impl.ts': sourceLines(30) },

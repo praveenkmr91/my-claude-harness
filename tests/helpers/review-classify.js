@@ -58,7 +58,7 @@ const toolCall = (name, input, { id, at, type = 'assistant' } = {}) => ({ type, 
 const writeOf = (file, content, opts) => toolCall('Write', { file_path: file, content }, opts);
 const editOf = (file, newString, opts) => toolCall('Edit', { file_path: file, old_string: 'x', new_string: newString }, opts);
 const dispatchOf = (subagentType, opts) => toolCall('Agent', { subagent_type: subagentType, description: 'review', prompt: 'review' }, opts);
-const resultOf = (id, { error = false, at } = {}) => ({ type: 'user', timestamp: at, message: { content: [{ type: 'tool_result', tool_use_id: id, ...(error && { is_error: true }), content: 'out' }] } });
+const resultOf = (id, { error = false, at, content = 'out' } = {}) => ({ type: 'user', timestamp: at, message: { content: [{ type: 'tool_result', tool_use_id: id, ...(error && { is_error: true }), content }] } });
 
 function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit = {}, input = {}, stdin }) {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
