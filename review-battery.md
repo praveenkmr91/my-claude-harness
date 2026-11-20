@@ -4,7 +4,7 @@
 |---|---|
 | pr-review-toolkit:code-reviewer, silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer | session (model omitted) — multi-hop lenses; the tier hook injects opus if the session is below it, so the battery cannot silently drop tier |
 | comment-analyzer, modern-ts-analyzer | `model: "opus"` — single-pass lenses; still review work, so Opus and never the Sonnet mechanical tier |
-| pr-test-analyzer | `model: "opus"`; only when package.json scripts has a test runner — a "missing tests" nag on a repo with no suite is noise |
+| pr-test-analyzer | `model: "opus"`; only when package.json scripts has a test runner — a "missing tests" nag on a repo with no suite is noise, and the same finding from any other member (adversarial-reviewer's New Hire included) is dropped the same way, never offered |
 
 - Members run on Opus even from a Fable session; the tier hook places them there unless Praveen's last typed turn contains `fable battery` / `battery fable` or says yes to a reply that ends a sentence with `Fable battery?`, the reserved phrase the hook keys on. Propose it only when the diff earns it, cost named.
 - A model typed with the verb (`fable battery`, `battery sonnet`) goes to every member as `model:`, overriding the table. Sonnet is his cheap pass, never proposed: the launch line says so, since it missed real bugs Opus found in the 2026-10-04 tier eval. Haiku stays denied.
