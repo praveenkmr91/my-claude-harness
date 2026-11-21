@@ -4,6 +4,20 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Lint gate fires on harness scripts that have no linter
+
+- **Evidence:** session `0a05d180`: `done-claim-gate.sh` blocked with LINT/TSC NOT RUN three times (twice on 2026-11-19, once on 2026-11-21) on turns that wrote a Node script under `~/.claude` or the session scratchpad and committed. `~/.claude` has no linter, type checker or `package.json` script, and the gate's static-check pattern accepts only lint or `tsc` commands, so `node --check`, `bash -n` and the harness suite (1015 of 1015) did not count.
+- **Why parked:** another session held uncommitted edits in `hooks/done-claim-gate.sh` and its test when this was found.
+- **Fix:** when every code file the turn edited sits under `~/.claude` or a scratchpad, the gate accepts `node --check`, `bash -n` or the `node --test` harness suite as the static check. Firing / near-twin / empty-input test triple; the near-twin is a repo file edited in the same turn, which still needs lint.
+- **Worth it when:** now, once that session's hook edits are committed; planned on Praveen's ask.
+
+### Cold-read cap rests on the rule alone
+
+- **Evidence:** `plan-build.md` caps cold reads at two per chunk and asks for Praveen's typed ask before a third; no hook checks it. Not measured: no count of cold reads per chunk with typed asks separated exists. The one chunk watched (the dry-run re-count, session `0a05d180`) had exactly two, about 73k tokens each.
+- **Why parked:** no evidence of a third read without an ask; the dry-run census (`state/census/dry-run-scope/`) reports review tokens per plan, dry runs plus cold reads, against a 513k baseline.
+- **Fix:** an Agent-dispatch hook that denies a third `cold-reader` dispatch on one plan chunk unless the typed prompt asks for it, and denies a `cold-reader` prompt that is more than the plan path. Starts from the missing count.
+- **Worth it when:** that census's comparison line shows review tokens per plan above 513k, or a transcript shows a third cold read no one asked for.
+
 ### Done-claim gate accepts hand-written skip lines on implementer builds
 
 - **Evidence:** 2026-11-09, Hayah rename across three portals: `done-claim-gate.sh` passed hand-written `<lens>: skip — <reason>` lines on three `implementer` sweep commits (306–386 lines each), though `review-routing.md` "verify" says a hand-written findings line does not count on an implementer build. Praveen had to ask "did u review" before the diff was read.
