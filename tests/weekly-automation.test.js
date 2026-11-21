@@ -206,6 +206,56 @@ test('a run with no repos still notifies', () => {
   assert.match(notifications, /No repos audited/);
 });
 
+function addCensus(home, name, source) {
+  const file = path.join(home, '.claude', 'state', 'census', name, 'run.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, source);
+}
+
+test('two censuses that each print a line both reach the one notification', () => {
+  const home = makeHome({});
+  addCensus(home, 'alpha', "console.log('alpha line');\n");
+  addCensus(home, 'beta', "console.log('beta line');\n");
+
+  const { result, notifications } = runScript(AUDIT, [], { home });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(notifications.match(/display notification/g).length, 1);
+  assert.match(notifications, /ran\. · alpha line · beta line/);
+});
+
+test('a census that prints nothing and exits 0 adds no separator', () => {
+  const home = makeHome({});
+  addCensus(home, 'quiet', '');
+
+  const { result, notifications } = runScript(AUDIT, [], { home });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(notifications, /No repos audited/);
+  assert.doesNotMatch(notifications, /·/);
+});
+
+test('a census that prints a line and exits non-zero is named as failed and its line is dropped', () => {
+  const home = makeHome({});
+  addCensus(home, 'broken', "console.log('half a line');\nprocess.exit(1);\n");
+
+  const { result, notifications } = runScript(AUDIT, [], { home });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(notifications, /ran\. · census broken failed/);
+  assert.doesNotMatch(notifications, /half a line/);
+});
+
+test('a home with no census directory gets a notification that never mentions a census', () => {
+  const home = makeHome({});
+
+  const { result, notifications } = runScript(AUDIT, [], { home });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(notifications.match(/display notification/g).length, 1);
+  assert.doesNotMatch(notifications, /census/);
+});
+
 function makeLearnHome() {
   const home = makeHome({});
   const claudeDir = path.join(home, '.claude');

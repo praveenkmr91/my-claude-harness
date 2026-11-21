@@ -84,7 +84,13 @@ elif [ ${#reports[@]} -eq 0 ]; then
 else
   msg="Reports ready for ${reports[*]}; they land in docs/audits/audit.md at the next session there."
 fi
-census="$HOME/.claude/state/census/review-by-size/run.js"
-[ -f "$census" ] && line=$(node "$census" 2>/dev/null) && [ -n "$line" ] && msg="$msg · $line"
+for census in "$HOME"/.claude/state/census/*/run.js; do
+  [ -f "$census" ] || continue
+  if line=$(node "$census" 2>/dev/null); then
+    [ -n "$line" ] && msg="$msg · $line"
+  else
+    msg="$msg · census $(basename "$(dirname "$census")") failed"
+  fi
+done
 osascript -e "display notification \"$msg\" with title \"Weekly audit\""
 [ ${#failed[@]} -eq 0 ]
