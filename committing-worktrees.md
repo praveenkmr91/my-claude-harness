@@ -2,6 +2,7 @@
 
 ## Worktrees
 - **"Work in a worktree" moves the session, not just the work:** create it, then `EnterWorktree` with its `path`. Carrying commits or files across while the session stays in the shared checkout is not it.
+- **A worktree only on Praveen's ask.** A subagent he asks for runs in this session's checkout; `isolation: "worktree"`, a new branch or a new worktree is a mechanism of its own, never added unasked to avoid a clash. A clash with a running agent is handled in the brief (disjoint paths, no commit, scoped checks).
 - **Inside a worktree session, plain git from the worktree cwd, one command per call, no chain.** Claude Code refuses git it can't prove stays inside the worktree: `cd` to the shared checkout, `git -C`, loops, subshells, `time -p`, or runtime variables around git.
 - **Entering a worktree locks every running subagent to it,** blocking one that writes the shared checkout mid-step. Let it finish before `EnterWorktree`, then move its output with `cp` (test a suspected hook block before rewriting files by hand).
 - **A `tsc` / vitest spike enumerating a plan's call sites** runs in a scratch worktree and commits to its own branch there; once that commit exists the worktree is removed, and the plan cites only the commit and branch, with the build in the main checkout.
