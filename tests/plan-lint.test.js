@@ -59,7 +59,7 @@ test('plan lint', async (t) => {
     assert.equal(decision.hookEventName, 'PreToolUse');
     assert.equal(decision.permissionDecision, 'deny');
     assert.match(decision.permissionDecisionReason, /3 P1 We found the bug in the loader\./);
-    assert.match(decision.permissionDecisionReason, /rephrase as an instruction, a decision or a sourced fact row/);
+    assert.match(decision.permissionDecisionReason, /rephrase as an instruction or a decision; move facts/);
   });
 
   await t.test('denies an Edit new_string the same way', () => {
@@ -165,7 +165,7 @@ test('check P1', async (t) => {
     assert.deepEqual(res.findings, ['1 P1 Turned out the API is flat.', '2 P1 I checked it.']);
     assert.equal(
       res.stderr.trimEnd().split('\n').at(-1),
-      'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md',
+      'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md',
     );
   });
 
@@ -340,7 +340,7 @@ test('check P5', async (t) => {
   });
 
   await t.test('passes ordinary headings, a path in backticks and a ### heading', () => {
-    const text = ['## Patterns to mirror', '', '## Facts the plan rests on', '', '## Files in `logs/`', '', '### Log out step'].join('\n');
+    const text = ['## Patterns to mirror', '', '## Contracts the plan rests on', '', '## Files in `logs/`', '', '### Log out step'].join('\n');
     assert.deepEqual(rulesOf(text), []);
   });
 
@@ -379,7 +379,7 @@ test('check P6', async (t) => {
 test('check P7', async (t) => {
   const P7_HINT = 'name each criterion in the step that delivers it';
   const REPHRASE_HINT =
-    'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
+    'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md';
   const A2_UNNAMED = ['## Criteria', '', '- A1: first', '- A2: second', '', '## Step 1: hook (A1)', '→ verify: run it'];
 
   await t.test('fails a criterion that no step names, at the criterion line', () => {
@@ -490,7 +490,7 @@ test('check P8', async (t) => {
   const P7_HINT = 'name each criterion in the step that delivers it';
   const P8_HINT = 'write steps as `1. **`, `1.1 **`, `### 1.` or `## Step 1`, and criteria as `- A1` bullets';
   const REPHRASE_HINT =
-    'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
+    'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md';
 
   await t.test('fails a Criteria heading with no parseable criterion, and passes it with one', () => {
     assert.deepEqual(check('## Criteria\n\nIt should work.\n').findings, ['1 P8 no criteria parsed']);
@@ -593,7 +593,7 @@ test('check P9', async (t) => {
     assert.deepEqual(check(withDraft('Serves A2 against `localhost:3002`.')).findings, []);
   });
 
-  await t.test('stays quiet for a detailed chunk without the draft label', () => {
+  await t.test('raises P11 and no P9 for a second detailed chunk without the draft label', () => {
     const text = [
       ...FIRST_CHUNK,
       '## Chunk 2: detail it',
@@ -602,7 +602,7 @@ test('check P9', async (t) => {
       '- → verify: run it',
       '→ verify: run it',
     ].join('\n');
-    assert.deepEqual(check(text).findings, []);
+    assert.deepEqual(check(text).findings, ['11 P11 ## Chunk 2: detail it']);
   });
 
   await t.test('counts a criterion named only in a draft chunk as covered for P7', () => {
@@ -615,6 +615,147 @@ test('check P9', async (t) => {
     assert.equal(res.code, 1);
     assert.equal(res.stderr.trimEnd().split('\n').at(-1), P9_HINT);
     assert.doesNotMatch(res.stderr, /rephrase/);
+  });
+});
+
+test('check P10', async (t) => {
+  const REPHRASE_HINT =
+    'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md';
+
+  await t.test('fires on a Facts section heading', () => {
+    assert.deepEqual(check('## Facts\n\n- The loader reads one file.\n').findings, ['1 P10 ## Facts']);
+  });
+
+  await t.test('fires on a Facts heading inside a chunk', () => {
+    const text = ['## Chunk 1: wire it', '', '### Facts', '', '1. **Wire it.**', '→ verify: run it'].join('\n');
+    assert.deepEqual(check(text).findings, ['3 P10 ### Facts']);
+  });
+
+  await t.test('fires on a qualified and a lowercase Facts heading', () => {
+    assert.deepEqual(check('## Facts (chunk 2)\n').findings, ['1 P10 ## Facts (chunk 2)']);
+    assert.deepEqual(check('## facts\n').findings, ['1 P10 ## facts']);
+  });
+
+  await t.test('fires on a Blocked on heading', () => {
+    assert.deepEqual(check('## Blocked on\n\n- The API team ships the field.\n').findings, ['1 P10 ## Blocked on']);
+  });
+
+  await t.test('fires on a bullet starting Rejected: and on Rejected: in mid-line', () => {
+    const text = '- Rejected: a second hook.\n- Use one hook. Rejected: a second hook.\n';
+    assert.deepEqual(check(text).findings, ['1 P10 - Rejected: a second hook.', '2 P10 - Use one hook. Rejected: a second hook.']);
+  });
+
+  await t.test('fires on Rejected: in bold and in underscore italics', () => {
+    assert.deepEqual(rulesOf('- **Rejected:** a second hook.\n- _Rejected:_ a third hook.\n'), ['P10', 'P10']);
+  });
+
+  await t.test('stays quiet for a step heading and a section heading that only contain the word', () => {
+    assert.deepEqual(rulesOf('### 2. Show the facts panel\n→ verify: run it\n'), []);
+    assert.deepEqual(rulesOf('## Artefacts\n\n- The build output.\n'), []);
+  });
+
+  await t.test('stays quiet for the lowercase word in a sentence', () => {
+    assert.deepEqual(rulesOf('- A rejected promise draws the error box.\n'), []);
+  });
+
+  await t.test('stays quiet for Rejected: inside backticks, double quotes and a fence', () => {
+    const text = [
+      '- The lint reads `Rejected:` as evidence.',
+      '- The badge reads "Rejected: card expired".',
+      '',
+      '```',
+      'Rejected: by the bank',
+      '```',
+    ];
+    assert.deepEqual(rulesOf(text.join('\n')), []);
+  });
+
+  await t.test('stays quiet for a Facts heading inside a fence and Rejected: in a Source column', () => {
+    assert.deepEqual(rulesOf('```\n## Facts\n```\n'), []);
+    assert.deepEqual(rulesOf(['| Field | Source |', '| --- | --- |', '| id | Rejected: by the bank |'].join('\n')), []);
+  });
+
+  await t.test('prints the rephrase hint', () => {
+    const res = check('## Facts\n');
+    assert.equal(res.code, 1);
+    assert.equal(res.stderr.trimEnd().split('\n').at(-1), REPHRASE_HINT);
+  });
+});
+
+test('check P11', async (t) => {
+  const P11_HINT =
+    'detail one chunk at a time: a landed chunk keeps its heading and one line naming the criteria it delivered; its steps and verify lines leave';
+  const REPHRASE_HINT =
+    'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md';
+  const CRITERIA = ['## Criteria', '', '- A1: first', '- A2: second', ''];
+  const FIRST_CHUNK = [...CRITERIA, '## Chunk 1: wire it', '', '1. **Wire it.** Serves A1.', '→ verify: run it', ''];
+  const SECOND_CHUNK = ['## Chunk 2: detail it', '', '2. **Detail it.** Serves A2.', '→ verify: run it', ''];
+  const FACTS_AND_TWO_CHUNKS = ['## Facts', '', '- The loader reads one file.', '', ...FIRST_CHUNK, ...SECOND_CHUNK].join('\n');
+
+  await t.test('fires on the second of two detailed chunks, at its heading', () => {
+    assert.deepEqual(check([...FIRST_CHUNK, ...SECOND_CHUNK].join('\n')).findings, ['11 P11 ## Chunk 2: detail it']);
+  });
+
+  await t.test('fires once per extra chunk when three carry verify lines', () => {
+    const third = ['## Chunk 3: ship it', '', '3. **Ship it.** Serves A2.', '→ verify: run it'];
+    assert.deepEqual(check([...FIRST_CHUNK, ...SECOND_CHUNK, ...third].join('\n')).findings, [
+      '11 P11 ## Chunk 2: detail it',
+      '16 P11 ## Chunk 3: ship it',
+    ]);
+  });
+
+  await t.test('stays quiet for one detailed chunk followed by a draft chunk', () => {
+    assert.deepEqual(rulesOf([...FIRST_CHUNK, '## Chunk 2 (draft)', '', 'Serves A2.'].join('\n')), []);
+  });
+
+  await t.test('stays quiet, with no P7, for a landed chunk cut to its criteria line before a detailed chunk', () => {
+    const landed = [...CRITERIA, '## Chunk 1: wire it', '', 'Delivered A1.', ''];
+    assert.deepEqual(rulesOf([...landed, ...SECOND_CHUNK].join('\n')), []);
+  });
+
+  await t.test('stays quiet for one chunk holding several steps', () => {
+    assert.deepEqual(rulesOf([...FIRST_CHUNK, '2. **Detail it.** Serves A2.', '→ verify: run it'].join('\n')), []);
+  });
+
+  await t.test('stays quiet for a heading that only starts like a chunk', () => {
+    const ideas = ['## Chunking ideas', '', '2. **Detail it.** Serves A2.', '→ verify: run it'];
+    assert.deepEqual(rulesOf([...FIRST_CHUNK, ...ideas].join('\n')), []);
+  });
+
+  await t.test('stays quiet for Step sections with no chunk', () => {
+    const steps = ['## Step 1: hook (A1)', '→ verify: run it', '', '## Step 2: rules (A2)', '→ verify: run it'];
+    assert.deepEqual(rulesOf([...CRITERIA, ...steps].join('\n')), []);
+  });
+
+  await t.test('prints the P11 hint and not the rephrase hint', () => {
+    const res = check([...FIRST_CHUNK, ...SECOND_CHUNK].join('\n'));
+    assert.equal(res.code, 1);
+    assert.equal(res.stderr.trimEnd().split('\n').at(-1), P11_HINT);
+    assert.doesNotMatch(res.stderr, /rephrase/);
+  });
+
+  await t.test('reports P10 and P11 together, each with its hint', () => {
+    const res = check(FACTS_AND_TWO_CHUNKS);
+    assert.deepEqual(res.findings, ['1 P10 ## Facts', '15 P11 ## Chunk 2: detail it']);
+    assert.deepEqual(res.stderr.trimEnd().split('\n').slice(-2), [P11_HINT, REPHRASE_HINT]);
+  });
+
+  await t.test('pre does not deny a write holding a Facts section and two detailed chunks', () => {
+    const res = writeContent(planFile(path.join(tmpDir, 'pre-p10')), FACTS_AND_TWO_CHUNKS);
+    assert.equal(res.code, 0);
+    assert.equal(res.stdout, '');
+  });
+
+  await t.test('post exits 2 naming P10 and P11 for the same plan on disk', () => {
+    const file = planFile(path.join(tmpDir, 'post-p10'), 'x.md', FACTS_AND_TWO_CHUNKS);
+    const res = run('post', { file_path: file });
+    assert.equal(res.code, 2);
+    assert.match(res.stderr, /1 P10 ## Facts/);
+    assert.match(res.stderr, /15 P11 ## Chunk 2: detail it/);
+  });
+
+  await t.test('exits 0 on an empty file', () => {
+    assert.equal(check('').code, 0);
   });
 });
 

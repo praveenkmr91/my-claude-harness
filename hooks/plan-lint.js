@@ -1,15 +1,18 @@
 #!/usr/bin/env node
-// PreToolUse and PostToolUse on Write|Edit of a plan file: refuses research narrative in a plan.
+// PreToolUse and PostToolUse on Write|Edit of a plan file: refuses research narrative, evidence sections and a second detailed chunk in a plan.
 'use strict';
 
 const fs = require('node:fs');
 
 const PLAN_PATH = /(^|\/)plans\/[^/]+(?<!\.research)\.md$/;
 const REPHRASE =
-  'rephrase as an instruction, a decision or a sourced fact row; move sampled, traced or dated material to <name>.research.md';
+  'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md';
 const NAME_CRITERIA = 'name each criterion in the step that delivers it';
 const WRITE_PARSEABLE = 'write steps as `1. **`, `1.1 **`, `### 1.` or `## Step 1`, and criteria as `- A1` bullets';
 const DRAFT_TITLE_ONLY = 'keep the draft chunk to its title, criteria and files; detail it once the previous chunk lands';
+const ONE_DETAILED_CHUNK =
+  'detail one chunk at a time: a landed chunk keeps its heading and one line naming the criteria it delivered; its steps and verify lines leave';
+const OWN_HINT_RULES = ['P7', 'P8', 'P9', 'P11'];
 
 // Interface wording is not a journal: `re.I`, `I/O`, `not-found`, `initially collapsed`.
 const FIRST_PERSON = /(?<![\w./-])I(?![\w/-])/;
@@ -26,6 +29,8 @@ const HEADING = /^#{1,6}\s/;
 const SECTION_HEADING = /^## /;
 const RESEARCH_HEADING =
   /\b(sampled|traced|journey|findings?|research|investigation|log|notes|history|vs\.?|addendum|unverified)\b|\d{4}-\d{2}-\d{2}/i;
+const EVIDENCE_HEADING = /^#{1,6}\s+(facts|blocked on)\b/i;
+const REJECTED_LABEL = /Rejected:/;
 const DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 const CONTEXT_HEADING = /^## Context\s*$/;
 const OPEN_HEADING = /^## Open(\s|$)/;
@@ -39,6 +44,7 @@ const STEPS_HEADING = /^## Steps\b/i;
 const PLAIN_STEP = /^\d+\. /;
 const TOP_LEVEL_BULLET = /^- /;
 const DRAFT_HEADING = /^## .*\(draft\)/i;
+const CHUNK_HEADING = /^## Chunk\b/i;
 const BACKTICKED_SPAN = /`([^`\n]*)`/g;
 const BARE_CITE = /[\w-]+\.[A-Za-z][A-Za-z0-9]*:\d+/;
 const TICKED_CITE = /(?:\.[A-Za-z][A-Za-z0-9]*|^):\d+/;
@@ -105,6 +111,14 @@ function researchHeadings(lines, masked) {
   return lines.flatMap((line, index) =>
     SECTION_HEADING.test(line) && RESEARCH_HEADING.test(masked[index])
       ? [{ line: index + 1, rule: 'P5', text: line.trim() }]
+      : [],
+  );
+}
+
+function evidenceLines(lines, masked) {
+  return lines.flatMap((line, index) =>
+    EVIDENCE_HEADING.test(line) || REJECTED_LABEL.test(masked[index])
+      ? [{ line: index + 1, rule: 'P10', text: line.trim() }]
       : [],
   );
 }
@@ -250,6 +264,17 @@ function detailedDraftLines(lines) {
   return findings;
 }
 
+function extraDetailedChunks(lines) {
+  const detailed = lines.flatMap((heading, start) => {
+    if (!CHUNK_HEADING.test(heading) || DRAFT_HEADING.test(heading)) return [];
+
+    const body = lines.slice(start + 1, sectionEnd(lines, start));
+    return body.some((line) => line.includes('→ verify:')) ? [{ line: start + 1, rule: 'P11', text: heading.trim() }] : [];
+  });
+
+  return detailed.slice(1);
+}
+
 function namedCriteria(line) {
   const single = [...line.matchAll(CRITERION_NAME)].map((match) => `${match[1]}${Number(match[2])}`);
   const ranged = [...line.matchAll(CRITERION_RANGE)].flatMap((match) => {
@@ -330,7 +355,9 @@ function lintPlan(text, { fragment }) {
       ...criteriaWithoutStep(outsideFences),
       ...unparsedShapes(outsideFences),
       ...detailedDraftLines(outsideFences),
+      ...extraDetailedChunks(outsideFences),
       ...researchHeadings(outsideFences, masked),
+      ...evidenceLines(outsideFences, masked),
       ...datedLines(outsideFences, masked),
     );
   }
@@ -345,7 +372,8 @@ function hintLines(rules) {
   if (rules.includes('P7')) hints.push(NAME_CRITERIA);
   if (rules.includes('P8')) hints.push(WRITE_PARSEABLE);
   if (rules.includes('P9')) hints.push(DRAFT_TITLE_ONLY);
-  if (rules.some((rule) => rule !== 'P7' && rule !== 'P8' && rule !== 'P9')) hints.push(REPHRASE);
+  if (rules.includes('P11')) hints.push(ONE_DETAILED_CHUNK);
+  if (rules.some((rule) => !OWN_HINT_RULES.includes(rule))) hints.push(REPHRASE);
   return hints;
 }
 
