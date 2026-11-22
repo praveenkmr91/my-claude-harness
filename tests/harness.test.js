@@ -194,6 +194,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/docs-context.sh', /library-docs\.md/, 'CLAUDE.md', /cites `pkg@x\.y\.z`/],
     ['hooks/plan-lint.js', /rephrase as an instruction/, 'plan-mode.md', /plan-lint\.js` refuses/],
     ['hooks/plan-lint.js', /has no step/, 'plan-mode.md', /\(P7\)/],
+    ['hooks/plan-lint.js', /move facts/, 'plan-mode.md', /\(P10\)/],
+    ['hooks/plan-lint.js', /detail one chunk at a time/, 'plan-mode.md', /\(P11\)/],
     ['hooks/bash-write-guard.js', /edit plan files with Write or Edit/, 'harness.md', /which only Write or Edit may change/],
     ['hooks/browser-main-guard.sh', /browser-verifier/, 'external-io.md', /browser-main-guard\.sh/],
     ['hooks/done-claim-gate.sh', /pass\|fail\|blocked/, 'agents/browser-verifier.md', /pass\|fail\|blocked/],
