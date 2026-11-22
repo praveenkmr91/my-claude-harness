@@ -25,7 +25,7 @@
 - **Stakeholder-facing text (Jira, PR, commit): concise, not terse.** Root cause 2-3 sentences, ask 1-2, done note 1-2. No commit hashes in Jira. No verification narratives, tested-case lists, env caveats, trade-off essays. Full sentences, readable without session context; cut padding, not connective tissue.
 
 ## Committing
-- **Rules live in `~/.claude/committing.md`**, injected on the first git command in each thread.
+- **Rules live in `~/.claude/committing.md`**, injected on the first git command (subagent: git write).
 
 ## Delegating
 - **Subagent:** open-ended research (3+ queries), specialized fits (Explore, implementer, checker, external-io, browser-verifier, dfs-lookup, code-reviewer), 2+ independent parallel investigations. A bare `general-purpose` inherits the session tier; dispatch a declared cheap agent.

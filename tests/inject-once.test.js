@@ -19,9 +19,11 @@ test.after(() => {
   for (const flag of flags) fs.rmSync(flag, { force: true });
 });
 
-function run(doc, payload, pattern) {
+function run(doc, payload, pattern, subagentExempt) {
   if (payload.session_id) flags.push(`/tmp/claude-inject-${doc}-${payload.session_id}-${payload.agent_id || 'main'}`);
-  const args = pattern ? [HOOK_PATH, doc, pattern] : [HOOK_PATH, doc];
+  const args = [HOOK_PATH, doc];
+  if (pattern) args.push(pattern);
+  if (pattern && subagentExempt) args.push(subagentExempt);
   const res = spawnSync('bash', args, { input: JSON.stringify(payload), encoding: 'utf8' });
   assert.equal(res.status, 0);
   return res.stdout;
@@ -33,13 +35,13 @@ function injectOnceEntries() {
     .flatMap((groups) => groups.flatMap((group) => group.hooks.map((h) => h.command)))
     .filter((command) => /inject-once\.sh/.test(command))
     .map((command) => {
-      const [, doc, pattern] = command.match(/inject-once\.sh (\S+)(?: '([^']*)')?$/);
-      return { doc, pattern };
+      const [, doc, pattern, subagentExempt] = command.match(/inject-once\.sh (\S+)(?: '([^']*)')?(?: '([^']*)')?$/);
+      return { doc, pattern, subagentExempt };
     });
 }
 
 const call = (sessionId, agentId) => ({ session_id: sessionId, ...(agentId && { agent_id: agentId }), tool_name: 'Agent', tool_input: {} });
-const bash = (sessionId, toolInput) => ({ session_id: sessionId, tool_name: 'Bash', tool_input: toolInput });
+const bash = (sessionId, toolInput, agentId) => ({ session_id: sessionId, ...(agentId && { agent_id: agentId }), tool_name: 'Bash', tool_input: toolInput });
 const context = (out) => JSON.parse(out).hookSpecificOutput.additionalContext;
 
 test('inject-once hook', async (t) => {
@@ -133,6 +135,74 @@ test('inject-once hook', async (t) => {
         assert.equal(run('committing.md', bash(sid, toolInput), pattern), '', JSON.stringify(toolInput));
         assert.match(context(run('committing.md', bash(sid, { command: 'git status' }), pattern)), /committing\.md — injected once/);
       }
+    }
+  });
+
+  await t.test('in a subagent any git command that is not read-only injects committing.md', () => {
+    const commands = [
+      'git add -A',
+      'git -C /repo commit -m x',
+      'GIT_INDEX_FILE=/tmp/i git read-tree HEAD',
+      'git status && git stash',
+      'git status;git commit -m x',
+      'git stash;echo done',
+      'echo $(git stash)',
+      'git commit>/dev/null',
+      'git -C /r \\\n  commit -m x',
+      'git branch -D old',
+      'git branch --delete old',
+      'git branch new',
+      'git worktree add ../w',
+      'git fetch origin',
+      'git config user.name x',
+      'git stage f',
+      'git "commit" -m x',
+      'git diff | git apply',
+      'git -C "$(git rev-parse --show-toplevel)" commit -m x',
+      'git -C $(git rev-parse --show-toplevel) add f',
+      'git -C `git rev-parse --show-toplevel` stash',
+      'git --work-tree=$(git rev-parse --show-toplevel) add f',
+      'git -c x=$(git log -1) commit',
+      'git -C diff commit -m x',
+      'git --work-tree diff commit -m x',
+    ];
+    for (const { pattern, subagentExempt } of committing) {
+      assert.ok(subagentExempt, 'committing.md entry exempts nothing in a subagent');
+      for (const command of commands) {
+        assert.match(context(run('committing.md', bash(newSession(), { command }, 'agent-a'), pattern, subagentExempt)), /committing\.md — injected once/, command);
+      }
+    }
+  });
+
+  await t.test('in a subagent read-only git stays quiet without spending the flag', () => {
+    const toolInputs = [
+      { command: 'git status' },
+      { command: 'git diff --stat HEAD~1 -- src/add.ts' },
+      { command: 'git log --oneline | grep commit' },
+      { command: 'git log -- add' },
+      { command: 'git branch --show-current' },
+      { command: 'git merge-base HEAD develop' },
+      { command: 'git -C /repo log -1' },
+      { command: 'git -C ~/.claude status' },
+      { command: 'git -c core.quotepath=false diff' },
+      { command: 'git --git-dir=/repo/.git log -1' },
+      { command: 'git --no-pager diff && git status' },
+      { command: 'git status;git log -1' },
+      { command: '(git status)' },
+      {},
+    ];
+    for (const { pattern, subagentExempt } of committing) {
+      for (const toolInput of toolInputs) {
+        const sid = newSession();
+        assert.equal(run('committing.md', bash(sid, toolInput, 'agent-a'), pattern, subagentExempt), '', JSON.stringify(toolInput));
+        assert.match(context(run('committing.md', bash(sid, { command: 'git commit -m x' }, 'agent-a'), pattern, subagentExempt)), /committing\.md — injected once/);
+      }
+    }
+  });
+
+  await t.test('the main thread loads committing.md on read-only git whatever a subagent exempts', () => {
+    for (const { pattern, subagentExempt } of committing) {
+      assert.match(context(run('committing.md', bash(newSession(), { command: 'git status' }), pattern, subagentExempt)), /committing\.md — injected once/);
     }
   });
 

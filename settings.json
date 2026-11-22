@@ -364,13 +364,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hooks/inject-once.sh committing.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)'",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh committing.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)' '(^|[^[:alnum:]_./-])git([[:space:]]+(-[Cc][[:space:]]+[[:alnum:]_./~=:@+-]+|--[[:alnum:]-]+=[[:alnum:]_./~=:@+-]+|--no-pager|-P))*[[:space:]]+(status|diff|log|show|rev-parse|merge-base|ls-files|blame|grep|cat-file|describe|rev-list|shortlog|ls-tree|for-each-ref|show-ref|name-rev|check-ignore|diff-tree|branch[[:space:]]+--show-current)([^[:alnum:]_./-]|$)'",
             "if": "Bash(git:*)",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash $HOME/.claude/hooks/inject-once.sh committing-worktrees.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)'",
+            "command": "bash $HOME/.claude/hooks/inject-once.sh committing-worktrees.md '(^|[^[:alnum:]_./-])git([[:space:]]|$)' '(^|[^[:alnum:]_./-])git([[:space:]]+(-[Cc][[:space:]]+[[:alnum:]_./~=:@+-]+|--[[:alnum:]-]+=[[:alnum:]_./~=:@+-]+|--no-pager|-P))*[[:space:]]+(status|diff|log|show|rev-parse|merge-base|ls-files|blame|grep|cat-file|describe|rev-list|shortlog|ls-tree|for-each-ref|show-ref|name-rev|check-ignore|diff-tree|branch[[:space:]]+--show-current)([^[:alnum:]_./-]|$)'",
             "if": "Bash(git:*)",
             "timeout": 5
           },
