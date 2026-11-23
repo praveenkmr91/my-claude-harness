@@ -14,9 +14,9 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 ### Lint gate fires on harness scripts that have no linter
 
 - **Evidence:** session `0a05d180`: `done-claim-gate.sh` blocked with LINT/TSC NOT RUN three times (twice on 2026-11-19, once on 2026-11-21) on turns that wrote a Node script under `~/.claude` or the session scratchpad and committed. `~/.claude` has no linter, type checker or `package.json` script, and the gate's static-check pattern accepts only lint or `tsc` commands, so `node --check`, `bash -n` and the harness suite (1015 of 1015) did not count.
-- **Why parked:** another session held uncommitted edits in `hooks/done-claim-gate.sh` and its test when this was found.
+- **Why parked:** the hook edits that blocked it are committed; it waits only on Praveen's ask.
 - **Fix:** when every code file the turn edited sits under `~/.claude` or a scratchpad, the gate accepts `node --check`, `bash -n` or the `node --test` harness suite as the static check. Firing / near-twin / empty-input test triple; the near-twin is a repo file edited in the same turn, which still needs lint.
-- **Worth it when:** now, once that session's hook edits are committed; planned on Praveen's ask.
+- **Worth it when:** now; planned on Praveen's ask.
 
 ### Cold-read cap rests on the rule alone
 
@@ -76,12 +76,12 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** in a plan with 2+ `## Chunk` headings, flag line cites in every chunk after the first one that carries none of its own commits; needs a commit-aware check.
 - **Worth it when:** a plan census shows unlabelled later chunks carrying line cites.
 
-### Build gate needs the typed word, not a yes to the proposal
+### Battery tier A/B before moving multi-hop members to Opus
 
-- **Evidence:** `build-approval-gate.sh` refused an `implementer` dispatch after Praveen answered "yes" to "Should I build it?"; only a typed `build` passed. `harness.md` says opt-in gates key on the proposal plus his yes, never on him naming the action.
-- **Why parked:** one occurrence, and the gate guards source writes, so loosening it needs a reserved proposal phrase the hook can key on.
-- **Fix:** accept a yes to a reply whose last line asks "Should I build it?", the way `enforce-subagent-model.sh` keys on `Fable review?`.
-- **Worth it when:** it blocks an approved build again.
+- **Evidence:** `review-battery.md` runs the multi-hop members (code-reviewer, silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer) at the session tier and the single-pass members on Opus. The Opus-vs-session comparison has to be re-run on a frozen diff: a diff that moves mid-run invalidates it.
+- **Why parked:** no valid comparison exists, and the session tier is the working default.
+- **Fix:** re-run the A/B on a frozen diff, then move the multi-hop members to Opus only if the result supports it.
+- **Worth it when:** moving the multi-hop members to Opus is next proposed.
 
 ### Same-file edit counter (thrash nudge)
 
@@ -226,8 +226,8 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Rule docs disagree with each other in small ways
 
-- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; dated incidents sit in `agents/implementer.md` and `review-battery.md`; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
-- **Why parked:** doc drift with no counted fault; the entry `Build gate needs the typed word, not a yes to the proposal` above is settled by `plan-build.md` and can go with this work.
+- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
+- **Why parked:** doc drift with no counted fault.
 - **Fix:** one pass over the docs named, each edit checked against the hook it describes.
 - **Worth it when:** a session follows one of the stale lines, or the next doc edit touches one of these files.
 
@@ -254,7 +254,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Smaller sweep leftovers
 
-- **Evidence:** `plans/harness-sweep.research.md`: `CLAUDE.md` sits exactly at its 1,399-word ceiling, so any added rule needs another moved out; the review join for "an ask naming shared state, public API or a money-moving mutation" has no code behind it; `evals/results.md` is overwritten each run, so evidence a rule doc cites does not survive.
+- **Evidence:** `plans/harness-sweep.research.md`: `CLAUDE.md` has its baseline in `tests/budget-baseline.json` raised with each added rule; the review join for "an ask naming shared state, public API or a money-moving mutation" has no code behind it; `evals/results.md` is overwritten each run, so evidence a rule doc cites does not survive.
 - **Why parked:** which rule leaves `CLAUDE.md` is the owner's choice; the other two have no counted fault.
 - **Fix:** move one `CLAUDE.md` rule into the doc it points to; implement or delete the review join; date-stamp eval results.
-- **Worth it when:** the next rule has to be added to `CLAUDE.md`.
+- **Worth it when:** `CLAUDE.md` reaches about 1,600 words.

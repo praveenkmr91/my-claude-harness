@@ -12,7 +12,6 @@
 - The launch line names the diff under review (e.g. "plan commit `00b1bfa5`, local, no PR"): the `pr-review-toolkit:` prefix is only the plugin the agents ship in, and it reads as a PR flow when no PR exists.
 - Beyond the required members, add the ones the diff calls for and name each member's effort on the launch line.
 - All output is leads; confirm each at source before relaying.
-- Open: re-run the Opus-vs-session A/B on a frozen diff before moving the multi-hop members to Opus; a diff that moves mid-run invalidates the comparison.
 
 ## Required members
 
