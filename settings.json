@@ -557,6 +557,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/model-switch-nudge.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/session-close-nudge.sh",
+            "timeout": 10
           }
         ]
       }
