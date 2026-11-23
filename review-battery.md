@@ -20,7 +20,7 @@
 - **Floor.** Under 20 unreviewed lines `required=` lists neither `code-reviewer` nor a signalled member; the Big bullet never lists a member with under 20 lines unreviewed by it.
 - **Members.** Beyond `code-reviewer`, `required=` lists silent-failure-hunter, type-design-analyzer, comment-analyzer or modern-ts-analyzer, each only when the unreviewed text itself holds its signal, so a signalled member stays listed until `code-reviewer` runs; the Big bullet lists the first two without one.
 - **Big.** `required=` also lists each of these that has 200 or more such lines, or a high-risk path among them: silent-failure-hunter, type-design-analyzer, reuse-analyzer and placement-analyzer; three new files alone list none, unlike the Big tier of `~/.claude/review-routing.md`.
-- **Range.** Every owed member is given everything written since its last run, never the last commit alone; no hook checks that range.
+- **Range.** Every owed member is given everything written since its last run, never the last commit alone; no hook checks that range. A rerun owed after a round that only applied the members' own confirmed findings goes at `effort: low` with a brief that asks for confirmed defects only and lists every decision already made as not to be raised; a rerun at the first round's depth re-finds decided items and grows another fix round.
 - **Cleared by** an agent dispatch of the member in the claiming turn with no errored result; a typed findings, skip or not-run line never clears one.
 - **Not owed** on a first line opening `Step N`, on a builder's `[REPORT`, or in a window a delivered REPORT opened.
 - **Effort** is set per member on each dispatch (levels: the Effort bullet of `~/.claude/review-routing.md`); a dispatch with none is denied.

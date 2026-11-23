@@ -189,7 +189,7 @@ test('done-claim gate: required review agents', async (t) => {
   };
   const writeOf = (repo, file, content, timestamp) => ({ blocks: [{ type: 'tool_use', id: `write-${file}`, name: 'Write', input: { file_path: path.join(repo, file), content } }], timestamp });
   const dispatchOf = (member, timestamp, id = `dispatch-${member}`) => ({ blocks: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type: member, description: 'review', prompt: 'review', effort: 'low' } }], timestamp });
-  const resultOf = (id, isError, timestamp) => ({ record: { type: 'user', timestamp, message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: 'out' }] } } });
+  const resultOf = (id, isError, timestamp, text = 'out') => ({ record: { type: 'user', timestamp, message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: text }] } } });
   const checked = (timestamp) => ({ command: 'pnpm lint && node --test tests/*.test.js', output: 'ℹ fail 0', timestamp });
   const committed = (timestamp) => ({ command: 'git commit -m x', output: '', timestamp });
   const feedbackOf = (text) => ({ record: { type: 'user', isMeta: true, message: { content: `Stop hook feedback:\n[bash …/done-claim-gate.sh]: ${text}` } } });
@@ -232,6 +232,62 @@ test('done-claim gate: required review agents', async (t) => {
     const repo = scratchRepo();
     const dispatches = ['code-reviewer', ...BIG_MEMBERS].map((member) => dispatchOf(member, stamp(2)));
     quiet(runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), ...dispatches, checked(stamp(3))], opts(repo)));
+  });
+
+  const reviewerShown = (...shown) => {
+    const transcriptPath = path.join(tmpDir, `t${nextSeq()}.jsonl`);
+    const agentDir = path.join(tmpDir, path.basename(transcriptPath, '.jsonl'), 'subagents');
+    fs.mkdirSync(agentDir, { recursive: true });
+    const records = [
+      { type: 'user', message: { role: 'user', content: 'review the change' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: `opened ${shown.join(' ')}` }] } },
+    ];
+    fs.writeFileSync(path.join(agentDir, 'agent-r1.jsonl'), records.map((r) => JSON.stringify(r)).join('\n'));
+    return transcriptPath;
+  };
+  const bigRuns = (repo, files, { linked = false, without } = {}) => {
+    const writes = files.map(([name, count]) => {
+      fs.writeFileSync(path.join(repo, name), sourceLines(count));
+      return writeOf(repo, name, sourceLines(count), stamp(1));
+    });
+    const dispatches = ['code-reviewer', ...BIG_MEMBERS].filter((member) => member !== without).map((member) => dispatchOf(member, stamp(2)));
+    const link = linked ? [resultOf('dispatch-reuse-analyzer', false, stamp(2), 'done\nagentId: r1 (use SendMessage to continue)')] : [];
+    return [...writes, ...dispatches, ...link, checked(stamp(3))];
+  };
+  const TWO_FILES = [['a.ts', 200], ['b.ts', 200]];
+  const BULK_CLAIM = `${CLAIM}\ndelete-list: skip — fixture files`;
+
+  await t.test('a Big member whose linked run was shown only some of the files is blocked, with the unshown file named', () => {
+    const repo = scratchRepo();
+    const fires = runWithResults(BULK_CLAIM, bigRuns(repo, TWO_FILES, { linked: true }), opts(repo, { transcriptPath: reviewerShown('a.ts') }));
+    blocked(fires, 'reuse-analyzer');
+    assert.ok(fires.stderr.split('\n').includes('reuse-analyzer has not been shown: b.ts.'), fires.stderr);
+  });
+
+  await t.test('quiet: the same run shown both files', () => {
+    const repo = scratchRepo();
+    quiet(runWithResults(BULK_CLAIM, bigRuns(repo, TWO_FILES, { linked: true }), opts(repo, { transcriptPath: reviewerShown('a.ts', 'b.ts') })));
+  });
+
+  await t.test('quiet: the unshown block is not added once two such blocks are in the window', () => {
+    const repo = scratchRepo();
+    const runs = [...bigRuns(repo, TWO_FILES, { linked: true }), agentFeedback(), agentFeedback()];
+    quiet(runWithResults(BULK_CLAIM, runs, opts(repo, { transcriptPath: reviewerShown('a.ts') })));
+  });
+
+  await t.test('a Big member with no dispatch in the turn is named with its files', () => {
+    const repo = scratchRepo();
+    const fires = runWithResults(BULK_CLAIM, bigRuns(repo, TWO_FILES, { without: 'type-design-analyzer' }), opts(repo));
+    blocked(fires, 'type-design-analyzer');
+    assert.ok(fires.stderr.split('\n').includes('type-design-analyzer has not been shown: a.ts, b.ts.'), fires.stderr);
+  });
+
+  await t.test('seven unshown files: five are named, decoded, and the rest counted', () => {
+    const repo = scratchRepo();
+    const files = [['my file.ts', 220], ...[1, 2, 3, 4, 5, 6].map((n) => [`f${n}.ts`, 200])];
+    const fires = runWithResults(BULK_CLAIM, bigRuns(repo, files, { without: 'reuse-analyzer' }), opts(repo));
+    blocked(fires, 'reuse-analyzer');
+    assert.ok(fires.stderr.split('\n').includes('reuse-analyzer has not been shown: my file.ts, f1.ts, f2.ts, f3.ts, f4.ts and 2 more.'), fires.stderr);
   });
 
   await t.test('a later typed turn that only commits is blocked for the four when the earlier turn dispatched code-reviewer alone', () => {

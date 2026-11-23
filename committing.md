@@ -16,7 +16,7 @@
 - **On "squash", a piece is the feature, not the plan.** Fold the unpushed range into one commit per piece: a plan doc and its build are one piece, including the shipping commit that deletes the plan; only work outside the feature (shared core, auth) keeps its own commit. Rewrite the message to describe the work as it now stands. Unpushed history only.
 - **Fold shapes (on a squash ask):**
     - My commit is HEAD: read HEAD in the same command as the amend (`git log -1 --format=%s | grep -q '<subject>' && git commit --amend --only <paths> …`); a HEAD read earlier in the turn is stale, since a concurrent session's commit can land in between.
-    - My commit sits below HEAD, only mine above it, clean tree: `git reset --soft <parent of my commit>`, recommit, `git diff --quiet <new> <old>`.
+    - My commit sits below HEAD, only mine above it, clean tree: `git reset --soft <parent of my commit>`, recommit, `git diff --quiet <new> <old>`. The parent is a hash read from `git log` this turn, never the base branch's name: a soft reset onto a `develop` that moved since the branch forked commits a revert of develop's newer work.
     - Another session's unpushed commits sit on top or in the range: rewriting them to fold is allowed when none of their work is lost. Keep each of their changes (its own commit, or folded into the piece it belongs to), and prove the tree unchanged with `git diff --quiet <new> <old>` before reporting. Only a guard denying the rewrite justifies a commit on top, its subject naming what it revises.
 
 ## Landing a branch

@@ -7,7 +7,7 @@
 
 INPUT=$(cat)
 python3 - "$INPUT" <<'PY'
-import json,sys,re,subprocess,os
+import json,sys,re,subprocess,os,urllib.parse
 try: inp=json.loads(sys.argv[1])
 except ValueError: sys.exit(0)
 if not isinstance(inp,dict): sys.exit(0)
@@ -144,7 +144,7 @@ def classify_skipped(why):
     if not warned: print(json.dumps({'systemMessage':why}))
     warned.append(why)
 def classify():
-    verb,lenses,required='review','reuse-analyzer,placement-analyzer','none'
+    verb,lenses,required,owed_files='review','reuse-analyzer,placement-analyzer','none',{}
     if cwd and os.path.isdir(cwd):
         payload=dict(inp)
         if base: payload['review_base']=base
@@ -161,14 +161,24 @@ def classify():
         if m: verb,lenses=m.groups()
         m=re.search(r'code-added=\d+ required=(\S+)',joins)
         if m: required=m.group(1)
-    return verb,lenses,required
-def required_status(required):
+        # `high-risk=` prints raw paths ahead of the other keys, so the last match is the classifier's own.
+        found=re.findall(r'owed-files=([^\s>]*)',joins)
+        for entry in found[-1].split(';') if found else []:
+            member,_,listed=entry.partition(':')
+            items=listed.split(',')
+            owed_files[member]=([urllib.parse.unquote(i) for i in items if not i.startswith('+')],sum(int(i[1:]) for i in items if i.startswith('+')))
+    return verb,lenses,required,owed_files
+def unshown_line(member,files):
+    paths,more=files
+    return f"{member} has not been shown: {', '.join(paths)}{f' and {more} more' if more else ''}."
+def required_status(required,owed_files):
     owed=[] if required=='none' else required.split(',')
     last_write=max((e for e,p,i in write_calls if code.search(p) and call_ok(i)),default=0)
-    undone=[m for m in owed if not any(n in ('Agent','Task') and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
+    undone=[m for m in owed if m in owed_files or not any(n in ('Agent','Task') and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
     if not undone: return owed,None
     if feedback_blocks>=2: return [m for m in owed if m not in undone],None
-    return owed,f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session still owes each an agent run. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. Give each everything written since its last run, never the last commit alone."
+    block=f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session still owes each an agent run. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. Give each everything written since its last run, never the last commit alone."
+    return owed,'\n'.join([block]+[unshown_line(m,owed_files[m]) for m in undone if m in owed_files])
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
 NAMED_VERBS={
@@ -223,8 +233,8 @@ if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, or the reply asks to commit, rewording to "Step N" must not pass.
     step_exempt=bool(step_claim) and not (committed or commit_ask or feedback_blocks)
     if not (window_report or step_exempt) and (feedback_blocks==1 or feedback_blocks<2 and (claim or commit_ask or committed)):
-        _,_,required=classify()
-        block=required_status(required)[1]
+        _,_,required,owed_files=classify()
+        block=required_status(required,owed_files)[1]
         if block:
             print(block,file=sys.stderr)
             sys.exit(2)
@@ -239,7 +249,8 @@ if (report and stopped) or not (code_turn or agent_build or (idle_ask or idle_co
     sys.exit(0)
 if not code_turn:
     if not exempt:
-        block=required_status((agent_class or classify())[2])[1]
+        _,_,required,owed_files=agent_class or classify()
+        block=required_status(required,owed_files)[1]
         if block: problems.append(block)
     if problems:
         print('\n'.join(problems),file=sys.stderr)
@@ -302,8 +313,8 @@ lint_cmds=[c for _,c in fresh] if report else cmds
 if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim_word or commit_ask or committed:
-    verb,lenses,required=classify()
-    owed,owed_block=([],None) if exempt else required_status(required)
+    verb,lenses,required,owed_files=classify()
+    owed,owed_block=([],None) if exempt else required_status(required,owed_files)
     strict=(built and claim and not step_claim and not report) or ship
     def lens_done(l):
         if l=='impeccable': return l in ran
