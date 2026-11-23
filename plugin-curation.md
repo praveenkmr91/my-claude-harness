@@ -31,7 +31,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `swift-lsp@claude-plugins-official` | Enable per-repo when a Swift repo is active. Also disabled in ATRAM via `.claude/settings.local.json`. |
 | `kotlin-lsp@claude-plugins-official` | Enable per-repo when a Kotlin repo is active. |
 | `frontend-design@claude-plugins-official` | 0 Skill calls in 3,695 transcripts; overlaps impeccable's design guidance. Re-enable for Figma-less UI. |
-| `pr-review-toolkit@claude-plugins-official` | Localized for `tools` (plugin agents take none). `review-pr`, `code-simplifier` unused. |
+| `pr-review-toolkit@claude-plugins-official` | Localized for `tools` (no outside override). `review-pr`, `code-simplifier` unused. |
 
 ## Fully purged (settings key, `installed_plugins.json`, cache, and marketplace where it had its own)
 | Plugin | Re-add |
@@ -59,7 +59,7 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 
 ## claude.ai account connectors and skills
 - `deniedMcpServers` blocks 0-call `cmux-cua`, `claude.ai Meetings`, `claude.ai Claude Data`; Figma, Docs, Atlassian kept. Unsigned connectors: near-zero context.
-- Account skills (0 uses) via `skillOverrides`: docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`; rest `user-invocable-only`. `docs` stays (connector needs it).
+- Account skills (0 uses) via `skillOverrides`: docx/xlsx/pptx/pdf/additiv-decks `name-only`; negotiation/morning/import-memory `off`; rest `user-invocable-only`. `docs` stays (connector needs it).
 
 ## Mechanics
 - **Drift is machine-guarded:** `hooks/plugin-drift-guard.sh` (SessionStart) diffs `enabledPlugins` against `plugin-curation.expected.json` — silent when clean, banner on drift. Deliberate change → `--accept`, then update the tables here. Snapshot is script-written only; never hand-edit.

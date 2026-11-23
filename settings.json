@@ -82,12 +82,14 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
     "anthropic-skills:xlsx": "name-only",
     "anthropic-skills:pptx": "name-only",
     "anthropic-skills:pdf": "name-only",
+    "anthropic-skills:additiv-brand-guidelines-ppt": "name-only",
+    "anthropic-skills:additiv-ppt-brands": "name-only",
     "anthropic-skills:stanford-gsb-negotiation": "off",
     "anthropic-skills:morning": "off",
     "anthropic-skills:import-memory": "off",
