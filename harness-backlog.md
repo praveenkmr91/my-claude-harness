@@ -4,13 +4,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
-### `plan-mode.md` sits at its injection ceiling
-
-- **Evidence:** measured 2026-11-22 with `tests/inject-plan-mode.test.js`: the hook emits the file's bytes plus 135. Commit `56c4d79` emits 9,511 against the 9,800 ceiling; with another session's uncommitted runtime-simulation bullet in the working tree it emitted 9,780, leaving 20 bytes. Four sentences of that commit were shortened to fit.
-- **Why parked:** the squeeze only bites once that session's bullet is committed, and its wording was still changing.
-- **Fix:** shorten the sentence listing the eleven lint rules (about 700 bytes) to the rule numbers and a pointer to `hooks/plan-lint.js`, which already prints each rule and its hint; the agreement pairs on `(P7)`, `(P10)` and `(P11)` keep passing. Split into a third plan doc only if it is still tight after that.
-- **Worth it when:** the next edit to `plan-mode.md` fails the ceiling case.
-
 ### Facts under a plain label line pass the plan lint
 
 - **Evidence:** the OCBC `native-bridge` plan before its rewrite carried 44 lines of code reads under a label line, "Chunk facts, read on the tree after the first, File-based handoff build:". P10 in `hooks/plan-lint.js` keys on headings starting `Facts` or `Blocked on` and on `Rejected:` lines, so a label line passes; only `plan-mode.md`'s rule text covers it.
