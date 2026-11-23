@@ -226,7 +226,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Rule docs disagree with each other in small ways
 
-- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `output-styles/peer-engineer.md` repeats lines `persona-core.md` re-injects and has no word ceiling; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
+- **Evidence:** `plans/harness-sweep.research.md` section 3: `commands/cycle.md` and `plugin-curation.md` against `committing.md` on unasked commits; `output-styles/peer-engineer.md` has no word ceiling; the Tailwind focus-ring rule sits outside the `tailwind-v4` skill.
 - **Why parked:** doc drift with no counted fault.
 - **Fix:** one pass over the docs named, each edit checked against the hook it describes.
 - **Worth it when:** a session follows one of the stale lines, or the next doc edit touches one of these files.

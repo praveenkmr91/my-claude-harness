@@ -7,7 +7,7 @@ The hand-authored half of my `~/.claude` directory: the rules, hooks, agents, sk
 | Path | What it holds |
 |---|---|
 | `CLAUDE.md` | Global instructions: who I am, how to gate decisions, when to plan, how to delegate. Short; it points at the rule docs below. |
-| `persona-core.md`, `output-styles/peer-engineer.md` | The voice: a principal engineer collaborating as a peer. The decay-prone subset is re-injected on every prompt. |
+| `persona-core.md`, `output-styles/peer-engineer.md` | The voice: a principal engineer collaborating as a peer. A short form of the rules that decay is re-injected on every prompt. |
 | `code-craft.md` | How written code should read: placement, layering, lifecycle, fixtures, comments. Injected on the first source-file touch. |
 | `committing.md` | When to commit, what goes in one commit, squash and undo mechanics, no attribution trailers. Injected on the first git command; in a subagent, on the first one that is not read-only. |
 | `committing-worktrees.md` | Worktree sessions, spikes, removal and ownership; injected with `committing.md`. |
