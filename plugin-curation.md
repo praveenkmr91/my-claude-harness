@@ -12,7 +12,6 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `typescript-lsp@claude-plugins-official` | — |
 | `context7@claude-plugins-official` | — |
 | `remember@claude-plugins-official` | — |
-| `pr-review-toolkit@claude-plugins-official` | `review-pr`, `code-simplifier` unrouted; battery/trim supersede. |
 | `claude-md-management@claude-plugins-official` | — |
 | `impeccable@impeccable` | Review lens: `/impeccable audit` on styled diffs; detector hook stays. |
 | `security-guidance@claude-plugins-official` | Pattern-only: `env.ENABLE_CODE_SECURITY_REVIEW="0"` disables its Opus Stop/commit review (secret-leak bug `anthropics/claude-code#90010`). Verify after restart: `~/.claude/security/log.txt` gains no `Stop hook:` lines. Revert when #90010 closes. Narrower: `ENABLE_STOP_REVIEW=0` (keeps commit review, same leak surface); kill switch `SECURITY_GUIDANCE_DISABLE=1`. |
@@ -32,6 +31,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 | `swift-lsp@claude-plugins-official` | Enable per-repo when a Swift repo is active. Also disabled in ATRAM via `.claude/settings.local.json`. |
 | `kotlin-lsp@claude-plugins-official` | Enable per-repo when a Kotlin repo is active. |
 | `frontend-design@claude-plugins-official` | 0 Skill calls in 3,695 transcripts; overlaps impeccable's design guidance. Re-enable for Figma-less UI. |
+| `pr-review-toolkit@claude-plugins-official` | Localized for `tools` (plugin agents take none). `review-pr`, `code-simplifier` unused. |
 
 ## Fully purged (settings key, `installed_plugins.json`, cache, and marketplace where it had its own)
 | Plugin | Re-add |
@@ -47,7 +47,7 @@ Owns deliberate `enabledPlugins` decisions in `~/.claude/settings.json`. Check h
 
 A key-deleted-but-still-installed plugin is an untested enablement state — tombstone (`false`) or purge fully, never in between.
 
-## Localized instead of installed (copies FREEZE at copied version; provenance in each SKILL.md frontmatter)
+## Localized instead of installed (copies FREEZE at copied version; provenance in each file's frontmatter)
 - `systematic-debugging`, `verification-before-completion` — from superpowers. Refresh = re-enable plugin, diff.
 - `codebase-design`, `domain-modeling`, `grilling`, `improve-codebase-architecture` — from mattpocock/skills. Plugin not installed: ships 25 skills always-on.
 - `react-best-practices` — from vercel-labs/agent-skills, Next.js/RSC rules pruned. Refresh = re-clone + diff.
@@ -55,11 +55,11 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 - `figma-design-to-code` — verbatim from the figma plugin.
 - `tailwind-v4` — from mastra-ai/mastra, near-verbatim; no vendor skill exists; v4 repos only. Refresh = re-pull, diff.
 - `delete-list`, `delete-audit`, `shortcut-debt` — from DietrichGebert/ponytail v5.3.2, provenance in each file's header comment. Refresh = diff upstream `skills/ponytail-{review,audit,debt}`. Not installed: its ladder duplicates CLAUDE.md, its band claude-hud.
+- `code-reviewer`, `silent-failure-hunter`, `type-design-analyzer`, `comment-analyzer`, `pr-test-analyzer` — pr-review-toolkit 1.0.1 bodies; refresh = diff cache.
 
 ## claude.ai account connectors and skills
-- 0-call servers blocked by `deniedMcpServers` (`serverName`): `cmux-cua`, `claude.ai Meetings`, `claude.ai Claude Data`. Figma, Claude Docs, Atlassian kept. Never-signed-in connectors: deferred names, near-zero context.
-- claude.ai account skills: hidden via `skillOverrides` (0 uses). docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`; the rest `user-invocable-only`. Keep `docs` (Claude Docs connector needs it).
-- `~/.claude/agents/` files cannot override plugin agents.
+- `deniedMcpServers` blocks 0-call `cmux-cua`, `claude.ai Meetings`, `claude.ai Claude Data`; Figma, Docs, Atlassian kept. Unsigned connectors: near-zero context.
+- Account skills (0 uses) via `skillOverrides`: docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`; rest `user-invocable-only`. `docs` stays (connector needs it).
 
 ## Mechanics
 - **Drift is machine-guarded:** `hooks/plugin-drift-guard.sh` (SessionStart) diffs `enabledPlugins` against `plugin-curation.expected.json` — silent when clean, banner on drift. Deliberate change → `--accept`, then update the tables here. Snapshot is script-written only; never hand-edit.
