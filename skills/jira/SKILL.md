@@ -33,3 +33,4 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP �
 - Name the environment of every piece of evidence ("verified on dev"). A finding from another env than the one the ticket was raised in (dev data on a UAT bug) is not a question unless reproduced there.
 - Plain comment → `contentFormat: "markdown"`.
 - @mention → `contentFormat: "adf"` with a mention node `{"type":"mention","attrs":{"id":"<accountId>","text":"@<Name>"}}`. The id comes from `lookupJiraAccountId` (`searchString`: name or email local part); never guess one.
+- ADF `code` combines only with `link`: with `strike`, `strong` or `em` on the same text node the whole write is rejected. Format that name as plain text.
