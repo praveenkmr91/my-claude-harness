@@ -57,8 +57,9 @@ A key-deleted-but-still-installed plugin is an untested enablement state — tom
 - `delete-list`, `delete-audit`, `shortcut-debt` — from DietrichGebert/ponytail v5.3.2, provenance in each file's header comment. Refresh = diff upstream `skills/ponytail-{review,audit,debt}`. Not installed: its ladder duplicates CLAUDE.md, its band claude-hud.
 
 ## claude.ai account connectors and skills
-- claude.ai connectors Canva / Excalidraw / Microsoft Learn: 0 calls, not settable from `~/.claude`. Optional hygiene only — unused connectors surface as deferred names, so disconnecting saves near-zero context. Figma, Claude Docs, Atlassian kept.
-- claude.ai account skills: hidden via `skillOverrides` (0 uses). docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`. Keep `docs` (Claude Docs connector needs it).
+- 0-call servers blocked by `deniedMcpServers` (`serverName`): `cmux-cua`, `claude.ai Meetings`, `claude.ai Claude Data`. Figma, Claude Docs, Atlassian kept. Never-signed-in connectors: deferred names, near-zero context.
+- claude.ai account skills: hidden via `skillOverrides` (0 uses). docx/xlsx/pptx/pdf `name-only`; negotiation/morning/import-memory `off`; the rest `user-invocable-only`. Keep `docs` (Claude Docs connector needs it).
+- `~/.claude/agents/` files cannot override plugin agents.
 
 ## Mechanics
 - **Drift is machine-guarded:** `hooks/plugin-drift-guard.sh` (SessionStart) diffs `enabledPlugins` against `plugin-curation.expected.json` — silent when clean, banner on drift. Deliberate change → `--accept`, then update the tables here. Snapshot is script-written only; never hand-edit.

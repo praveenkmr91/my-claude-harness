@@ -1,6 +1,7 @@
 ---
 name: modern-ts-analyzer
 model: opus
+tools: Read, Bash, Glob, Grep
 description: Use when reviewing a diff for outdated TS/JS syntax and idioms — legacy patterns where a modern language feature is strictly clearer or safer. Part of the standard code-review battery; give it the diff scope (usually unstaged git diff) when invoking.
 ---
 

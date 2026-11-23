@@ -1,6 +1,7 @@
 {
   "env": {
-    "ENABLE_CODE_SECURITY_REVIEW": "0"
+    "ENABLE_CODE_SECURITY_REVIEW": "0",
+    "CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS": "100000"
   },
   "attribution": {
     "commit": "",
@@ -81,7 +82,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
   "skillOverrides": {
     "anthropic-skills:docx": "name-only",
     "anthropic-skills:xlsx": "name-only",
@@ -89,8 +90,27 @@
     "anthropic-skills:pdf": "name-only",
     "anthropic-skills:stanford-gsb-negotiation": "off",
     "anthropic-skills:morning": "off",
-    "anthropic-skills:import-memory": "off"
+    "anthropic-skills:import-memory": "off",
+    "anthropic-skills:artifact-emulator": "user-invocable-only",
+    "anthropic-skills:built-in-browser": "user-invocable-only",
+    "anthropic-skills:chrome-browser": "user-invocable-only",
+    "anthropic-skills:computer-use": "user-invocable-only",
+    "anthropic-skills:deep-research": "user-invocable-only",
+    "anthropic-skills:find-skills": "user-invocable-only",
+    "anthropic-skills:google-workspace": "user-invocable-only",
+    "anthropic-skills:skill-creator": "user-invocable-only"
   },
+  "deniedMcpServers": [
+    {
+      "serverName": "cmux-cua"
+    },
+    {
+      "serverName": "claude.ai Meetings"
+    },
+    {
+      "serverName": "claude.ai Claude Data"
+    }
+  ],
   "hooks": {
     "PostCompact": [
       {
@@ -581,6 +601,7 @@
   "worktree": {
     "baseRef": "head"
   },
+  "enableArtifact": false,
   "statusLine": {
     "type": "command",
     "command": "CLAUDE_HUD_ALLOW_EXTRA_CMD=1 '/Users/praveenkumar/Library/Application Support/fnm/aliases/default/bin/node' '/Users/praveenkumar/.claude/plugins/claude-hud/statusline.mjs' --extra-cmd 'bash /Users/praveenkumar/.claude/statusline/session-address.sh'"
@@ -647,6 +668,7 @@
     }
   },
   "outputStyle": "peer-engineer",
+  "feedbackDrafts": "off",
   "effortLevel": "medium",
   "modelSettings": {
     "claude-opus-5-5": {
@@ -656,7 +678,7 @@
       "effortLevel": "high"
     },
     "claude-fable-5-2": {
-      "effortLevel": "high"
+      "effortLevel": "medium"
     }
   },
   "advisorModel": "claude-fable-5-2",
