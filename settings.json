@@ -1,6 +1,7 @@
 {
   "env": {
-    "ENABLE_CODE_SECURITY_REVIEW": "0"
+    "ENABLE_CODE_SECURITY_REVIEW": "0",
+    "COMPACT_NUDGE_COLD_MODE": "warn"
   },
   "attribution": {
     "commit": "",
@@ -598,7 +599,8 @@
     "kotlin-lsp@claude-plugins-official": false,
     "claude-hud@claude-hud": true,
     "modern-web-guidance@googlechrome": false,
-    "cc-plugin-you-should-know@builtin": true
+    "cc-plugin-you-should-know@builtin": true,
+    "compact-nudge@claude-toolbelt": true
   },
   "extraKnownMarketplaces": {
     "superpowers-dev": {
@@ -625,6 +627,17 @@
       "source": {
         "source": "github",
         "repo": "GoogleChrome/modern-web-guidance"
+      },
+      "autoUpdate": false
+    },
+    "claude-toolbelt": {
+      "source": {
+        "source": "github",
+        "repo": "Malo-T/claude-toolbelt",
+        "sparsePaths": [
+          ".claude-plugin",
+          "plugins/compact-nudge"
+        ]
       },
       "autoUpdate": false
     }
