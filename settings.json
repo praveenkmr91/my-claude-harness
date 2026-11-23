@@ -1,7 +1,6 @@
 {
   "env": {
-    "ENABLE_CODE_SECURITY_REVIEW": "0",
-    "COMPACT_NUDGE_COLD_MODE": "warn"
+    "ENABLE_CODE_SECURITY_REVIEW": "0"
   },
   "attribution": {
     "commit": "",
