@@ -5,7 +5,7 @@
 ## Draft
 - **The plan is the file.** Draft at `~/.claude/plans/<slug>.md`; harness work (`~/.claude/`) stays there and is deleted once its last step commits (`hooks/step-gate.sh` reads a plan file still on disk as a build in progress). Repo work moves to `docs/plans/<slug>.md` on approval, named in one line; the build runs from it and the shipping commit deletes it. An ask to implement or hand off implies approval, so the move lands in its own `docs(plans):` commit before the first build step or handoff prompt, never deferred to a chunk's commit. The implementer gets only the file, so every piece of context it needs is written into it: decisions, contracts, files and siblings. What a failing test or `tsc` would settle is not context. Plan drift mid-build → edit the file, never just the chat.
 - **Tier.** Plan gates scale with the plan: names match `review-routing.md` (Trivial / Small / Big), size bounded by the chunk rule below.
-    - Trivial: no plan required by `CLAUDE.md` but written anyway, verify lines only lint, type check, tests → no plan gate.
+    - Trivial: no plan required by `CLAUDE.md` but written anyway, verify lines only lint, type check, tests → the Small gates once it asks for "implement".
     - Small: a plan `CLAUDE.md` requires, within the chunk rule's bounds, no new mechanism → one cold read and the advisor consult.
     - Big: a new mechanism (hook, rule doc, agent file, dep, layer, boundary, async state table), shared state, public API, money path → every gate in Draft and in Review (`plan-build.md`).
     - A plan the chunk rule splits is tiered per chunk, on that chunk's own content: a chunk with none of the Big triggers is Small, whatever the plan's size.

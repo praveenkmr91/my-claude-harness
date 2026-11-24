@@ -17,9 +17,9 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 ### Plan gate reads a future "implement" as an ask to implement now
 
 - **Evidence:** session `bb3f0c74` (2026-11-24): `done-claim-gate.sh` blocked six replies with PLAN PRESENTED UNREVIEWED. Two were false: they closed with "…and bring it back for \"implement\"", which names a later approval, and `later_approval` (`done-claim-gate.sh:205`) strips only `for your implement`. A third asked to implement a spike written to `/tmp/spike`, outside the session scratchpad that `build-approval-gate.sh` already exempts; that ask was self-inflicted. The other three asked to implement a plan edited since its last review, and were right.
-- **Why parked:** one session; each false fire cost one `plan gate: skip` line.
+- **Why parked:** one session; each false fire cost one reworded reply.
 - **Fix:** `later_approval` also strips a quoted `"implement"` after `for` or `back for`. Firing / near-twin / empty-input tests, the near-twin being "type \"implement chunk 1\"" after an unreviewed edit.
-- **Worth it when:** another session takes a skip line on a reply that asked nothing.
+- **Worth it when:** another session rewords a reply that asked nothing to pass the gate.
 
 ### Facts under a plain label line pass the plan lint
 

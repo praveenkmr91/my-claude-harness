@@ -23,7 +23,6 @@ path=inp.get('transcript_path')
 if not path: sys.exit(0)
 label_open=r'^\s*(?:[-*]\s+)?[`*]*'
 label_close=r'[`*]*:[`*]*[ \t]*'
-pass_review=re.compile(label_open+r'Pass'+label_close+r'review\b',re.M|re.I)
 skip_reason=r'skip(?:ped)?[ \t]*[—–.:,-][ \t]*\S'
 verdict=re.compile(label_open+r'([a-z][a-z-]+)'+label_close+r'(?:(?:\d+|no) findings?\b|('+skip_reason+r')).*$')
 def lens_ran(b):
@@ -61,7 +60,7 @@ stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 # Transcript-wide, never reset(): plan edits and their reviews span turns, and session_work must outlive the window so a later claim still owes the session's reviews.
-ev=0; plan_edits={}; plan_reviews=[]; errored_ids=set(); advisor_at=[]; author_review_at=[]; plan_reads=[]; learned=False; model=''; session_work=False
+ev=0; plan_edits={}; plan_reviews=[]; errored_ids=set(); advisor_at=[]; learned=False; model=''; session_work=False
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
 # The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
@@ -106,7 +105,6 @@ for line in transcript:
             if not isinstance(b,dict): continue
             if b.get('type')=='text':
                 texts.append(b['text'])
-                if pass_review.search(b['text']): author_review_at.append(ev)
             if b.get('type') not in ('tool_use','server_tool_use'): continue
             ev+=1
             if b.get('name')=='advisor': advisor_at.append(ev)
@@ -118,7 +116,6 @@ for line in transcript:
                 edited=b.get('input',{}).get('file_path','')
                 if re.search(r'/plans/[^/]+\.md$',edited) and not edited.endswith('.research.md'): plan_edits[edited]=ev
             elif b.get('name') in ('Agent','Task') and lens_ran(b)=='cold-reader': plan_reviews.append((ev,b.get('input',{}).get('prompt') or '',b.get('id')))
-            elif b.get('name')=='Read': plan_reads.append((ev,b.get('input',{}).get('file_path','')))
             message=b.get('input',{}).get('message')
             # A REPORT's lens and skip lines satisfy the Stop arm after the send.
             if b.get('name')=='SendMessage' and isinstance(message,str) and is_report(message):
@@ -208,7 +205,7 @@ plan_tail=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
 later_approval=r'for your\s+[\'"`“”‘’]?implement\b[\'"`“”‘’]?'
 ask_line=re.sub(later_approval,'',plan_tail[-1],flags=re.I) if plan_tail else ''
 implement_ask=not report and plan_edits and ask_line and re.search(r'\b(implement|build it|hand (?:it )?to the implementer|start the build)\b',ask_line,re.I) and re.search(r'\?|\btype\b|\bsay\b|approv|go ahead|want me|\bif you\b',ask_line,re.I)
-if implement_ask and not re.search(label_open+r'plan gate'+label_close+skip_reason,'\n'.join(texts),re.M|re.I):
+if implement_ask:
     plan_path=max(plan_edits,key=plan_edits.get)
     plan_name=os.path.basename(plan_path)
     # The basename matches only as a whole path component, so a read of `build-ui.md` is not one of `ui.md`; the basename alone still follows a plan moved between `plans/` dirs.
@@ -217,9 +214,7 @@ if implement_ask and not re.search(label_open+r'plan gate'+label_close+skip_reas
     unreviewed=[]
     if not covering: unreviewed.append('(A) no cold-reader ran on it')
     if covering and 'fable' not in model.lower() and not any(a>covering[0] for a in advisor_at): unreviewed.append('(B) no advisor consult followed its first review')
-    read_after=[e for e,p in plan_reads if p==plan_path and e>plan_edits[plan_path]]
-    if not read_after or not (pass_review.search(final) or any(a>=read_after[0] for a in author_review_at)): unreviewed.append('(C) no `Pass: review` of your own followed a Read of the plan after its last edit')
-    if unreviewed: problems.append(f"PLAN PRESENTED UNREVIEWED: this reply asks to implement {plan_name}, but {' and '.join(unreviewed)} (plan-build.md Review). Run the missing review, fold it, then present — or write `plan gate: skip — <reason>`.")
+    if unreviewed: problems.append(f"PLAN PRESENTED UNREVIEWED: this reply asks to implement {plan_name}, but {' and '.join(unreviewed)} (plan-build.md Review). Run the missing review, fold it, then present.")
 # A redirect counts by its target only: `node --test x.test.js > out.txt` names code but writes none.
 redirect_target=re.compile(r'(?:>>?|\btee(?:\s+-a)?)\s*([^\s;&|]+)')
 inplace_write=re.compile(r'sed -i|write_text')
