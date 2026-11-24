@@ -4,6 +4,17 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
+### Status answers and no-edit builder reports skip the Big review bar
+
+- **Evidence:** a census of nine sessions after the DPLK-281 miss found five where a status or commit-only turn was the route that escaped review. Replaying the planner's status answer in session `352bbe1d` (line 8177) through `done-claim-gate.sh` exits 0. Its earlier claim, "DPLK-281's frontend work is complete", has no word the claim pattern matches. Commit `ea2d928` covered the other routes: the member set, builder REPORTs and the two-block give-up.
+- **Why parked:** the remaining routes rest on one replayed session. Praveen chose to wait for a second sighting.
+- **Fix:** a status turn's claim owes the members the classifier lists in `owed-files=`. The claim pattern gains `complete`. A REPORT whose window holds no edit also owes them. Files: `hooks/done-claim-gate.sh` (the claim pattern and the no-code-turn exit), `tests/done-claim-gate-plan-review.test.js`, `tests/done-claim-gate-lenses.test.js`.
+- **Upgrades considered:**
+    - Sizing work by ticket range across repos would catch the `352bbe1d` case, where nothing was written in that session. It costs heuristic repo discovery and git time inside the classifier's 6 s budget.
+    - Owing `code-reviewer` on Big REPORTs adds the battery's fifth member there. It costs a second size bar for one member.
+    - A fail-closed classifier timeout on claim turns would stop the gate failing open. It costs a hard stop whenever git is slow, and a cold run already took 7.35 s on a replay.
+- **Worth it when:** a status answer or a no-edit REPORT claims Big work done and Praveen has to ask for the review.
+
 ### Facts under a plain label line pass the plan lint
 
 - **Evidence:** the OCBC `native-bridge` plan before its rewrite carried 44 lines of code reads under a label line, "Chunk facts, read on the tree after the first, File-based handoff build:". P10 in `hooks/plan-lint.js` keys on headings starting `Facts` or `Blocked on` and on `Rejected:` lines, so a label line passes; only `plan-mode.md`'s rule text covers it.
