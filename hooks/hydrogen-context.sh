@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 IN=$(cat)
 case "$IN" in
-  *hydrogen*|*Workflow*|*useProcessState*|*ProtectRoutes*|*milestone*|*StepContent*|*ProcessContent*|*ContentBox*|*Accordion*|*ui.layouts*|*keepPreviousData*|*cacheTime*|*staleTime*|*usePortfoliosData*|*useSecurityResearchData*|*useTableControl*|*TableFilter*|*createTableState*|*FieldsType*|*customCells*|*ui.components.table*|*HydrogenForms*|*DecimalInput*|*TextfieldWrap*|*useFieldArray*|*listKeyDataSource*|*eject-script*|*ejected*|*resolve.dedupe*|*@teambit*|*ui.theme*|*getColor*) ;;
+  *hydrogen*|*Workflow*|*useProcessState*|*ProtectRoutes*|*milestone*|*StepContent*|*ProcessContent*|*ContentBox*|*Accordion*|*ui.layouts*|*keepPreviousData*|*cacheTime*|*staleTime*|*usePortfoliosData*|*useSecurityResearchData*|*useTableControl*|*TableFilter*|*createTableState*|*FieldsType*|*customCells*|*ui.components.table*|*HydrogenForms*|*DecimalInput*|*TextfieldWrap*|*useFieldArray*|*listKeyDataSource*|*eject-script*|*ejected*|*resolve.dedupe*|*@teambit*|*ui.theme*|*getColor*|*'"Agent"'*) ;;
   *) exit 0 ;;
 esac
+
+if [ "$(jq -r '.tool_name // empty' <<<"$IN")" = "Agent" ]; then
+  REDIRECT=$(jq -r '(.tool_input.prompt // "") as $p | ((.tool_input.subagent_type // "") | IN("Explore", "general-purpose", "claude")) and ($p | test("hydrogen monorepo|projects/hydrogen/hydrogen"; "i")) and ($p | contains("[hydrogen-direct:") | not)' <<<"$IN")
+  [ "$REDIRECT" = true ] && jq -cn --arg r "This brief sends a Hydrogen monorepo question to a generic agent. Redispatch it as hydrogen-lookup (catalogue-backed); a DFS contract question goes to dfs-lookup. If the brief reads specific monorepo files on purpose, such as a diff review, add [hydrogen-direct: <why>] to the prompt and dispatch again." '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  exit 0
+fi
 
 CWD=$(jq -r '.cwd // empty' <<<"$IN")
 ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || echo "$CWD")

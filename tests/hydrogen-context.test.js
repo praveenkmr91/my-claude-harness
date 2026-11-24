@@ -40,6 +40,9 @@ function run(input) {
 const callNaming = (sessionId, cwd, pattern) =>
   JSON.stringify({ session_id: sessionId, cwd, tool_name: 'Grep', tool_input: { pattern } });
 
+const dispatch = (sessionId, cwd, type, prompt) =>
+  JSON.stringify({ session_id: sessionId, cwd, tool_name: 'Agent', tool_input: { subagent_type: type, prompt } });
+
 const call = (sessionId, cwd) => callNaming(sessionId, cwd, 'getColor');
 
 const OUTPUT_CEILING = 9800;
@@ -100,6 +103,31 @@ test('hydrogen context hook', async (t) => {
     assert.equal(run(diveCall(newSession(), themedRepo, '/tmp/elsewhere/hydrogen-notes')), '');
     const mapPath = '~/Documents/projects/hera/.claude/skills/generate-component-map/assets/hydrogen-component-map.json';
     assert.equal(run(diveCall(newSession(), themedRepo, mapPath)), '');
+  });
+
+  const denialOf = (stdout) => JSON.parse(stdout).hookSpecificOutput;
+
+  await t.test('an Explore dispatch about the Hydrogen monorepo is denied toward hydrogen-lookup, every time', () => {
+    const sessionId = newSession();
+    const payload = dispatch(sessionId, themedRepo, 'Explore', 'Which component in the Hydrogen monorepo wraps the table?');
+    for (let round = 0; round < 2; round++) {
+      const denial = denialOf(run(payload));
+      assert.equal(denial.permissionDecision, 'deny');
+      assert.match(denial.permissionDecisionReason, /hydrogen-lookup/);
+    }
+  });
+
+  await t.test('a general-purpose dispatch naming the monorepo path is denied from a non-Hydrogen cwd', () => {
+    const denial = denialOf(run(dispatch(newSession(), plainRepo, 'general-purpose', `List the hooks under ${MONOREPO_PATH}`)));
+    assert.equal(denial.permissionDecision, 'deny');
+    assert.match(denial.permissionDecisionReason, /hydrogen-lookup/);
+  });
+
+  await t.test('other agents, app-only briefs and [hydrogen-direct:] dispatches pass untouched', () => {
+    const monorepoBrief = `Review ${MONOREPO_PATH} for useTableControl callers`;
+    assert.equal(run(dispatch(newSession(), themedRepo, 'reuse-analyzer', monorepoBrief)), '');
+    assert.equal(run(dispatch(newSession(), themedRepo, 'Explore', 'Find usages of @additiv-hydrogen/ui.layouts in this app')), '');
+    assert.equal(run(dispatch(newSession(), themedRepo, 'Explore', `${monorepoBrief} [hydrogen-direct: diff review]`)), '');
   });
 
   await t.test('an empty payload passes with no output', () => {

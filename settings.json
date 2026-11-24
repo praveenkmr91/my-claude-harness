@@ -328,6 +328,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/inject-once.sh subagent-tiers-enforcement.md",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/hydrogen-context.sh",
+            "timeout": 5
           }
         ]
       },
