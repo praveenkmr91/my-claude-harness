@@ -249,7 +249,7 @@ idle_ask=commit_ask and re.search(r'(?<!\bthat )(?<!\bthe )\bcommit\b',last,re.I
 # A first line opening "Step N" claims one plan step, whose done bar is a hand pass (review-routing.md); the whole build's claim and the shipping commit need real lenses.
 step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
 step_turn=bool(step_claim) and not committed
-stop_exempt=window_report and stop_window and not report
+stop_exempt=window_report and stop_window and not report and not code_turn
 if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, or the reply asks to commit, rewording to "Step N" must not pass.
     step_exempt=bool(step_claim) and not (committed or commit_ask or feedback_blocks)

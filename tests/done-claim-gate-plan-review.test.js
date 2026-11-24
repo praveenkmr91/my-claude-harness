@@ -829,6 +829,19 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults('Done. REPORT sent.', window, opts(repo)));
   });
 
+  await t.test('on the retry a code turn inside a STOP-answered window is checked as on the first run, over Big writes with members unrun; the same window with no code edit is quiet', () => {
+    const repo = scratchRepo();
+    const envelope = (body) => `<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n${body}\n</cross-session-message>`;
+    const window = [
+      { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${envelope('[STOP demo] Stop after this step and report.')}` } } },
+      { sent: `[REPORT demo step 1] Stopped before step 2 started.\n${RAW_OUTPUT}`, output: 'Message sent to planner-1', timestamp: stamp(2) },
+      { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${envelope('[GO demo] Carry on with step 2.')}` } } },
+    ];
+    const retry = (reply, ...runs) => runWithResults(reply, [...window, ...runs], opts(repo, { stopHookActive: true }));
+    blocked(retry('Done: step 2 built.', writeOf(repo, 'src/impl.ts', sourceLines(200), stamp(3))), BIG_NAMES);
+    quiet(retry('Done. REPORT sent.'));
+  });
+
   await t.test('on a code turn a hedge word does not void a claim; on a no-tool no-code turn it does', () => {
     const line = 'Done, nothing is left to be reviewed.';
     const codeClaim = runFull(line);
