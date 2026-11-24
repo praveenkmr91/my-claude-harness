@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
-const { BASE_VERDICTS, run, runFull, runWithResults } = require('./helpers/done-claim-gate');
+const { BASE_VERDICTS, CODE_REVIEW, scratchRepo, run, runFull, runWithResults } = require('./helpers/done-claim-gate');
 
 test('done-claim gate: evidence', async (t) => {
   await t.test('blocks a claim with no test or runtime command this turn', () => {
@@ -37,17 +37,20 @@ test('done-claim gate: evidence', async (t) => {
     assert.equal(runWithResults('Done: the edits landed.', [{ command: 'pnpm test', output: [{ type: 'text', text: 'Tests  0 failed | 9 passed' }] }]).status, 0);
   });
 
-  await t.test('blocks a tested claim when no review pass ran', () => {
-    const { status, stderr } = runFull('Done: the edits landed.', { bashCommand: 'node --test tests/*.test.js' });
-    assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer[\s\S]*`review` pass/);
-    assert.doesNotMatch(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+  await t.test('a tested claim over reviewed code owes no lens line: the lens names alone block nothing', () => {
+    const built = { bashCommand: 'node --test tests/*.test.js', cwd: scratchRepo(), written: 30 };
+    const { status, stderr } = runFull('Done: the edits landed.', { ...built, reviews: [CODE_REVIEW] });
+    assert.equal(status, 0, stderr);
+    assert.doesNotMatch(stderr, /REVIEW/);
+    assert.match(runFull('Done: the edits landed.', built).stderr, /REVIEW AGENTS NOT RUN/);
+    assert.equal(run('Done: the edits landed.'), 2);
   });
 
-  await t.test('blocks a commit ask with no review pass', () => {
-    const { status, stderr } = runFull('Diff is above.\nSay yes and I will commit.');
-    assert.equal(status, 2);
-    assert.match(stderr, /asks to commit/);
+  await t.test('a commit ask with no review pass passes while lint ran; with no lint it is blocked for the lint', () => {
+    assert.equal(run('Diff is above.\nSay yes and I will commit.'), 0);
+    const noLint = runFull('Diff is above.\nSay yes and I will commit.', { lint: false });
+    assert.equal(noLint.status, 2);
+    assert.match(noLint.stderr, /LINT\/TSC NOT RUN: [\s\S]*asks to commit/);
     assert.equal(run('Diff is above.\nCommitted as ae56e51. Want me to push?'), 0);
   });
 
@@ -61,13 +64,15 @@ test('done-claim gate: evidence', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'pnpm check:types && node --test', lint: false }), 0);
   });
 
-  await t.test('an automatic commit triggers the lint and review checks like a commit ask', () => {
+  await t.test('an automatic commit triggers the lint check like a commit ask, and owes no review', () => {
     const noLint = runFull(`Committed as abc1234.\n${BASE_VERDICTS}`, { bashCommand: 'git -C /repo commit --only src/app.ts -m x', lint: false });
     assert.equal(noLint.status, 2);
     assert.match(noLint.stderr, /LINT\/TSC NOT RUN: this turn edited web code and ran git commit/);
-    const noLens = runFull('Committed as abc1234.', { bashCommand: 'git commit -m x' });
-    assert.match(noLens.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer: [\s\S]*ran git commit/);
-    assert.equal(run(`Committed as abc1234.\n${BASE_VERDICTS}`, { bashCommand: 'git commit -m x' }), 0);
+    const unreviewed = { cwd: scratchRepo(), written: 30 };
+    const noLens = runFull('Committed as abc1234.', { bashCommand: 'git commit -m x', ...unreviewed });
+    assert.equal(noLens.status, 0, noLens.stderr);
+    assert.doesNotMatch(noLens.stderr, /REVIEW/);
+    assert.match(runFull('Done: committed.', { bashCommand: 'node --test tests/*.test.js && git commit -m x', ...unreviewed }).stderr, /REVIEW AGENTS NOT RUN/);
     assert.equal(run('Here is the history.', { bashCommand: 'git log --grep commit', lint: false }), 0);
   });
 
@@ -111,11 +116,12 @@ test('done-claim gate: evidence', async (t) => {
     assert.equal(run('Committed as abc1234.', { ...docTurn, bashCommand: 'node --test tests/*.test.js > /tmp/out.txt 2>&1 && git commit --only CLAUDE.md -m x' }), 0);
   });
 
-  await t.test('a Bash write into a code file still triggers the review check', () => {
+  await t.test('a Bash write into a code file still makes a code turn, so its "Fixed." claim needs evidence', () => {
     for (const command of ['cat > src/app.ts <<EOF', 'echo x >> src/app.ts', 'echo x | tee -a src/app.ts', "sed -i '' 's/a/b/' src/app.ts"]) {
-      const { status, stderr } = runFull('Committed as abc1234.', { editedFile: null, lint: false, bashCommand: `${command} && git commit -m x` });
+      const { status, stderr } = runFull('Fixed.', { editedFile: null, lint: false, bashCommand: command });
       assert.equal(status, 2, command);
-      assert.match(stderr, /REVIEW NOT RUN/, command);
+      assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/, command);
     }
+    assert.equal(run('Fixed.', { editedFile: null, lint: false, bashCommand: 'cat > notes.md <<EOF' }), 0);
   });
 });

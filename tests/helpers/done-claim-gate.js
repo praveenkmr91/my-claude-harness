@@ -16,7 +16,8 @@ const BASE_VERDICTS = 'reuse-analyzer: 0 findings\nplacement-analyzer: skip — 
 const LENS_SKIPS = 'reuse-analyzer: skip — rename only\nplacement-analyzer: skip — nothing moved';
 const LEARN_SKIP = 'learn: skip — nothing new this build';
 const RAW_OUTPUT = 'Raw output: /private/tmp/s/scratchpad/step1-checks.txt';
-const LENS_AGENTS = ['reuse-analyzer', 'placement-analyzer'].map((subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } }));
+const CODE_REVIEW = { type: 'tool_use', id: 'code-review-run', name: 'Agent', input: { subagent_type: 'code-reviewer', prompt: 'review' } };
+const LENS_AGENTS =['reuse-analyzer', 'placement-analyzer'].map((subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } }));
 
 const handBack = (name) => ({
   type: 'user',
@@ -47,9 +48,19 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !ke
 
 let seq = 0;
 const nextSeq = () => seq++;
+const scratchRepo = () => {
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+  spawnSync('git', ['init', '-q'], { cwd: repo, env });
+  return repo;
+};
+
 // `send: true` replays the reply as a pending SendMessage (its tool_use already in the transcript) through the PreToolUse arm.
-function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, prompt = 'go', handback, send = false } = {}) {
-  const content = [...reviews, send ? reportSend(reply, 'send') : { type: 'text', text: reply }];
+// `written` is the line count of a Write into `cwd` (a scratch repo, so the classifier runs); a `reviews` entry with an `id` gets an answered result.
+function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, written = 0, prompt = 'go', handback, send = false } = {}) {
+  const source = Array.from({ length: written }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
+  const write = written ? [{ type: 'tool_use', name: 'Write', input: { file_path: path.join(cwd, 'impl.ts'), content: source } }] : [];
+  const content = [...write, ...reviews, send ? reportSend(reply, 'send') : { type: 'text', text: reply }];
+  const answers = reviews.filter((r) => r.id).map((r) => ({ type: 'tool_result', tool_use_id: r.id, content: 'ok' }));
   if (editedFile) content.unshift({ type: 'tool_use', name: 'Edit', input: { file_path: editedFile } });
   if (bashCommand) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: bashCommand } });
   if (lint) content.unshift({ type: 'tool_use', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
@@ -58,9 +69,10 @@ function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = t
     { type: 'user', message: { content: prompt } },
     ...(handback ? [handback] : []),
     { type: 'assistant', message: { content } },
+    ...(answers.length ? [{ type: 'user', message: { content: answers } }] : []),
   ].map((r) => JSON.stringify(r)).join('\n'));
   const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, stop_hook_active: stopHookActive, cwd };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8' });
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env });
 }
 const run = (reply, opts) => runFull(reply, opts).status;
 
@@ -71,11 +83,13 @@ function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.
   if (lint) prelude.push({ type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
   if (editedFile) prelude.push({ type: 'tool_use', id: 'edit', name: 'Edit', input: { file_path: editedFile } });
   if (prelude.length) lines.push({ type: 'assistant', message: { content: prelude } });
-  runs.forEach(({ command, sent, handback, record, prompt, blocks, isError = false, output, timestamp }, i) => {
+  runs.forEach(({ command, sent, handback, record, prompt, blocks, answered = false, isError = false, output, timestamp }, i) => {
     if (handback || record) {
       lines.push(handback ?? record);
     } else if (blocks) {
       lines.push({ type: 'assistant', timestamp, message: { content: blocks } });
+      // A reviewer run clears files only once its result is in the transcript.
+      if (answered) lines.push({ type: 'user', timestamp, message: { content: blocks.filter((b) => b.type === 'tool_use').map((b) => ({ type: 'tool_result', tool_use_id: b.id, content: 'ok' })) } });
     } else if (prompt) {
       lines.push({ type: 'user', timestamp, message: { content: prompt } });
     } else {
@@ -84,7 +98,7 @@ function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.
       lines.push({ type: 'user', timestamp, message: { content: [{ type: 'tool_result', tool_use_id: `run${i}`, is_error: isError, content: output }] } });
     }
   });
-  if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: `${reply}\n${BASE_VERDICTS}` }] } });
+  if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } });
   fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
   const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, cwd, ...(stopHookActive && { stop_hook_active: true }) };
   return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env: home ? { ...env, HOME: home } : env });
@@ -98,9 +112,11 @@ module.exports = {
   LEARN_SKIP,
   RAW_OUTPUT,
   LENS_AGENTS,
+  CODE_REVIEW,
   handBack,
   handBackAttachment,
   repoWith,
+  scratchRepo,
   env,
   nextSeq,
   runFull,

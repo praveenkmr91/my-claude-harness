@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
-  HOOK_PATH, tmpDir, LENS_SKIPS, LEARN_SKIP, RAW_OUTPUT, LENS_AGENTS,
+  HOOK_PATH, tmpDir, LENS_SKIPS, LEARN_SKIP, RAW_OUTPUT,
   handBack, repoWith, env, nextSeq, run, runFull, runWithResults,
 } = require('./helpers/done-claim-gate');
 
@@ -17,9 +17,9 @@ test('done-claim gate: report', async (t) => {
     const bare = runFull('[REPORT demo step 1] Step 1 built.', { ...built, lint: false });
     assert.equal(bare.status, 2);
     assert.match(bare.stderr, /REPORT WITHOUT RAW OUTPUT/);
-    assert.match(bare.stderr, /DONE-CLAIM WITHOUT EVIDENCE: the first line claims 'REPORT'[^\n]*cite their output; for a REPORT, the lens lines go in the message itself\./);
-    assert.match(bare.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[^\n]*the lens lines go in the message itself\./);
-    assert.equal(run(`[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`, { ...built, bashCommand: 'node --test tests/*.test.js' }), 0);
+    assert.match(bare.stderr, /DONE-CLAIM WITHOUT EVIDENCE: the first line claims 'REPORT'[^\n]*cite their output; for a REPORT, the raw output of the checks goes in the message itself\./);
+    assert.doesNotMatch(bare.stderr, /REVIEW/);
+    assert.equal(run(`[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`, { ...built, bashCommand: 'node --test tests/*.test.js' }), 0);
     assert.equal(run('[ASK demo step 1] Which file owns the type?', { ...built, lint: false }), 0);
   });
 
@@ -42,27 +42,15 @@ test('done-claim gate: report', async (t) => {
     assert.equal(runWithResults(report, [{ handback: handBack('implementer') }, green, lint], opts).status, 0);
   });
 
-  await t.test('a REPORT reads its lens lines from the message, not from earlier chat text', () => {
+  await t.test('a REPORT owes no lens line: with the lines in the message, in chat beside it, or nowhere, it is sent', () => {
     const body = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
     const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
     const chat = { blocks: [{ type: 'text', text: LENS_SKIPS }] };
     const opts = { send: true, lint: false, editedFile: null };
-    const chatOnly = runWithResults(body, [{ handback: handBack('implementer') }, tested, chat], opts);
-    assert.equal(chatOnly.status, 2);
-    assert.match(chatOnly.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
-    assert.equal(runWithResults(`${body}\n${LENS_SKIPS}`, [{ handback: handBack('implementer') }, tested, chat], opts).status, 0);
-  });
-
-  await t.test('on a built window a lens run needs its findings line in the REPORT; a skip line alone does', () => {
-    const body = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
-    const tested = { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' };
-    const lensRuns = { blocks: LENS_AGENTS };
-    const opts = { send: true, lint: false, editedFile: null };
-    const runOnly = runWithResults(body, [{ handback: handBack('implementer') }, tested, lensRuns], opts);
-    assert.equal(runOnly.status, 2);
-    assert.match(runOnly.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
-    assert.equal(runWithResults(`${body}\nreuse-analyzer: 0 findings\nplacement-analyzer: 2 findings`, [{ handback: handBack('implementer') }, tested, lensRuns], opts).status, 0);
+    assert.equal(runWithResults(body, [{ handback: handBack('implementer') }, tested, chat], opts).status, 0);
     assert.equal(runWithResults(`${body}\n${LENS_SKIPS}`, [{ handback: handBack('implementer') }, tested], opts).status, 0);
+    assert.equal(runWithResults(body, [{ handback: handBack('implementer') }, tested], opts).status, 0);
+    assert.equal(runWithResults(body, [{ handback: handBack('implementer') }], opts).status, 2);
   });
 
   await t.test('a REPORT with no build and no scratchpad path is blocked for the missing raw output alone', () => {
@@ -98,7 +86,7 @@ test('done-claim gate: report', async (t) => {
     const { status, stderr } = runFull(body, opts);
     assert.equal(status, 2);
     assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
+    assert.doesNotMatch(stderr, /REVIEW/);
   });
 
   await t.test('a REPORT answering a STOP, with nothing built since the last REPORT, is quiet but still needs its raw output', () => {
@@ -146,14 +134,13 @@ test('done-claim gate: report', async (t) => {
     assert.equal(runWithResults(report, [{ handback: handBack('implementer') }, blocked], opts).status, 2);
     const checked = [{ handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }, blocked];
     const reworded = runWithResults(`[REPORT demo step 1] Step 1 built and checked.\n${RAW_OUTPUT}`, checked, { ...opts, lint: true });
-    assert.equal(reworded.status, 2);
-    assert.match(reworded.stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:/);
+    assert.equal(reworded.status, 0, reworded.stderr);
     const delivered = { sent: report, output: 'Message sent to planner-1' };
     const afterDelivery = runWithResults(`[REPORT demo step 2] Nothing built since step 1.\n${RAW_OUTPUT}`, [{ handback: handBack('implementer') }, delivered], opts);
     assert.equal(afterDelivery.status, 0, afterDelivery.stderr);
   });
 
-  await t.test('a REPORT is reviewed by the lenses of the files changed since the previous REPORT commit, not the branch', () => {
+  await t.test('a REPORT owes the impeccable audit for the styling changed since the previous REPORT commit, not the branch', () => {
     const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
     const git = (...args) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' }).stdout.trim();
     const commit = (file, subject) => {
@@ -164,13 +151,12 @@ test('done-claim gate: report', async (t) => {
       return `[master ${git('rev-parse', '--short', 'HEAD')}] ${subject}`;
     };
     git('init', '-q');
-    const step1Output = commit('src/a.tsx', 'step 1');
+    const step1Output = commit('src/a.css', 'step 1');
     const step2Output = commit('docs/b.md', 'step 2');
-    const report = `[REPORT demo step 2] Step 2 built.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings\n${RAW_OUTPUT}`;
+    const report = `[REPORT demo step 2] Step 2 built.\n${RAW_OUTPUT}`;
     const delivered = { sent: '[REPORT demo step 1] Step 1 built.', output: 'Message sent to planner-1' };
     const step2 = [
       { handback: handBack('implementer') },
-      { blocks: LENS_AGENTS },
       { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' },
       { command: 'git commit -m "step 2"', output: step2Output },
     ];
@@ -178,12 +164,12 @@ test('done-claim gate: report', async (t) => {
     const step1 = (output) => ({ command: 'git commit -m "step 1"', output });
     const branchWide = runWithResults(report, [step1(step1Output), ...step2], opts);
     assert.equal(branchWide.status, 2);
-    assert.match(branchWide.stderr, /REVIEW NOT RUN for react-best-practices:/);
+    assert.match(branchWide.stderr, /IMPECCABLE NOT RUN/);
     const stepOnly = runWithResults(report, [step1(step1Output), delivered, ...step2], opts);
     assert.equal(stepOnly.status, 0, stepOnly.stderr);
     const unresolvable = runWithResults(report, [step1('[master deadbee] step 1'), delivered, ...step2], opts);
     assert.equal(unresolvable.status, 2);
-    assert.match(unresolvable.stderr, /REVIEW NOT RUN for react-best-practices:/);
+    assert.match(unresolvable.stderr, /IMPECCABLE NOT RUN/);
   });
 
   const styledTurn = (runs) => {
@@ -208,8 +194,8 @@ test('done-claim gate: report', async (t) => {
     assert.equal(status, 0, stderr);
   });
 
-  await t.test('at Stop, a built step commit passes on a hand-pass lens line, with or without a sent REPORT, and blocks with no lens line', () => {
-    const report = `[REPORT demo step 1] Step 1 built.\n${LENS_SKIPS}\n${RAW_OUTPUT}`;
+  await t.test('at Stop, a built step commit owes no lens line: it passes with or without a sent REPORT', () => {
+    const report = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
     const runs = [
       { handback: handBack('implementer') },
       { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' },
@@ -220,17 +206,16 @@ test('done-claim gate: report', async (t) => {
     const unreported = runWithResults('Committed as abc1234.', runs.filter((r) => !r.sent));
     assert.equal(unreported.status, 0, unreported.stderr);
     const noLensLine = runFull('Committed as abc1234.', { editedFile: null, lint: false, handback: handBack('implementer'), bashCommand: 'git commit -m x' });
-    assert.equal(noLensLine.status, 2);
-    assert.match(noLensLine.stderr, /REVIEW NOT RUN for reuse-analyzer/);
+    assert.equal(noLensLine.status, 0, noLensLine.stderr);
   });
 
   await t.test('at Stop, a delivered REPORT closes the window and a blocked one keeps it', () => {
     const report = `[REPORT demo step 1] Step 1 built.\n${RAW_OUTPUT}`;
     const base = [{ handback: handBack('implementer') }, { command: 'git commit -m x', output: '' }];
     const opts = { lint: false, editedFile: null };
-    const blocked = runWithResults('Done: step 1 committed.', [...base, { sent: report, isError: true, output: 'PreToolUse:SendMessage hook error: REVIEW NOT RUN' }], opts);
+    const blocked = runWithResults('Done: step 1 committed.', [...base, { sent: report, isError: true, output: 'PreToolUse:SendMessage hook error: DONE-CLAIM WITHOUT EVIDENCE' }], opts);
     assert.equal(blocked.status, 2);
-    assert.match(blocked.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
+    assert.match(blocked.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
     const delivered = runWithResults('Done: step 1 committed.', [...base, { sent: report, output: 'Message sent to planner-1' }], opts);
     assert.equal(delivered.status, 0, delivered.stderr);
   });
@@ -298,27 +283,24 @@ test('done-claim gate: report', async (t) => {
     assert.match(claim.stderr, /DONE-CLAIM OVER A FAILED RUN/);
   });
 
-  await t.test('a compaction summary is not a typed prompt, so it keeps the lens dispatches', () => {
+  await t.test('a compaction summary is not a typed prompt, so it keeps the window\'s hand-back and its learn pass owed', () => {
     const compaction = { type: 'user', isCompactSummary: true, message: { content: 'This session is being continued from a previous conversation.' } };
-    const built = (between) => [{ blocks: LENS_AGENTS }, between, { handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }];
+    const built = (between) => [{ handback: handBack('implementer') }, between, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0' }];
     const opts = { lint: false, editedFile: null };
     const typed = runWithResults('Done: step built.', built({ prompt: 'next' }), opts);
-    assert.equal(typed.status, 2);
-    assert.match(typed.stderr, /REVIEW NOT RUN for reuse-analyzer:/);
-    const compacted = runWithResults(`Done: step built.\n${LEARN_SKIP}`, built({ record: compaction }), opts);
-    assert.doesNotMatch(compacted.stderr, /REVIEW NOT RUN/);
-    assert.equal(compacted.status, 0, compacted.stderr);
+    assert.equal(typed.status, 0, typed.stderr);
+    const compacted = runWithResults('Done: step built.', built({ record: compaction }), opts);
+    assert.equal(compacted.status, 2);
+    assert.match(compacted.stderr, /LEARN NOT RUN/);
   });
 
   const stamp = (seconds = 0) => new Date(Date.UTC(2099, 0, 1, 0, 0, seconds)).toISOString();
   const sourceLines = (count) => Array.from({ length: count }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
-  const AGENT_MEMBERS = ['code-reviewer', 'silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'adversarial-reviewer'];
-  const SKILL_MEMBERS = ['delete-list', 'security-review'];
-  const BIG_NAMES = 'silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer, security-review';
+  const AGENT_MEMBERS = ['code-reviewer', 'silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer'];
+  const BIG_NAMES = 'silent-failure-hunter, type-design-analyzer, placement-analyzer, adversarial-reviewer';
   const NOT_RUN = /REVIEW AGENTS NOT RUN for ([^:]+):/;
-  const agentRuns = (timestamp, members = AGENT_MEMBERS) => ({ blocks: members.map((member) => ({ type: 'tool_use', id: `run-${member}`, name: 'Agent', input: { subagent_type: member, description: 'review', prompt: 'review', effort: 'low' } })), timestamp });
-  const skillRuns = (timestamp, members = SKILL_MEMBERS) => ({ blocks: members.map((member) => ({ type: 'tool_use', id: `skill-${member}`, name: 'Skill', input: { skill: member } })), timestamp });
-  const feedback = () => ({ record: { type: 'user', isMeta: true, message: { content: 'Stop hook feedback:\n[bash …/done-claim-gate.sh]: REVIEW AGENTS NOT RUN for delete-list: source written in this session still owes each a run.' } } });
+  const agentRuns = (timestamp, members = AGENT_MEMBERS) => ({ blocks: members.map((member) => ({ type: 'tool_use', id: `run-${member}`, name: 'Agent', input: { subagent_type: member, description: 'review', prompt: 'review', effort: 'low' } })), timestamp, answered: true });
+  const feedback = () => ({ record: { type: 'user', isMeta: true, message: { content: 'Stop hook feedback:\n[bash …/done-claim-gate.sh]: REVIEW AGENTS NOT RUN for placement-analyzer: source written in this session still owes each a run.' } } });
 
   // Each step is built by an implementer whose agent transcript writes `stepLines[i]` lines; every step but the last is already delivered as a REPORT.
   const builderThread = (stepLines, lastStepRuns = []) => {
@@ -333,7 +315,7 @@ test('done-claim gate: report', async (t) => {
       return JSON.stringify({ type: 'assistant', timestamp: stamp(10 * (i + 1)), message: { content: [{ type: 'tool_use', id: `agent-write-${i}`, name: 'Write', input: { file_path: file, content: sourceLines(count) } }] } });
     });
     fs.writeFileSync(path.join(agentDir, 'agent-a1b2c3.jsonl'), writes.join('\n'));
-    const message = (i) => `[REPORT demo step ${i + 1}] Step ${i + 1} built.\n${LENS_SKIPS}\ndelete-list: skip — fixture files\n${RAW_OUTPUT}`;
+    const message = (i) => `[REPORT demo step ${i + 1}] Step ${i + 1} built.\n${RAW_OUTPUT}`;
     const stepRuns = (i) => [{ handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0', timestamp: stamp(10 * (i + 1) + 2) }];
     const runs = stepLines.flatMap((_, i) => (i < stepLines.length - 1
       ? [...stepRuns(i), { sent: message(i), output: 'Message sent to planner-1', timestamp: stamp(10 * (i + 1) + 3) }]
@@ -350,30 +332,31 @@ test('done-claim gate: report', async (t) => {
     assert.equal(res.status, 0, res.stderr);
   };
 
-  await t.test('a REPORT after 250 builder lines is refused for delete-list and security-review while the six agents ran; Skill calls send it', () => {
-    refusedFor(sendReport(builderThread([250], [agentRuns(stamp(21))])), 'delete-list, security-review');
-    sent(sendReport(builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))])));
-    refusedFor(sendReport(builderThread([250], [agentRuns(stamp(21)), agentRuns(stamp(22), SKILL_MEMBERS)])), 'delete-list, security-review');
+  await t.test('a REPORT after 250 builder lines is refused for the four Big members and never for code-reviewer; the four run after the write send it', () => {
+    refusedFor(sendReport(builderThread([250])), BIG_NAMES);
+    refusedFor(sendReport(builderThread([250], [agentRuns(stamp(21), AGENT_MEMBERS.slice(0, 4))])), 'adversarial-reviewer');
+    sent(sendReport(builderThread([250], [agentRuns(stamp(21), AGENT_MEMBERS.slice(1))])));
     sent(sendReport(builderThread([60])));
   });
 
   await t.test('four 60-line builder steps: the first three REPORTs are sent and the fourth is refused for the Big members; running them sends it', () => {
     for (const steps of [[60], [60, 60], [60, 60, 60]]) sent(sendReport(builderThread(steps)));
     refusedFor(sendReport(builderThread([60, 60, 60, 60])), BIG_NAMES);
-    sent(sendReport(builderThread([60, 60, 60, 60], [agentRuns(stamp(41)), skillRuns(stamp(42))])));
+    sent(sendReport(builderThread([60, 60, 60, 60], [agentRuns(stamp(41))])));
   });
 
-  await t.test('a REPORT after two blocks since the last delivered REPORT is still refused for the Big members in owed-files; run, it is sent', () => {
-    refusedFor(sendReport(builderThread([60, 250], [agentRuns(stamp(21))]), [feedback(), feedback()]), 'delete-list, security-review');
-    sent(sendReport(builderThread([60, 250], [agentRuns(stamp(21)), skillRuns(stamp(22))]), [feedback(), feedback()]));
+  await t.test('a REPORT after two blocks since the last delivered REPORT is refused as after none; run, it is sent', () => {
+    refusedFor(sendReport(builderThread([60, 250]), [feedback(), feedback()]), BIG_NAMES);
+    sent(sendReport(builderThread([60, 250], [agentRuns(stamp(21))]), [feedback(), feedback()]));
   });
 
-  await t.test('a Stop in a window a REPORT opened owes the Big members in owed-files once the window got a hand-back', () => {
-    const reply = 'Committed as abc1234.\ndelete-list: skip — fixture files';
+  await t.test('a Stop claim in a window a REPORT opened owes the four Big members once the window got a hand-back; a commit alone owes none', () => {
+    const claim = `Done: step 2 committed.\n${LEARN_SKIP}`;
     const commit = { command: 'git commit -m x', output: '', timestamp: stamp(25) };
-    refusedFor(stopAfter(builderThread([60, 250], [agentRuns(stamp(21))]), reply, [commit]), 'delete-list, security-review');
-    sent(stopAfter(builderThread([60, 250], [agentRuns(stamp(21)), skillRuns(stamp(22))]), reply, [commit]));
-    sent(stopAfter(builderThread([60, 60]), reply, [commit]));
+    refusedFor(stopAfter(builderThread([60, 250]), claim, [commit]), BIG_NAMES);
+    sent(stopAfter(builderThread([60, 250], [agentRuns(stamp(21))]), claim, [commit]));
+    sent(stopAfter(builderThread([60, 60]), claim, [commit]));
+    sent(stopAfter(builderThread([60, 250]), 'Committed as abc1234.', [commit]));
   });
 
   await t.test('a REPORT sent after a delivered STOP-answering REPORT, with no edit in its window, is refused for the Big members still unrun; run, it is sent', () => {
@@ -384,17 +367,15 @@ test('done-claim gate: report', async (t) => {
     ];
     const implementerRun = { blocks: [{ type: 'tool_use', id: 'dispatch-implementer', name: 'Agent', input: { subagent_type: 'implementer', description: 'build', prompt: 'build' } }], timestamp: stamp(5) };
     refusedFor(sendReport(builderThread([250]), [implementerRun, ...answered]), BIG_NAMES);
-    sent(sendReport(builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))]), [implementerRun, ...answered]));
+    sent(sendReport(builderThread([250], [agentRuns(stamp(21))]), [implementerRun, ...answered]));
   });
 
-  await t.test('the retry in a window a REPORT opened holds the Big members for a claim or one block; after two blocks only a claim holds them', () => {
+  await t.test('the retry in a window a REPORT opened holds the Big members for a claim whatever the block count; a reply that claims nothing passes', () => {
     const retry = (reply, blocks) => stopAfter(builderThread([60, 250]), reply, Array.from({ length: blocks }, feedback), true);
-    const claim = 'Done: step built.\ndelete-list: skip — fixture files';
-    const status = 'Findings are below.\ndelete-list: skip — fixture files';
-    refusedFor(retry(claim, 0), BIG_NAMES);
-    refusedFor(retry(status, 1), BIG_NAMES);
-    sent(retry(status, 2));
-    refusedFor(retry(claim, 2), BIG_NAMES);
+    refusedFor(retry('Done: step built.', 0), BIG_NAMES);
+    refusedFor(retry('Done: step built.', 2), BIG_NAMES);
+    sent(retry('Findings are below.', 0));
+    sent(retry('Findings are below.', 1));
   });
 
   await t.test('an edit-free REPORT after a step committed with a printed sha, on a clean tree, still owes the Big members; run, it is sent', () => {
@@ -414,17 +395,18 @@ test('done-claim gate: report', async (t) => {
     ];
     const second = (...reviews) => runWithResults(`[REPORT demo step 2] Nothing built since step 1.\n${RAW_OUTPUT}`, [write, agentRuns(stamp(2), ['code-reviewer']), ...reviews, committedStep, ...answered], { send: true, lint: false, editedFile: null, cwd: repo, since: stamp(0) });
     refusedFor(second(), BIG_NAMES);
-    sent(second(agentRuns(stamp(2)), skillRuns(stamp(2))));
+    sent(second(agentRuns(stamp(2))));
   });
 
-  await t.test('a REPORT on bulk work whose owed members all ran still owes its typed delete-list line', () => {
-    const thread = builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))]);
-    const noLine = { ...thread, message: thread.message.replace(/delete-list: skip.*\n/, '') };
-    const res = sendReport(noLine);
-    assert.equal(res.status, 2, res.stderr);
-    assert.match(res.stderr, /REVIEW NOT RUN for delete-list:/);
-    assert.doesNotMatch(res.stderr, NOT_RUN);
-    sent(sendReport(thread));
+  await t.test('a REPORT on bulk work whose owed members all ran is sent with no typed delete-list line', () => {
+    sent(sendReport(builderThread([250], [agentRuns(stamp(21))])));
+  });
+
+  await t.test('a REPORT answering a STOP over 300 uncovered builder lines is sent; the same REPORT with no STOP is refused for the Big members', () => {
+    const stopEnvelope = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[STOP demo] Stop after this step and report.\n</cross-session-message>';
+    const stopMsg = { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${stopEnvelope}` } } };
+    sent(sendReport(builderThread([300]), [stopMsg]));
+    refusedFor(sendReport(builderThread([300])), BIG_NAMES);
   });
 
   await t.test('an empty payload or an empty SendMessage passes', () => {

@@ -253,16 +253,12 @@ test('inject-once hook', async (t) => {
     assert.equal(results.filter((r) => r.stdout !== '').length, 1);
   });
 
-  await t.test('compaction resets the flag so the doc injects again, nudge counters kept', () => {
+  await t.test('compaction resets the flag so the doc injects again', () => {
     const sid = newSession();
-    const counter = `/tmp/claude-review-lenses-${sid}`;
-    fs.writeFileSync(counter, '3');
     run('subagent-tiers.md', call(sid, 'agent-a'));
     const reset = spawnSync('bash', [path.resolve(__dirname, '..', 'hooks', 'reset-context-flags.sh')], { input: JSON.stringify({ session_id: sid }), encoding: 'utf8' });
     assert.equal(reset.status, 0);
     assert.match(context(run('subagent-tiers.md', call(sid, 'agent-a'))), /subagent-tiers\.md — injected once/);
-    assert.ok(fs.existsSync(counter));
-    fs.rmSync(counter);
   });
 
   await t.test("compaction clears the session's Hydrogen section flags only", () => {

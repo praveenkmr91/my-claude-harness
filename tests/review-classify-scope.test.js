@@ -13,9 +13,9 @@ test('review-classify scopes the edited file', async (t) => {
     'b.ts': ['export const b = 1;\n', 'export const b = 1;\nexport const b2 = 2;\nexport const b3 = 3;\nexport const b4 = 4;\n'],
   };
 
-  await t.test('payload file_path scopes the first edit to that file', () => {
+  await t.test('payload file_path no longer scopes: the dirty tree stays in scope', () => {
     const out = joinsForEdit({ files, payload: (repo) => ({ tool_input: { file_path: path.join(repo, 'b.ts') } }) });
-    assert.match(out, / added=3 /);
+    assert.match(out, / added=5 /);
   });
 
   await t.test('payload without file_path leaves the dirty tree in scope', () => {
@@ -117,7 +117,13 @@ test('review-classify on bytes outside ASCII', async (t) => {
     const name = 'Årsrapport.ts';
     const files = { [name]: ['export const a = 1;\n', 'export const a = b ?? 1;\n'] };
     // The collation crash this guards only exists under a UTF-8 locale.
-    const out = joinsForEdit({ files, locale: 'en_US.UTF-8', payload: (repo) => ({ tool_input: { file_path: path.join(repo, name) } }) });
+    const transcript = path.join(tmpDir, 'edit-aring.jsonl');
+    const payload = (repo) => {
+      const edit = { type: 'assistant', timestamp: '2020-01-01T00:00:00.000Z', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(repo, name), old_string: 'x', new_string: files[name][1] } }] } };
+      fs.writeFileSync(transcript, `${JSON.stringify(edit)}\n`);
+      return { transcript_path: transcript };
+    };
+    const out = joinsForEdit({ files, locale: 'en_US.UTF-8', payload });
     assert.match(out, /lenses=\S*silent-failure-hunter/);
   });
 

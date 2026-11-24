@@ -5,39 +5,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { HOOK_PATH, tmpDir, BASE_VERDICTS, nextSeq, run, runFull } = require('./helpers/done-claim-gate');
+const { HOOK_PATH, tmpDir, BASE_VERDICTS, CODE_REVIEW, nextSeq, scratchRepo, run, runFull } = require('./helpers/done-claim-gate');
 
 test('done-claim gate: lenses', async (t) => {
-  await t.test('names only the lenses without a verdict line or a run', () => {
-    const ask = 'Diff is above.\nSay yes and I will commit.';
-    const { status, stderr } = runFull(`reuse-analyzer: 0 findings\n${ask}`);
-    assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for placement-analyzer:/);
-    const placementAgent = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'placement-analyzer' } };
-    assert.equal(run(`reuse-analyzer: 0 findings\n${ask}`, { reviews: [placementAgent] }), 0);
-  });
-
-  await t.test('a skip without a reason, or a bare definition Read, is not a verdict', () => {
-    const ask = 'Diff is above.\nSay yes and I will commit.';
-    assert.equal(run(`reuse-analyzer: skip\nplacement-analyzer: skip —\n${ask}`), 2);
-    const reads = ['reuse-analyzer', 'placement-analyzer'].map((name) => ({ type: 'tool_use', name: 'Read', input: { file_path: `/Users/x/.claude/agents/${name}.md` } }));
-    assert.equal(run(ask, { reviews: reads }), 2);
-  });
-
-  await t.test('a lens verdict is accepted in bold, backtick and bullet label forms and with no findings', () => {
-    const ask = 'Diff is above.\nSay yes and I will commit.';
-    for (const verdicts of [
-      '- **reuse-analyzer:** no findings. The path filter extends the existing hook.\n`placement-analyzer`: 0 findings',
-      'reuse-analyzer: no findings\n* **placement-analyzer**: skipped. Single-file change.',
-      '`reuse-analyzer:` 2 findings\nplacement-analyzer: skip: nothing moved',
-    ]) {
-      assert.equal(run(`${verdicts}\n${ask}`), 0, verdicts);
+  await t.test('typed lens lines, skipped or not, change nothing: over unreviewed code a claim with none, all or hand-written ones is blocked alike, and a code-reviewer run clears it', () => {
+    const built = { bashCommand: 'node --test tests/*.test.js', cwd: scratchRepo(), written: 30 };
+    for (const verdicts of ['', `\n${BASE_VERDICTS}`, '\nreuse-analyzer: looks fine\nplacement-analyzer: skipped']) {
+      const { status, stderr } = runFull(`Done: the edits landed.${verdicts}`, built);
+      assert.equal(status, 2, stderr);
+      assert.match(stderr, /REVIEW AGENTS NOT RUN for code-reviewer:/);
     }
-  });
-
-  await t.test('a lens name followed by prose is not a verdict', () => {
-    const ask = 'Diff is above.\nSay yes and I will commit.';
-    assert.equal(run(`reuse-analyzer: looks fine\nplacement-analyzer: skipped\n${ask}`), 2);
+    assert.equal(run('Done: the edits landed.', { ...built, reviews: [CODE_REVIEW] }), 0);
   });
 
   await t.test('verdict lines do not mask the first-line claim or the last-line commit ask', () => {
@@ -45,26 +23,21 @@ test('done-claim gate: lenses', async (t) => {
     assert.equal(status, 2);
     assert.match(stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
     assert.equal(run(`Diff is above.\nSay yes and I will commit.\n${BASE_VERDICTS}`), 0);
-    assert.match(runFull(`Diff is above.\nSay yes and I will commit.\nreuse-analyzer: 0 findings`).stderr, /asks to commit/);
+    assert.match(runFull(`Diff is above.\nSay yes and I will commit.\nreuse-analyzer: 0 findings`, { lint: false }).stderr, /asks to commit/);
   });
 
-  await t.test('requires the content-signalled reviewer, satisfied by its plugin agent', () => {
+  await t.test('a styled turn owes the impeccable audit at its claim, never at a commit ask', () => {
     const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
-    fs.writeFileSync(path.join(repo, 'api.ts'), 'p.catch(() => null);');
+    fs.writeFileSync(path.join(repo, 'a.css'), '.a { color: red; }\n');
     spawnSync('git', ['init', '-q'], { cwd: repo });
-    const ask = 'Diff is above.\nSay yes and I will commit.';
-    assert.match(runFull(`${BASE_VERDICTS}\n${ask}`, { cwd: repo }).stderr, /REVIEW NOT RUN for silent-failure-hunter:/);
-    const hunter = { type: 'tool_use', name: 'Agent', input: { subagent_type: 'pr-review-toolkit:silent-failure-hunter' } };
-    assert.equal(run(`${BASE_VERDICTS}\n${ask}`, { cwd: repo, reviews: [hunter] }), 0);
-  });
-
-  await t.test('names the verb the classifier picks for the repo', () => {
-    const repo = fs.mkdtempSync(path.join(tmpDir, 'repo-'));
-    fs.mkdirSync(path.join(repo, 'src', 'auth'), { recursive: true });
-    fs.writeFileSync(path.join(repo, 'src', 'auth', 'useAuth.ts'), '');
-    spawnSync('git', ['init', '-q'], { cwd: repo });
-    const { stderr } = runFull('Diff is above.\nSay yes and I will commit.', { cwd: repo });
-    assert.match(stderr, /`harden` pass/);
+    const styled = { cwd: repo, editedFile: path.join(repo, 'a.css'), lint: false };
+    const claim = runFull('Done: the styling landed.', { ...styled, bashCommand: 'node --test tests/*.test.js' });
+    assert.equal(claim.status, 2);
+    assert.match(claim.stderr, /IMPECCABLE NOT RUN/);
+    const audit = { type: 'tool_use', name: 'Skill', input: { skill: 'impeccable:impeccable' } };
+    assert.equal(run('Done: the styling landed.', { ...styled, bashCommand: 'node --test tests/*.test.js', reviews: [audit] }), 0);
+    assert.equal(runFull('Diff is above.\nSay yes and I will commit.', styled).status, 0);
+    assert.equal(runFull('Committed as abc1234.', { ...styled, bashCommand: 'git commit -m x' }).status, 0);
   });
 
   await t.test('ignores the noun form of "passes"', () => {

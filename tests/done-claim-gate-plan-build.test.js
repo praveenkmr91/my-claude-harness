@@ -7,8 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
-  HOOK_PATH, tmpDir, BASE_VERDICTS, LENS_SKIPS, LEARN_SKIP, RAW_OUTPUT, LENS_AGENTS,
-  handBack, handBackAttachment, repoWith, nextSeq, run, runFull, runWithResults,
+  HOOK_PATH, tmpDir, LENS_SKIPS, LEARN_SKIP, RAW_OUTPUT, LENS_AGENTS,
+  CODE_REVIEW, handBack, handBackAttachment, repoWith, scratchRepo, nextSeq, run, runFull, runWithResults,
 } = require('./helpers/done-claim-gate');
 
 test('done-claim gate: plan build', async (t) => {
@@ -118,18 +118,18 @@ test('done-claim gate: plan build', async (t) => {
     assert.equal(status, 0, stderr);
   });
 
-  await t.test('reads verdicts from last_assistant_message when the transcript lags', () => {
+  await t.test('reads the claim from last_assistant_message when the transcript lags', () => {
     const transcriptPath = path.join(tmpDir, `t${nextSeq()}.jsonl`);
     fs.writeFileSync(transcriptPath, [
       { type: 'user', message: { content: 'go' } },
-      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/repo/src/app.ts' } }, { type: 'tool_use', name: 'Bash', input: { command: 'pnpm lint && node --test && git commit -m x' } }] } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/repo/src/app.ts' } }, { type: 'tool_use', name: 'Bash', input: { command: 'pnpm lint && git commit -m x' } }] } },
     ].map((e) => JSON.stringify(e)).join('\n'));
     const payload = (extra) => JSON.stringify({ transcript_path: transcriptPath, ...extra });
-    assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({}), encoding: 'utf8' }).status, 2);
-    assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({ last_assistant_message: `Done: edits landed.\n${BASE_VERDICTS}` }), encoding: 'utf8' }).status, 0);
+    assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({}), encoding: 'utf8' }).status, 0);
+    assert.equal(spawnSync('bash', [HOOK_PATH], { input: payload({ last_assistant_message: 'Done: edits landed.' }), encoding: 'utf8' }).status, 2);
   });
 
-  await t.test('an implementer hand-back counts as a code change: the claim needs evidence and every lens', () => {
+  await t.test('an implementer hand-back counts as a code change: the claim needs evidence', () => {
     for (const handback of [handBack('implementer'), handBackAttachment('implementer')]) {
       const { status, stderr } = runFull('Done: step 1 landed.', { editedFile: null, handback });
       assert.equal(status, 2);
@@ -140,32 +140,33 @@ test('done-claim gate: plan build', async (t) => {
     assert.equal(run('Done: step 1 landed.', { editedFile: null, handback: handBackAttachment('checker') }), 0);
   });
 
-  await t.test('in a plan build a done-claim with hand-written findings lines stays blocked; a skip with a reason passes', () => {
+  await t.test('in a plan build a done-claim reads no lens line: only /learn is strict, and a learn skip with a reason clears it', () => {
     const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js' };
     const { status, stderr } = runFull('Done: step 1 landed.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', built);
     assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*on a done-claim or shipping commit in a plan build a hand pass does not count/);
-    assert.equal(run(`Done: step 1 landed.\n${LENS_SKIPS}\n${LEARN_SKIP}`, built), 0);
+    assert.match(stderr, /LEARN NOT RUN/);
+    assert.doesNotMatch(stderr, /REVIEW/);
+    assert.equal(run(`Done: step 1 landed.\n${LEARN_SKIP}`, built), 0);
   });
 
-  await t.test('in a plan build a first line opening "Step N" is a step claim and passes on hand-pass lens lines', () => {
+  await t.test('in a plan build a first line opening "Step N" is a step claim: no learn pass, where the same words after "Done:" owe one', () => {
     const built = { editedFile: null, handback: handBack('implementer'), bashCommand: 'node --test tests/*.test.js' };
-    const handPass = 'reuse-analyzer: 0 findings\nplacement-analyzer: 0 findings';
-    assert.equal(run(`Step 1 passes verify: 3,057 tests green.\n${handPass}`, built), 0);
-    assert.equal(run(`**Step 3** is built and passes the full verify.\n${handPass}`, built), 0);
-    const { status, stderr } = runFull('Step 2 passes verify.', built);
+    assert.equal(run('Step 1 passes verify: 3,057 tests green.', built), 0);
+    assert.equal(run('**Step 3** is built and passes the full verify.', built), 0);
+    const { status, stderr } = runFull('Done: step 2 passes verify.', built);
     assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer/);
-    assert.doesNotMatch(stderr, /hand pass does not count/);
+    assert.match(stderr, /LEARN NOT RUN/);
   });
 
-  await t.test('a shipping commit that deletes the repo plan file needs each lens dispatched or skipped, with no hand-back', () => {
-    const ship = { editedFile: null, lint: false, bashCommand: 'git rm docs/plans/demo.md && git commit -m ship' };
-    const { status, stderr } = runFull('Shipped.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', ship);
+  await t.test('a shipping commit that deletes the repo plan file owes /learn; one that deletes another file does not', () => {
+    const ship = { editedFile: null, cwd: scratchRepo(), written: 30, reviews: [CODE_REVIEW], bashCommand: 'git rm docs/plans/demo.md && git commit -m ship' };
+    const { status, stderr } = runFull('Shipped.', ship);
     assert.equal(status, 2);
-    assert.match(stderr, /REVIEW NOT RUN for reuse-analyzer, placement-analyzer:[\s\S]*shipping commit in a plan build a hand pass does not count/);
-    assert.equal(run(`Shipped.\n${LEARN_SKIP}`, { ...ship, reviews: LENS_AGENTS }), 0);
-    assert.equal(run('Shipped.\nreuse-analyzer: 0 findings\nplacement-analyzer: 0 findings', { ...ship, bashCommand: 'git rm docs/notes.md && git commit -m x' }), 0);
+    assert.match(stderr, /LEARN NOT RUN/);
+    assert.doesNotMatch(stderr, /REVIEW/);
+    assert.match(runFull('Shipped.', { ...ship, reviews: [] }).stderr, /REVIEW AGENTS NOT RUN/);
+    assert.equal(run(`Shipped.\n${LEARN_SKIP}`, ship), 0);
+    assert.equal(run('Shipped.', { ...ship, bashCommand: 'git rm docs/notes.md && git commit -m x' }), 0);
   });
 
   await t.test('a plan build done-claim or shipping commit needs one /learn pass in the transcript, or a learn skip line', () => {

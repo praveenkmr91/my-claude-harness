@@ -208,11 +208,6 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/hydrogen-util-guard.sh",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/review-lens-nudge.sh",
-            "timeout": 8
           }
         ]
       },

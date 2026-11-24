@@ -164,7 +164,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/block-dangerous-git.sh', /co-authored-by/i, 'committing.md', /Co-Authored-By/],
     ['hooks/commit-trailer-check.sh', /co-authored-by/i, 'committing.md', /commit-trailer-check\.sh/],
     ['hooks/block-dangerous-git.sh', /push and PR need a yes/, 'committing.md', /`gh pr create` hook-asked/],
-    ['hooks/done-claim-gate.sh', /ran git commit/, 'committing.md', /Stop gate checks lint and lenses on any committing turn/],
+    ['hooks/done-claim-gate.sh', /ran git commit/, 'committing.md', /Stop gate checks lint on any committing turn/],
     ['hooks/enforce-subagent-model.sh', /is review\/planning work/, 'subagent-tiers.md', /denied for review\/planning agents \(one exception/],
     ['hooks/enforce-subagent-model.sh', /= "Explore" \] && inject "haiku"/, 'subagent-tiers.md', /\| Explore \| Haiku always/],
     ['hooks/enforce-subagent-model.sh', /is_brain_agent" = true \][\s\S]*inject "opus"/, 'subagent-tiers.md', /sub-Opus session the hook injects opus/],
@@ -183,12 +183,11 @@ test.describe('rule and hook agree', () => {
     ['hooks/comment-delta-check.js', /when to upgrade/, 'code-craft.md', /when to upgrade/],
     ['hooks/comment-delta-check.js', /until\|once\|when\|upgrade\|revisit\|lands\?\|replaced\?\|before/, 'commands/shortcut-debt.md', /until\|once\|when\|upgrade\|revisit\|lands\?\|replaced\?\|before/],
     ['hooks/agent-file-scope.sh', /wrote outside the files its brief named/, 'code-craft.md', /Surgical on build tasks/],
-    ['hooks/done-claim-gate.sh', /REVIEW NOT RUN/, 'review-routing.md', /Stop gate blocks/],
+    ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-routing.md', /Stop gate blocks/],
     ['hooks/done-claim-gate.sh', /'Pass'/, 'review-routing.md', /`Pass: <verb>`/],
     ['hooks/done-claim-gate.sh', /LINT\/TSC NOT RUN/, 'CLAUDE.md', /run linter \+ type checker/],
     ['hooks/block-dangerous-git.sh', /updatedInput/, 'CLAUDE.md', /auto-quotes unquoted/],
     ['hooks/audit-due.sh', /--stamp/, 'review-routing.md', /audit-due\.sh --stamp/],
-    ['hooks/review-lens-nudge.sh', /Review lenses for this change/, 'review-routing.md', /nudge the lens list mid-turn/],
     ['hooks/review-classify.py', /' effort=%s' % effort/, 'review-routing.md', /`effort=` on the joins line/],
     ['hooks/bash-write-guard.js', /Use Write or Edit/, 'harness.md', /bash-write-guard\.js` blocks them/],
     ['hooks/docs-context.sh', /library-docs\.md/, 'CLAUDE.md', /cites `pkg@x\.y\.z`/],
@@ -206,13 +205,13 @@ test.describe('rule and hook agree', () => {
     ['hooks/step-gate.sh', /handed back with no/, 'plan-build.md', /step-gate\.sh/],
     ['hooks/step-gate.sh', /handed back with no/, 'README.md', /step-gate\.sh/],
     ['hooks/done-claim-gate.sh', /REPORT WITHOUT RAW OUTPUT/, 'peer-sessions.md', /done-claim-gate\.sh refuses the send/],
-    ['hooks/done-claim-gate.sh', /the lens lines go in the message itself/, 'README.md', /refuses a REPORT send/],
-    ['hooks/done-claim-gate.sh', /a hand pass does not count/, 'review-routing.md', /hand-written findings line does not count/],
+    ['hooks/done-claim-gate.sh', /the raw output of the checks goes in the message itself/, 'README.md', /blocks a "done" claim, a REPORT send/],
+    ['hooks/done-claim-gate.sh', /a typed findings or skip line does not count/, 'review-routing.md', /a typed findings, skip or hand-pass line clears nothing/],
     ['hooks/done-claim-gate.sh', /IMPECCABLE NOT RUN/, 'review-routing.md', /\/impeccable audit <files>/],
     ['hooks/done-claim-gate.sh', /LEARN NOT RUN/, 'review-routing.md', /one `\/learn` pass per build session/],
     ['hooks/review-classify.py', /code-added=%d required=%s/, 'review-routing.md', /`required=`/],
     ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-battery.md', /## Required members/],
-    ['hooks/review-classify.py', /^BIG_MEMBERS = \('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'delete-list', 'adversarial-reviewer', 'security-review'\)$/m, 'review-battery.md', /\*\*Big\.\*\* .*silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer and security-review/],
+    ['hooks/review-classify.py', /^BIG_MEMBERS = \('silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer', 'security-review'\)$/m, 'review-battery.md', /\*\*Big\.\*\* .*silent-failure-hunter and type-design-analyzer unsignalled, plus placement-analyzer and adversarial-reviewer; security-review joins/],
     ['hooks/enforce-subagent-model.sh', /names its effort/, 'subagent-tiers-enforcement.md', /with no `effort`/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
@@ -235,14 +234,13 @@ test('eval-run.sh: the cold-read brief grep yields the brief without the dispatc
   assert.doesNotMatch(brief, /dispatch prompt/, 'the brief must not carry the dispatch-prompt rule');
 });
 
-test('reset-context-flags.sh: every hook flag is reset on compaction or is a nudge counter', () => {
+test('reset-context-flags.sh: every hook flag is reset on compaction', () => {
   const reset = read('hooks/reset-context-flags.sh');
-  const counters = ['claude-review-lenses'];
   const prefixes = new Set();
   for (const script of HOOK_SCRIPTS) {
     for (const m of read(`hooks/${script}`).matchAll(/\/tmp\/(claude-[a-z-]+?)-\$/g)) prefixes.add(m[1]);
   }
-  const unreset = [...prefixes].filter((p) => !reset.includes(`/tmp/${p}-`) && !counters.some((c) => p.startsWith(c)));
+  const unreset = [...prefixes].filter((p) => !reset.includes(`/tmp/${p}-`));
   assert.deepEqual(unreset, [], 'a new context-injection flag must be cleared in reset-context-flags.sh');
 });
 

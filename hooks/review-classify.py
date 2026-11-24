@@ -1,5 +1,5 @@
-# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_cutoff, the stamp that opens the claiming window, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, code-added=, required= and owed-files= — keep those keys.
-# Big rule: required= also lists silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer and security-review, each owed at 20+ non-test lines when they reach 200 or a path is high-risk; a member's lines count until one of its runs is shown the file. delete-list and security-review run as main-thread Skill calls, the rest as agents.
+# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_scope=report for a REPORT, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, code-added=, required= and owed-files= — keep those keys.
+# required= is the only clearing path: a write to a code file outside TEST_FILE_ANY is cleared for a member by a finished, non-errored main-thread run of that member started after the write and shown the file; every run up to this call counts. code-reviewer is owed at 20+ uncleared lines, silent-failure-hunter and type-design-analyzer at 20+ when their own uncleared web text holds their signal, and those two plus placement-analyzer and adversarial-reviewer when the 20+ reach 200 or a path is high-risk; security-review is owed at 20+ lines only with a high-risk path. security-review runs as a main-thread Skill call, the rest as agents. review_scope=report lists only the members the Big rule owes. owed-files= names each owed member's uncleared files.
 import functools
 import glob
 import json
@@ -55,8 +55,9 @@ COMMENT_LINE = rx(r'^\s*(//|/\*|\*)')
 LEGACY_SYNTAX = rx(r'(^|[^.\w$])var\s|\.indexOf\([^)]*\)\s*[!=<>]=*\s*-1|Object\.assign\(\s*\{\}|\.apply\(\s*(this|null)|\.substr\(|(^|[^.\w$])require\(')
 # Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
 CODE_PATHSPEC = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs', '*.vue', ':!*.test.*', ':!*.spec.*', ':!**/__tests__/**', ':!tests/**']
-BIG_MEMBERS = ('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'delete-list', 'adversarial-reviewer', 'security-review')
-SKILL_MEMBERS = ('delete-list', 'security-review')
+BIG_MEMBERS = ('silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer', 'security-review')
+OWED_MEMBERS = ('code-reviewer',) + BIG_MEMBERS
+SKILL_MEMBERS = ('security-review',)
 
 
 def run(program, *args):
@@ -121,24 +122,44 @@ def pr_target(prompt_lines):
     return ''
 
 
-def scan_transcript(top, cutoff, main):
+def scan_transcript(top, main):
     top = os.path.realpath(top)
     # Default macOS volumes ignore case; elsewhere two spellings differing in case are two paths.
     fold = str.lower if sys.platform == 'darwin' else str
     NEEDLE = re.compile(rb'"name":"(?:Write|Edit|MultiEdit|Agent|Task|Skill)"|"is_error":true')
+    RESULT_ID = re.compile(rb'"tool_use_id":"([^"]+)"')
+    NOTICE = re.compile(r'<tool-use-id>([^<]+)</tool-use-id>.*?<status>([a-z]+)</status>', re.S)
+    BACKGROUND_NOTE = 'Async agent launched successfully'
     # Twin of `agent_id` in done-claim-gate.sh, narrowed to a filename-safe id.
     AGENT_ID = re.compile(r'agentId: ([A-Za-z0-9_-]+)')
     # Twin of `code` in done-claim-gate.sh.
     CODE = re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
     WEB = re.compile(r'\.(ts|tsx|js|jsx|mjs|cjs|vue)$')
-    TESTISH = re.compile(r'\.(test|spec)\.|__tests__/|^tests/')
     WORKTREE_PREFIX = re.compile(r'^\.claude/worktrees/[^/]+/')
     agent_dir = os.path.splitext(main)[0] + '/subagents'
     subagents = glob.escape(agent_dir)
+    agent_members = tuple(member for member in OWED_MEMBERS if member not in SKILL_MEMBERS)
+
+    def member_of(name, inp):
+        by_skill = name == 'Skill'
+        kind = ((inp.get('skill') if by_skill else inp.get('subagent_type')) or '').rsplit(':', 1)[-1]
+        return kind if name in ('Agent', 'Task', 'Skill') and kind in (SKILL_MEMBERS if by_skill else agent_members) else ''
+
     since = ''
     calls = []
     failed = set()
     agent_ids = {}
+    # A reviewer's result and a background run's notification carry no NEEDLE marker, so they are found by call id.
+    reviewers = set()
+    answered = set()
+    background = set()
+    completed = set()
+    # A failed or stopped background run resumed through SendMessage reports `completed` under the SendMessage's call id.
+    resumed = {}
+
+    def answers_reviewer(raw):
+        return bool(reviewers) and b'"tool_result"' in raw and any(call_id.decode() in reviewers for call_id in RESULT_ID.findall(raw))
+
     for path in [main] + sorted(glob.glob(subagents + '/agent-*.jsonl')):
         is_main = path == main
         try:
@@ -147,7 +168,7 @@ def scan_transcript(top, cutoff, main):
             continue
         with f:
             for raw in f:
-                hit = NEEDLE.search(raw) or (is_main and b'agentId: ' in raw)
+                hit = NEEDLE.search(raw) or (is_main and (b'agentId: ' in raw or b'<task-notification>' in raw or b'"name":"SendMessage"' in raw or answers_reviewer(raw)))
                 if not (hit or (is_main and not since)):
                     continue
                 try:
@@ -157,33 +178,45 @@ def scan_transcript(top, cutoff, main):
                 if is_main and not since:
                     since = rec.get('timestamp') or ''
                 content = (rec.get('message') or {}).get('content')
+                if is_main:
+                    attachment = rec.get('attachment')
+                    notice = content if isinstance(content, str) else attachment.get('prompt') if isinstance(attachment, dict) else None
+                    if isinstance(notice, str) and notice.lstrip().startswith('<task-notification>'):
+                        notified = NOTICE.search(notice)
+                        if notified and notified.group(2) == 'completed':
+                            completed.add(resumed.get(notified.group(1), notified.group(1)))
+                        continue
                 if not (hit and isinstance(content, list)):
                     continue
                 for block in content:
                     if not isinstance(block, dict):
                         continue
                     if rec.get('type') == 'user' and block.get('type') == 'tool_result':
+                        call_id = block.get('tool_use_id')
                         if block.get('is_error'):
-                            failed.add(block.get('tool_use_id'))
+                            failed.add(call_id)
                         elif is_main:
-                            found = AGENT_ID.findall(result_text(block.get('content')))
-                            if found and isinstance(block.get('tool_use_id'), str):
-                                agent_ids[block['tool_use_id']] = found[-1]
+                            text = result_text(block.get('content'))
+                            found = AGENT_ID.findall(text)
+                            if found and isinstance(call_id, str):
+                                agent_ids[call_id] = found[-1]
+                            if call_id in reviewers:
+                                answered.add(call_id)
+                                if BACKGROUND_NOTE in text:
+                                    background.add(call_id)
                     elif rec.get('type') == 'assistant' and block.get('type') == 'tool_use':
                         calls.append((rec.get('timestamp') or '', block.get('name'), block.get('input') or {}, block.get('id'), is_main))
-    review = None
-    points = {member: [] for member in BIG_MEMBERS}
-    agent_members = ('code-reviewer',) + tuple(member for member in BIG_MEMBERS if member not in SKILL_MEMBERS)
+                        if is_main and member_of(block.get('name'), block.get('input') or {}):
+                            reviewers.add(block.get('id'))
+                        if is_main and block.get('name') == 'SendMessage':
+                            origin = next((original for original, agent_id in agent_ids.items() if original in reviewers and agent_id == (block.get('input') or {}).get('to')), None)
+                            if origin:
+                                resumed[block.get('id')] = origin
+    runs = {member: [] for member in OWED_MEMBERS}
     for ts, name, inp, call_id, is_main in calls:
-        by_skill = name == 'Skill'
-        kind = ((inp.get('skill') if by_skill else inp.get('subagent_type')) or '').rsplit(':', 1)[-1]
-        if not (is_main and name in ('Agent', 'Task', 'Skill') and kind in (SKILL_MEMBERS if by_skill else agent_members) and call_id not in failed):
-            continue
-        if kind in BIG_MEMBERS:
-            points[kind].append((ts, call_id))
-        elif not cutoff or ts < cutoff:
-            review = max(ts, review or ts)
-    before_cutoff = {member: [point for point in member_points if not cutoff or point[0] < cutoff] for member, member_points in points.items()}
+        member = member_of(name, inp) if is_main else ''
+        if member and call_id in answered and call_id not in failed and (call_id not in background or call_id in completed):
+            runs[member].append((ts, call_id))
 
     # What the reviewer was shown: its own replies and tool results. The brief, its copies in api-request-blob
     # and the harness attachments (injected docs, git status) are not.
@@ -223,10 +256,8 @@ def scan_transcript(top, cutoff, main):
         return any(ts <= point_ts and clears_file(call_id, rel) for point_ts, call_id in member_points)
 
     edited = {}
-    count = 0
-    texts = []
-    big = {member: {} for member in BIG_MEMBERS}
-    owed_big = {member: {} for member in BIG_MEMBERS}
+    lines = {member: {} for member in OWED_MEMBERS}
+    texts = {member: [] for member in OWED_MEMBERS}
     # The impeccable join reads every commit since the session began, so one styled edit would owe an
     # audit on every later claim; once an audit has run, only styling written after it owes another.
     audits = [ts for ts, name, inp, call_id, is_main in calls if is_main and name == 'Skill' and (inp.get('skill') or '').rsplit(':', 1)[-1] == 'impeccable' and call_id not in failed]
@@ -249,17 +280,14 @@ def scan_transcript(top, cutoff, main):
         if not CODE.search(rel):
             continue
         written = sum(len(s.splitlines()) for s in new)
-        if review is None or ts > review:
-            count += written
-            if WEB.search(rel) and not TESTISH.search(rel):
-                texts += new
         if written and not TEST_FILE_ANY.search(rel):
-            for member in BIG_MEMBERS:
-                if not cleared(ts, rel, before_cutoff[member]):
-                    big[member][rel] = big[member].get(rel, 0) + written
-                if not cleared(ts, rel, points[member]):
-                    owed_big[member][rel] = owed_big[member].get(rel, 0) + written
-    return str(since), count, '\n'.join(edited), '\n'.join(texts), big, owed_big, restyled
+            for member in OWED_MEMBERS:
+                if cleared(ts, rel, runs[member]):
+                    continue
+                lines[member][rel] = lines[member].get(rel, 0) + written
+                if WEB.search(rel):
+                    texts[member] += new
+    return str(since), '\n'.join(edited), lines, {member: '\n'.join(member_texts) for member, member_texts in texts.items()}, restyled
 
 
 def log_since(since, flags, pathspec):
@@ -318,6 +346,16 @@ def big_owed(member_paths):
     return member_lines >= 20 and (member_lines >= 200 or high_risk(member_paths))
 
 
+def member_owed(member, paths, text, report_scope):
+    if sum(paths.values()) < 20:
+        return False
+    if member == 'code-reviewer':
+        return not report_scope
+    if member == 'security-review':
+        return bool(high_risk(paths))
+    return big_owed(paths) or (not report_scope and member in signals(text))
+
+
 def signals(text):
     lines = text.split('\n')
     found = []
@@ -368,11 +406,10 @@ def comment_only(diff_text):
 
 def classify(payload):
     transcript = field(payload, 'transcript_path')
-    # The nudge's own edit joins scope from the payload; its lines are counted from the transcript, which already holds the call.
-    edited = chomp('\n' + field(payload, 'tool_input', 'file_path'))
+    edited = ''
     prompt = field(payload, 'prompt')
     base = field(payload, 'review_base')
-    cutoff = field(payload, 'review_cutoff')
+    report_scope = field(payload, 'review_scope') == 'report'
     effort = effort_level(prompt)
     no_scope = '<review-joins effort=%s>' % effort if effort else None
 
@@ -387,10 +424,8 @@ def classify(payload):
     top = None
     ref = 'HEAD'
     since = ''
-    code_added = 0
-    unreviewed = ''
-    big = {}
-    owed_big = {}
+    member_lines = {}
+    member_texts = {}
     restyled = None
     scoped = ''
     untracked = ''
@@ -409,10 +444,10 @@ def classify(payload):
         top = chomp(run('git', 'rev-parse', '--show-toplevel')[0])
         if transcript and os.access(transcript, os.R_OK):
             try:
-                since, code_added, scanned, unreviewed, big, owed_big, restyled = scan_transcript(top, cutoff, transcript)
+                since, scanned, member_lines, member_texts, restyled = scan_transcript(top, transcript)
             except Exception:
-                since, code_added, scanned, unreviewed, big, owed_big, restyled = '', 0, '', '', {}, {}, None
-            edited = chomp(edited + '\n' + scanned)
+                since, scanned, member_lines, member_texts, restyled = '', '', {}, {}, None
+            edited = chomp(scanned)
         # Steps amend into one commit, so --since cannot isolate a step, and the step window outranks session edits.
         if base and run('git', 'cat-file', '-e', base + '^{commit}')[1]:
             ref = base
@@ -507,13 +542,9 @@ def classify(payload):
     if has_test_script(package_top) and any(TESTABLE_FILE.search(line) for line in file_lines) and not any(TEST_FILE_ANY.search(line) for line in file_lines):
         lens('pr-test-analyzer')
 
-    owed = []
-    if code_added >= 20:
-        owed = ['code-reviewer'] + signals(unreviewed)
-    for member in BIG_MEMBERS:
-        if member not in owed and big_owed(big.get(member, {})):
-            owed.append(member)
+    owed = [member for member in OWED_MEMBERS if member_owed(member, member_lines.get(member, {}), member_texts.get(member, ''), report_scope)]
     required = ','.join(owed) or 'none'
+    code_added = sum(member_lines.get('code-reviewer', {}).values())
 
     if pr_diff:
         diff_text = pr_diff
@@ -527,10 +558,9 @@ def classify(payload):
         required = 'none'
 
     entries = []
-    for member in BIG_MEMBERS:
-        member_paths = owed_big.get(member, {})
-        if member in required.split(',') and big_owed(member_paths):
-            ranked = sorted(member_paths.items(), key=lambda item: (-item[1], item[0]))
+    for member in OWED_MEMBERS:
+        if member in required.split(','):
+            ranked = sorted(member_lines[member].items(), key=lambda item: (-item[1], item[0]))
             listed = [urllib.parse.quote(path, safe='/', errors='surrogateescape') for path, _ in ranked[:5]]
             if len(ranked) > 5:
                 listed.append('+%d' % (len(ranked) - 5))

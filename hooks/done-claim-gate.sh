@@ -1,8 +1,9 @@
 #!/bin/bash
 # Stop hook, and PreToolUse SendMessage on a `[REPORT` send (window = since the previous sent REPORT, not the typed prompt, so a typed "granted" cannot empty it).
 # Claim = first line of the final reply (or the REPORT) only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
-# One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which also runs on the retry after one such block, on any retry that claims, asks to commit or commits, and from the second block on only while a Big member sits in `owed-files=`; the block message must carry the exact verdict format; a blocked REPORT re-blocks until it changes.
-# Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The REVIEW AGENTS NOT RUN check also runs on every other turn that claims done, asks to commit, commits or sends a REPORT, once the session has made a Write/Edit/MultiEdit to a code file or dispatched an agent; a REPORT answering a STOP, a no-code Stop in the window it opened and a `Step N` claim without a commit are exempt. A REPORT send, and a Stop in a window a REPORT opened, owe only the members in `owed-files=`, whatever the window edited; `delete-list` and `security-review` clear by a `Skill` call, the rest by an agent. A `Pass: <verb>` line in the reply is checked on every turn.
+# One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which runs again on a retry that claims or ships, with no release however many blocks came before; a reply that claims nothing passes. A blocked REPORT re-blocks until it changes.
+# Review is owed at the checkpoint only: a done-claim whose first line is not "Step N", a REPORT, or the shipping commit. review-classify.py alone decides what is owed (`required=`, `owed-files=`) from the reviewer runs in the transcript and the files each was shown; this gate clears nothing and blocks while `required=` is non-empty, whatever findings, skip or hand-pass lines the reply holds. A commit or commit ask alone owes no review. A REPORT answering a STOP and a no-code Stop in the window it opened are exempt; a REPORT, and a Stop in a window a REPORT opened, send `review_scope=report`, so the classifier lists only the Big members.
+# Claim and evidence checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The checkpoint check also runs on every other turn that claims done or sends a REPORT, once the session has made a Write/Edit/MultiEdit to a code file or dispatched an agent. A `Pass: <verb>` line in the reply is checked on every turn.
 # A plan build's done-claim or shipping commit also needs one `/learn` pass in the transcript (typed or Skill) or a `learn: skip — <reason>` line: of 84 build sessions, 13 ran /learn (measured 2026-11-06).
 
 INPUT=$(cat)
@@ -29,11 +30,11 @@ def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
-# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with its commit in the next escapes the shipping check; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim or commit over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
+# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with a sha-less (`-q`) commit in the next escapes the shipping check; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim or commit over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
-def reset(ts='',by_report=False,after_stop=False):
-    global texts,cmds,cmd_ids,results,edits,lens_calls,lens_at,write_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,window_ts,window_report,stop_window
-    texts=[]; cmds=[]; cmd_ids=[]; results={}; edits=[]; lens_calls=[]; lens_at=[]; write_calls=[]; tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; built_blind=False; hb_at=0; stopped=False; feedback_blocks=0; window_ts=ts; window_report=by_report; stop_window=after_stop
+def reset(by_report=False,after_stop=False):
+    global texts,cmds,cmd_ids,commit_shas,results,edits,lens_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,window_report,stop_window
+    texts=[]; cmds=[]; cmd_ids=[]; commit_shas=[]; results={}; edits=[]; lens_calls=[]; tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; built_blind=False; hb_at=0; stopped=False; feedback_blocks=0; window_report=by_report; stop_window=after_stop
 # An Agent dispatch result names the agent's own transcript (`output_file: …/<id>.output`); its Write/Edit calls are the hand-back's edit paths.
 agent_out={}
 output_file=re.compile(r'output_file:\s*(\S+/([^/\s]+)\.output)')
@@ -52,9 +53,7 @@ def handback(origin):
     global built,built_blind,hb_at
     built=True; hb_at=len(cmds)
     files=agent_edits(agent_out.get(origin.get('from'),''))
-    if files:
-        edits.extend(files)
-        write_calls.extend((ev,f,None) for f in files)
+    if files: edits.extend(files)
     else: built_blind=True
 stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
@@ -63,8 +62,9 @@ reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 ev=0; plan_edits={}; plan_reviews=[]; errored_ids=set(); advisor_at=[]; learned=False; model=''; session_work=False
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
-# The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
+# The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file"). `ship` reads that from the commits' own diffs; `plan_rm` is the fallback for a commit whose sha was not printed (`git commit -q`).
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
+plan_deleted=re.compile(r'^D\t(?:.*/)?docs/plans/[^\t]+\.md$',re.M)
 commit_line=re.compile(r'^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]',re.M)
 # Twin of the implementer hand-back selects (user and attachment) in hooks/step-gate.sh EVENTS.
 try: transcript=open(path)
@@ -78,7 +78,7 @@ for line in transcript:
         txt=c if isinstance(c,str) else ' '.join(b.get('text','') for b in c if isinstance(b,dict) and b.get('type')=='text')
         if '<command-name>/learn</command-name>' in txt: learned=True
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
-        if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta') and not r.get('isCompactSummary'): reset(r.get('timestamp') or ''); base=None
+        if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta') and not r.get('isCompactSummary'): reset(); base=None
         if r.get('isMeta') and txt.lstrip().startswith('Stop hook feedback:') and 'REVIEW AGENTS NOT RUN' in txt: feedback_blocks+=1
         if isinstance(c,str) and stop_msg.search(c): stopped=True
         if r.get('origin',{}).get('handback') and r['origin'].get('name')=='implementer': handback(r['origin'])
@@ -88,10 +88,10 @@ for line in transcript:
                 if isinstance(b,dict) and b.get('type')=='tool_result':
                     results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
                     if b.get('is_error'): errored_ids.add(b.get('tool_use_id'))
-                    if b.get('tool_use_id') in commit_ids and not b.get('is_error') and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]
+                    if b.get('tool_use_id') in commit_ids and not b.get('is_error') and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]; commit_shas.extend(shas)
                     for m in output_file.finditer(results[b.get('tool_use_id')][1]): agent_out[m.group(2)]=m.group(1)
         # A blocked REPORT lands as an errored result and keeps the window, so an unchanged resend blocks again; a pending send has no result yet.
-        if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('tool_use_id') in report_ids and not b.get('is_error') for b in c or []): reset(r.get('timestamp') or '',True,stopped); base=last_sha
+        if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('tool_use_id') in report_ids and not b.get('is_error') for b in c or []): reset(True,stopped); base=last_sha
         # A PreToolUse block lands as an errored tool_result, not a hook_blocking_error attachment.
         if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('is_error') and 'about to write source' in str(b.get('content','')) for b in c or []): nudged=True
     elif t=='attachment':
@@ -117,17 +117,16 @@ for line in transcript:
                 if re.search(r'/plans/[^/]+\.md$',edited) and not edited.endswith('.research.md'): plan_edits[edited]=ev
             elif b.get('name') in ('Agent','Task') and lens_ran(b)=='cold-reader': plan_reviews.append((ev,b.get('input',{}).get('prompt') or '',b.get('id')))
             message=b.get('input',{}).get('message')
-            # A REPORT's lens and skip lines satisfy the Stop arm after the send.
+            # A REPORT's `Pass:` and skip lines satisfy the Stop arm after the send.
             if b.get('name')=='SendMessage' and isinstance(message,str) and is_report(message):
                 report_ids.add(b.get('id'))
                 if not report: texts.append(message)
-            if b.get('name') in ('Write','Edit','MultiEdit'): write_calls.append((ev,b.get('input',{}).get('file_path',''),b.get('id')))
             if b.get('name')=='Bash':
                 cmds.append(b.get('input',{}).get('command','')); cmd_ids.append(b.get('id'))
                 if commit_cmd.search(cmds[-1]): commit_ids.add(b.get('id'))
             elif b.get('name') in ('Write','Edit','NotebookEdit'): edits.append(b.get('input',{}).get('file_path',''))
             else:
-                if b.get('name') in ('Agent','Task','Skill'): lens_calls.append((b.get('name'),lens_ran(b),b.get('id'))); lens_at.append(ev)
+                if b.get('name') in ('Agent','Task','Skill'): lens_calls.append((b.get('name'),lens_ran(b),b.get('id')))
                 tools.append((b.get('name',''),b.get('id')))
                 if lens_ran(b)=='browser-verifier': verifier_calls.append(b.get('id'))
 def call_ok(i): return i is None or not (results.get(i) or (False,))[0]
@@ -144,12 +143,12 @@ def classify_skipped(why):
     print(why,file=sys.stderr)
     if not warned: print(json.dumps({'systemMessage':why}))
     warned.append(why)
-def classify():
+def classify(report_scope=False):
     verb,lenses,required,owed_files='review','reuse-analyzer,placement-analyzer','none',{}
     if cwd and os.path.isdir(cwd):
         payload=dict(inp)
         if base and code_turn: payload['review_base']=base
-        if window_ts: payload['review_cutoff']=window_ts
+        if report_scope: payload['review_scope']='report'
         # Under the 10s Stop-hook timeout in settings.json; a killed hook blocks nothing.
         try:
             res=subprocess.run(['python3',os.path.expanduser('~/.claude/hooks/review-classify.py')],input=json.dumps(payload),cwd=cwd,capture_output=True,text=True,timeout=6)
@@ -172,22 +171,11 @@ def classify():
 def unshown_line(member,files):
     paths,more=files
     return f"{member} has not been shown: {', '.join(paths)}{f' and {more} more' if more else ''}."
-skill_members=('delete-list','security-review')
-# owed_only keeps just the members the classifier lists in owed-files=, for a REPORT and the window it opened.
-def required_status(required,owed_files,owed_only=False):
-    owed=[] if required=='none' else required.split(',')
-    if owed_only: owed=[m for m in owed if m in owed_files]
-    last_write=max((e for e,p,i in write_calls if code.search(p) and call_ok(i)),default=0)
-    undone=[m for m in owed if m in owed_files or not any(n in (('Skill',) if m in skill_members else ('Agent','Task')) and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
-    if not undone: return owed,None
-    if feedback_blocks>=2:
-        if not (report or claim or commit_ask or committed): return [m for m in owed if m not in undone],None
-        released=[m for m in undone if m not in owed_files]
-        undone=[m for m in undone if m in owed_files]
-        owed=[m for m in owed if m not in released]
-        if not undone: return owed,None
-    block=f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session still owes each a run. Run `delete-list` and `security-review` as `Skill` calls and the rest as agents, each with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. After two such blocks only the Big members above still block; a turn that claims nothing, asks nothing and committed nothing is released. Give each everything written since its last run, never the last commit alone."
-    return owed,'\n'.join([block]+[unshown_line(m,owed_files[m]) for m in undone if m in owed_files])
+def required_status(required,owed_files):
+    if required=='none': return None
+    owed=required.split(',')
+    block=f"REVIEW AGENTS NOT RUN for {', '.join(owed)}: source written in this session still owes each a run. Run `security-review` as a `Skill` call and the rest as agents, each with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count, and a run clears a file only once its transcript shows it. Give each everything written since its last run, never the last commit alone."
+    return '\n'.join([block]+[unshown_line(m,owed_files[m]) for m in owed if m in owed_files])
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
 NAMED_VERBS={
@@ -225,49 +213,61 @@ if report and '/scratchpad/' not in final:
 # commit_at's value and path classes stop at a separator and a quote, so each token parses one way; otherwise a long command backtracks past the Stop timeout.
 commit_at=re.compile(r'(?:^|[;&|({`]|\b(?:ba|z)?sh\s+-\w*c\s+[\'"]|\beval\s+[\'"]?)\s*(?:(?:(?:time|then|do|if|elif|else|while|until|env|command|exec|nice)|!|xargs(?:\s+-[^\s;&|`]+)*|timeout\s+[^\s;&|`]+|\w+=(?:"[^"]*"|\'[^\']*\'|[^\s;&|`\'"]*))\s+)*(?:[^\s;&|`]*/)?'+commit_cmd.pattern,re.M)
 committed=any(commit_at.search(c) for c in cmds)
-ship=committed and any(plan_rm.search(c) for c in cmds)
+def commits_delete_plan():
+    if not (commit_shas and cwd and os.path.isdir(cwd)): return False
+    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*commit_shas,'--'],cwd=cwd,capture_output=True,text=True,timeout=3).stdout
+    except subprocess.TimeoutExpired: return False
+    return bool(plan_deleted.search(shown))
+ship=committed and (commits_delete_plan() or any(plan_rm.search(c) for c in cmds))
 code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)
 agent_ran=any(n in ('Agent','Task') for n,_,_ in lens_calls)
 lines=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
 first=lines[0] if lines else ''
 last=lines[-1] if lines else ''
 commit_ask=re.search(r'\bcommit(?!ted)',last,re.I) and re.search(r'\?|\bsay\b|approv|go ahead|want me',last,re.I)
-# Off a code or agent turn only done, complete and ready to ship count, and a hedge anywhere in the clause voids it ("Not quite done.", "what's done and what's left:"); "done-claim" is a name. shortcut: clauses split at . ! ? ; : — but not at commas; upgrade = split commas once a suppressed real claim is seen.
+# Off a code or agent turn only done, complete and ready to ship count, and a hedge anywhere in the clause voids it ("Not quite done.", "what's done and what's left:"); "done-claim" is a name. shortcut: clauses split at . ! ? ; : — but not at commas, bar a trailing commit ask (below); upgrade = split commas once a suppressed real claim is seen.
 complete=r"(?:\bis|\bare|['’](?:s|re))\s+(?:\w+\s+)?complete\b"
 claim_words=r'done(?!-)|fixed|works|passes|passing|green|ready to (?:ship|commit|merge)' if code_turn or agent_ran else r'done(?!-)|ready to (?:ship|commit|merge)'
 claim_word_re=re.compile(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(?:'+claim_words+r')\b|'+complete,re.I)
 hedge=re.compile(r"\b(?:not|yet|almost|nearly|partly|partially|to be)\b|n['’]t\b|\bwhat['’]s\b",re.I)
 narrow=not (code_turn or agent_ran)
-claim=None if first.rstrip().endswith('?') else next((m for clause in re.split(r'[.!?;:—]',first) if not (narrow and hedge.search(clause)) and (m:=claim_word_re.search(clause))),None)
-# On a first Stop without a code edit, an ask about "the commit" or "that commit" names one already made and costs no review; the retry and release paths read commit_ask as is.
-idle_ask=commit_ask and re.search(r'(?<!\bthat )(?<!\bthe )\bcommit\b',last,re.I)
-# A first line opening "Step N" claims one plan step, whose done bar is a hand pass (review-routing.md); the whole build's claim and the shipping commit need real lenses.
+# A clause ending in "?" is a question, not a claim, except a claim ahead of a trailing commit ask after its last comma ("Fixed it and tests pass, commit?") whose head is not itself a question or a condition ("Is it done, should I commit?", "If that works, should I commit?").
+commit_tail=re.compile(r',[^,?]*\bcommit(?!ted)[^,?]*\?$',re.I)
+question_head=re.compile(r"\W*(?:is|are|was|were|did|does|do|has|have|can|could|should|would|will|shall|want|if|once|when|after|assuming|unless|provided|whether)\b",re.I)
+def clause_claim(clause):
+    if clause.endswith('?'):
+        head=commit_tail.sub('',clause)
+        if head==clause or question_head.match(head): return None
+        clause=head
+    if narrow and hedge.search(clause): return None
+    return claim_word_re.search(clause)
+claim=next((m for clause in re.findall(r'[^.!?;:—]+[.!?;:—]?',first) if (m:=clause_claim(clause))),None)
+# A first line opening "Step N" claims one plan step, which owes no review (review-routing.md); the whole build's claim and the shipping commit are the checkpoint.
 step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
-step_turn=bool(step_claim) and not committed
+step_turn=bool(step_claim) and not ship
 stop_exempt=window_report and stop_window and not report and not code_turn
 if inp.get('stop_hook_active') and not report:
-    # A step claim is exempt here only as it was on the first run: once an agent block is in the window, or the reply asks to commit, rewording to "Step N" must not pass.
-    step_exempt=bool(step_claim) and not (committed or commit_ask or feedback_blocks)
-    if not step_exempt and not stop_exempt and (feedback_blocks==1 or claim or commit_ask or committed):
-        _,_,required,owed_files=classify()
-        block=required_status(required,owed_files,window_report)[1]
+    # A step claim is exempt here only as it was on the first run: once an agent block is in the window, rewording to "Step N" must not pass.
+    step_exempt=bool(step_claim) and not (ship or feedback_blocks)
+    if not step_exempt and not stop_exempt and (claim or ship):
+        _,_,required,owed_files=classify(window_report)
+        block=required_status(required,owed_files)
         if block:
             print(block,file=sys.stderr)
             sys.exit(2)
     sys.exit(0)
 # A REPORT answering a STOP skips every check but `problems` (raw-output path, `Pass:` lines, plan gate); a no-code Stop in the window it opened skips the review-agent check too, until a typed prompt or the next REPORT.
 if (report and stopped) or not code_turn:
-    if not (report and stopped) and not stop_exempt and not step_turn and session_work and (claim or idle_ask or committed or report):
-        _,_,required,owed_files=classify()
-        block=required_status(required,owed_files,report or window_report)[1]
+    if not (report and stopped) and not stop_exempt and not step_turn and session_work and (claim or report):
+        _,_,required,owed_files=classify(report or window_report)
+        block=required_status(required,owed_files)
         if block: problems.append(block)
     if problems:
         print('\n'.join(problems),file=sys.stderr)
         sys.exit(2)
     sys.exit(0)
-# A REPORT's lens lines come from the message being sent: chat text earlier in the window is not what the planner reads.
+# A REPORT's skip lines come from the message being sent: chat text earlier in the window is not what the planner reads.
 all_lines=[l for l in '\n'.join([final] if report else texts).split('\n') if l.strip()]
-verdicts={m.group(1) for l in all_lines if (m:=verdict.match(l))}
 skipped={m.group(1) for l in all_lines if (m:=verdict.match(l)) and m.group(2)}
 claim_word=claim.group(0) if claim else 'REPORT' if report else None
 why='claims done' if claim_word else 'asks to commit' if commit_ask else 'ran git commit'
@@ -294,7 +294,7 @@ fresh=list(zip(cmd_ids,cmds))[hb_at if report else 0:]
 runtime_ids=[i for i,c in fresh if evidence.search(c)]
 static_ids=[i for i,c in fresh if report and static_check.search(c)]
 evidence_ids=runtime_ids+static_ids
-report_tail='; for a REPORT, the lens lines go in the message itself' if report else ''
+report_tail='; for a REPORT, the raw output of the checks goes in the message itself' if report else ''
 no_evidence_close="run the step's → verify lines in this thread and cite their output" if report else 'or reword the first line as a status, not a claim'
 no_check='no check ran since the last REPORT' if report else 'no test or runtime command ran this turn — static-clean (lint + tsc) is not done'
 failed_run_close="; a REPORT cannot be reworded — if the plan step expects this failure, add an `expected red: <what fails and why the plan expects it>` line, which the planner checks against the plan" if report else ', or reword the first line as a status that names what is still red'
@@ -321,26 +321,15 @@ def repo_lints(cwd):
 lint_cmds=[c for _,c in fresh] if report else cmds
 if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
-if claim_word or commit_ask or committed:
-    verb,lenses,required,owed_files=classify()
-    owed,owed_block=([],None) if step_turn else required_status(required,owed_files,report or window_report)
-    # A REPORT keeps the lens lines it owes today: only the block above is new there.
-    if report or window_report: owed=[]
-    strict=(built and claim and not step_claim and not report) or ship
-    def lens_done(l):
-        if l=='impeccable': return l in ran
-        if strict: return l in ran or l in skipped
-        if report and built: return l in verdicts
-        return l in ran or l in verdicts
-    missing=[l for l in lenses.split(',') if l not in owed and not lens_done(l)]
-    if 'impeccable' in missing:
-        missing.remove('impeccable')
+if claim_word or ship:
+    _,lenses,required,owed_files=classify(report or window_report)
+    if 'impeccable' in lenses.split(',') and 'impeccable' not in ran:
         problems.append("IMPECCABLE NOT RUN: this turn changed styling; run the `impeccable:impeccable` skill with `audit <changed files>` — a hand-written findings or skip line never satisfies it (review-routing.md).")
-    hand_pass='; on a done-claim or shipping commit in a plan build a hand pass does not count: dispatch the lens or decline it with a reason' if strict else ''
-    if missing: problems.append(f"REVIEW NOT RUN for {', '.join(missing)}: this turn edited code and {why}, and the `{verb}` pass names those lenses. Per lens, run it (skill/agent) or hand-pass it and write `<lens>: N findings`, or decline with `<lens>: skip — <reason>` (~/.claude/review-routing.md){hand_pass}{report_tail}.")
+    owed_block=None if step_turn else required_status(required,owed_files)
     if owed_block: problems.append(owed_block)
-    if strict and not learned and 'learn' not in skipped:
-        problems.append("LEARN NOT RUN: this plan build claims done or ships, and `/learn` has not run in this session. Run the `learn` skill on this build (it writes only on a yes), or write `learn: skip — <reason>`.")
+strict=(built and claim and not step_claim and not report) or ship
+if strict and not learned and 'learn' not in skipped:
+    problems.append("LEARN NOT RUN: this plan build claims done or ships, and `/learn` has not run in this session. Run the `learn` skill on this build (it writes only on a yes), or write `learn: skip — <reason>`.")
 if problems:
     print('\n'.join(problems),file=sys.stderr)
     sys.exit(2)
