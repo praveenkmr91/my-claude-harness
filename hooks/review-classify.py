@@ -1,5 +1,5 @@
 # Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_cutoff, the stamp that opens the claiming window, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, code-added=, required= and owed-files= — keep those keys.
-# Big rule: required= also lists silent-failure-hunter, type-design-analyzer, reuse-analyzer and placement-analyzer, each owed at 20+ non-test lines when they reach 200 or a path is high-risk; a member's lines count until one of its runs is shown the file.
+# Big rule: required= also lists silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer and security-review, each owed at 20+ non-test lines when they reach 200 or a path is high-risk; a member's lines count until one of its runs is shown the file. delete-list and security-review run as main-thread Skill calls, the rest as agents.
 import functools
 import glob
 import json
@@ -55,7 +55,8 @@ COMMENT_LINE = rx(r'^\s*(//|/\*|\*)')
 LEGACY_SYNTAX = rx(r'(^|[^.\w$])var\s|\.indexOf\([^)]*\)\s*[!=<>]=*\s*-1|Object\.assign\(\s*\{\}|\.apply\(\s*(this|null)|\.substr\(|(^|[^.\w$])require\(')
 # Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
 CODE_PATHSPEC = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs', '*.vue', ':!*.test.*', ':!*.spec.*', ':!**/__tests__/**', ':!tests/**']
-BIG_MEMBERS = ('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer')
+BIG_MEMBERS = ('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'delete-list', 'adversarial-reviewer', 'security-review')
+SKILL_MEMBERS = ('delete-list', 'security-review')
 
 
 def run(program, *args):
@@ -172,9 +173,11 @@ def scan_transcript(top, cutoff, main):
                         calls.append((rec.get('timestamp') or '', block.get('name'), block.get('input') or {}, block.get('id'), is_main))
     review = None
     points = {member: [] for member in BIG_MEMBERS}
+    agent_members = ('code-reviewer',) + tuple(member for member in BIG_MEMBERS if member not in SKILL_MEMBERS)
     for ts, name, inp, call_id, is_main in calls:
-        kind = (inp.get('subagent_type') or '').rsplit(':', 1)[-1]
-        if not (is_main and name in ('Agent', 'Task') and kind in ('code-reviewer',) + BIG_MEMBERS and call_id not in failed):
+        by_skill = name == 'Skill'
+        kind = ((inp.get('skill') if by_skill else inp.get('subagent_type')) or '').rsplit(':', 1)[-1]
+        if not (is_main and name in ('Agent', 'Task', 'Skill') and kind in (SKILL_MEMBERS if by_skill else agent_members) and call_id not in failed):
             continue
         if kind in BIG_MEMBERS:
             points[kind].append((ts, call_id))

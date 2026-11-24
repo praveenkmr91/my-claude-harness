@@ -8,7 +8,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
   HOOK_PATH, tmpDir, LENS_SKIPS, LEARN_SKIP, RAW_OUTPUT, LENS_AGENTS,
-  handBack, repoWith, env, run, runFull, runWithResults,
+  handBack, repoWith, env, nextSeq, run, runFull, runWithResults,
 } = require('./helpers/done-claim-gate');
 
 test('done-claim gate: report', async (t) => {
@@ -308,6 +308,92 @@ test('done-claim gate: report', async (t) => {
     const compacted = runWithResults(`Done: step built.\n${LEARN_SKIP}`, built({ record: compaction }), opts);
     assert.doesNotMatch(compacted.stderr, /REVIEW NOT RUN/);
     assert.equal(compacted.status, 0, compacted.stderr);
+  });
+
+  const stamp = (seconds = 0) => new Date(Date.UTC(2099, 0, 1, 0, 0, seconds)).toISOString();
+  const sourceLines = (count) => Array.from({ length: count }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
+  const AGENT_MEMBERS = ['code-reviewer', 'silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'adversarial-reviewer'];
+  const SKILL_MEMBERS = ['delete-list', 'security-review'];
+  const BIG_NAMES = 'silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer, security-review';
+  const NOT_RUN = /REVIEW AGENTS NOT RUN for ([^:]+):/;
+  const agentRuns = (timestamp, members = AGENT_MEMBERS) => ({ blocks: members.map((member) => ({ type: 'tool_use', id: `run-${member}`, name: 'Agent', input: { subagent_type: member, description: 'review', prompt: 'review', effort: 'low' } })), timestamp });
+  const skillRuns = (timestamp, members = SKILL_MEMBERS) => ({ blocks: members.map((member) => ({ type: 'tool_use', id: `skill-${member}`, name: 'Skill', input: { skill: member } })), timestamp });
+  const feedback = () => ({ record: { type: 'user', isMeta: true, message: { content: 'Stop hook feedback:\n[bash …/done-claim-gate.sh]: REVIEW AGENTS NOT RUN for delete-list: source written in this session still owes each a run.' } } });
+
+  // Each step is built by an implementer whose agent transcript writes `stepLines[i]` lines; every step but the last is already delivered as a REPORT.
+  const builderThread = (stepLines, lastStepRuns = []) => {
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+    spawnSync('git', ['init', '-q'], { cwd: repo, env });
+    const transcriptPath = path.join(tmpDir, `t${nextSeq()}.jsonl`);
+    const agentDir = path.join(tmpDir, path.basename(transcriptPath, '.jsonl'), 'subagents');
+    fs.mkdirSync(agentDir, { recursive: true });
+    const writes = stepLines.map((count, i) => {
+      const file = path.join(repo, `s${i + 1}.ts`);
+      fs.writeFileSync(file, sourceLines(count));
+      return JSON.stringify({ type: 'assistant', timestamp: stamp(10 * (i + 1)), message: { content: [{ type: 'tool_use', id: `agent-write-${i}`, name: 'Write', input: { file_path: file, content: sourceLines(count) } }] } });
+    });
+    fs.writeFileSync(path.join(agentDir, 'agent-a1b2c3.jsonl'), writes.join('\n'));
+    const message = (i) => `[REPORT demo step ${i + 1}] Step ${i + 1} built.\n${LENS_SKIPS}\ndelete-list: skip — fixture files\n${RAW_OUTPUT}`;
+    const stepRuns = (i) => [{ handback: handBack('implementer') }, { command: 'node --test tests/*.test.js', output: 'ℹ fail 0', timestamp: stamp(10 * (i + 1) + 2) }];
+    const runs = stepLines.flatMap((_, i) => (i < stepLines.length - 1
+      ? [...stepRuns(i), { sent: message(i), output: 'Message sent to planner-1', timestamp: stamp(10 * (i + 1) + 3) }]
+      : [...stepRuns(i), ...lastStepRuns]));
+    return { repo, runs, transcriptPath, message: message(stepLines.length - 1) };
+  };
+  const sendReport = ({ repo, runs, transcriptPath, message }, extra = []) => runWithResults(message, [...runs, ...extra], { send: true, lint: false, editedFile: null, cwd: repo, since: stamp(0), transcriptPath });
+  const stopAfter = ({ repo, runs, transcriptPath }, reply, extra = [], stopHookActive = false) => runWithResults(reply, [...runs, ...extra], { lint: false, editedFile: null, cwd: repo, since: stamp(0), transcriptPath, stopHookActive });
+  const refusedFor = (res, members) => {
+    assert.equal(res.status, 2, res.stderr);
+    assert.equal(res.stderr.match(NOT_RUN)?.[1], members, res.stderr);
+  };
+  const sent = (res) => {
+    assert.equal(res.status, 0, res.stderr);
+  };
+
+  await t.test('a REPORT after 250 builder lines is refused for delete-list and security-review while the six agents ran; Skill calls send it', () => {
+    refusedFor(sendReport(builderThread([250], [agentRuns(stamp(21))])), 'delete-list, security-review');
+    sent(sendReport(builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))])));
+    refusedFor(sendReport(builderThread([250], [agentRuns(stamp(21)), agentRuns(stamp(22), SKILL_MEMBERS)])), 'delete-list, security-review');
+    sent(sendReport(builderThread([60])));
+  });
+
+  await t.test('four 60-line builder steps: the first three REPORTs are sent and the fourth is refused for the Big members; running them sends it', () => {
+    for (const steps of [[60], [60, 60], [60, 60, 60]]) sent(sendReport(builderThread(steps)));
+    refusedFor(sendReport(builderThread([60, 60, 60, 60])), BIG_NAMES);
+    sent(sendReport(builderThread([60, 60, 60, 60], [agentRuns(stamp(41)), skillRuns(stamp(42))])));
+  });
+
+  await t.test('a REPORT after two blocks since the last delivered REPORT is still refused for the Big members in owed-files; run, it is sent', () => {
+    refusedFor(sendReport(builderThread([60, 250], [agentRuns(stamp(21))]), [feedback(), feedback()]), 'delete-list, security-review');
+    sent(sendReport(builderThread([60, 250], [agentRuns(stamp(21)), skillRuns(stamp(22))]), [feedback(), feedback()]));
+  });
+
+  await t.test('a Stop in a window a REPORT opened owes the Big members in owed-files once the window got a hand-back', () => {
+    const reply = 'Committed as abc1234.\ndelete-list: skip — fixture files';
+    const commit = { command: 'git commit -m x', output: '', timestamp: stamp(25) };
+    refusedFor(stopAfter(builderThread([60, 250], [agentRuns(stamp(21))]), reply, [commit]), 'delete-list, security-review');
+    sent(stopAfter(builderThread([60, 250], [agentRuns(stamp(21)), skillRuns(stamp(22))]), reply, [commit]));
+    sent(stopAfter(builderThread([60, 60]), reply, [commit]));
+  });
+
+  await t.test('the retry in a window a REPORT opened holds the Big members for a claim or one block; after two blocks only a claim holds them', () => {
+    const retry = (reply, blocks) => stopAfter(builderThread([60, 250]), reply, Array.from({ length: blocks }, feedback), true);
+    const claim = 'Done: step built.\ndelete-list: skip — fixture files';
+    const status = 'Findings are below.\ndelete-list: skip — fixture files';
+    refusedFor(retry(claim, 0), BIG_NAMES);
+    refusedFor(retry(status, 1), BIG_NAMES);
+    sent(retry(status, 2));
+    refusedFor(retry(claim, 2), BIG_NAMES);
+  });
+
+  await t.test('a REPORT on bulk work whose owed members all ran still owes its typed delete-list line', () => {
+    const thread = builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))]);
+    const noLine = { ...thread, message: thread.message.replace(/delete-list: skip.*\n/, '') };
+    const res = sendReport(noLine);
+    assert.equal(res.status, 2, res.stderr);
+    assert.match(res.stderr, /REVIEW NOT RUN for delete-list:/);
+    assert.doesNotMatch(res.stderr, NOT_RUN);
+    sent(sendReport(thread));
   });
 
   await t.test('an empty payload or an empty SendMessage passes', () => {

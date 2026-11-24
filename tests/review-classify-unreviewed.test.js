@@ -140,13 +140,15 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(classifyTranscript({ main: mainOnly, unreadable: ['agent-a.jsonl'] }), / code-added=0 /);
   });
 
-  const bigFour = ['silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer'];
+  const bigSeven = ['silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'delete-list', 'adversarial-reviewer', 'security-review'];
+  const skillMembers = ['delete-list', 'security-review'];
+  const runOf = (member, { id, at }) => (skillMembers.includes(member) ? toolCall('Skill', { skill: member }, { id, at }) : dispatchOf(member, { id, at }));
   const required = (members) => new RegExp(` required=${members.join(',')} `);
-  const allFive = required(['code-reviewer', ...bigFour]);
-  const allFiveWithout = (member) => required(['code-reviewer', ...bigFour.filter((m) => m !== member)]);
+  const allEight = required(['code-reviewer', ...bigSeven]);
+  const allEightWithout = (member) => required(['code-reviewer', ...bigSeven.filter((m) => m !== member)]);
 
-  await t.test('big: 200 source lines list all five members', () => {
-    assert.match(classifyTranscript({ main: written('impl.ts', sourceLines(200)) }), allFive);
+  await t.test('big: 200 source lines list all eight members', () => {
+    assert.match(classifyTranscript({ main: written('impl.ts', sourceLines(200)) }), allEight);
   });
 
   await t.test('quiet: 199 source lines list code-reviewer alone', () => {
@@ -170,8 +172,8 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(out, / bulk=yes code-added=30 required=code-reviewer /);
   });
 
-  await t.test('big: 25 lines in src/useAuth.ts, a risk path, list all five members', () => {
-    assert.match(classifyTranscript({ main: written('src/useAuth.ts', sourceLines(25)) }), allFive);
+  await t.test('big: 25 lines in src/useAuth.ts, a risk path, list all eight members', () => {
+    assert.match(classifyTranscript({ main: written('src/useAuth.ts', sourceLines(25)) }), allEight);
   });
 
   await t.test('quiet: 10 lines in src/useAuth.ts are under the floor', () => {
@@ -182,8 +184,8 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.match(classifyTranscript({ main: written('src/useAuth.test.ts', sourceLines(25)) }), / code-added=25 required=code-reviewer /);
   });
 
-  await t.test('big: 200 lines holding a catch list all five, silent-failure-hunter once', () => {
-    assert.match(classifyTranscript({ main: written('impl.ts', sourceLines(200, withCatch)) }), allFive);
+  await t.test('big: 200 lines holding a catch list all eight, silent-failure-hunter once', () => {
+    assert.match(classifyTranscript({ main: written('impl.ts', sourceLines(200, withCatch)) }), allEight);
   });
 
   await t.test('a code-reviewer dispatch clears none of the Big members', () => {
@@ -195,7 +197,7 @@ test('review-classify unreviewed source lines', async (t) => {
       ],
     });
     assert.match(out, / code-added=5 /);
-    assert.match(out, required(bigFour));
+    assert.match(out, required(bigSeven));
   });
 
   const bigThenDispatch = (member, { error = false } = {}) => (repo) => [
@@ -205,11 +207,11 @@ test('review-classify unreviewed source lines', async (t) => {
   ];
 
   await t.test('big: a reuse-analyzer dispatch after 200 lines clears reuse-analyzer alone', () => {
-    assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer') }), allFiveWithout('reuse-analyzer'));
+    assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer') }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('big: a silent-failure-hunter dispatch after 200 lines clears silent-failure-hunter alone', () => {
-    assert.match(classifyTranscript({ main: bigThenDispatch('silent-failure-hunter') }), allFiveWithout('silent-failure-hunter'));
+    assert.match(classifyTranscript({ main: bigThenDispatch('silent-failure-hunter') }), allEightWithout('silent-failure-hunter'));
   });
 
   await t.test('big: a silent-failure-hunter dispatch leaves its catch signal listed until code-reviewer runs', () => {
@@ -219,22 +221,22 @@ test('review-classify unreviewed source lines', async (t) => {
         dispatchOf('silent-failure-hunter', { id: 'big', at: stamp(2) }),
       ],
     });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
   });
 
   await t.test('big: 200 more lines after a reuse-analyzer dispatch list reuse-analyzer again', () => {
     const out = classifyTranscript({
       main: (repo) => [...bigThenDispatch('reuse-analyzer')(repo), writeOf(path.join(repo, 'more.ts'), sourceLines(200), { at: stamp(3) })],
     });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
   });
 
   await t.test('big twin: a reuse-analyzer dispatch with an errored result keeps reuse-analyzer listed', () => {
-    assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer', { error: true }) }), allFive);
+    assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer', { error: true }) }), allEight);
   });
 
   await t.test('big twin: a reuse-analyzer dispatch stamped at the review cutoff keeps reuse-analyzer listed', () => {
-    assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer'), input: { review_cutoff: stamp(2) } }), allFive);
+    assert.match(classifyTranscript({ main: bigThenDispatch('reuse-analyzer'), input: { review_cutoff: stamp(2) } }), allEight);
   });
 
   const linkedRun = (member) => [
@@ -261,14 +263,56 @@ test('review-classify unreviewed source lines', async (t) => {
   const twoFiles = { 'a.ts': sourceLines(200), 'b.ts': sourceLines(200) };
   const reuseRun = ({ files = twoFiles, onDisk = files, shown = ['a.ts'], ...rest } = {}) => classifyTranscript({ onDisk, main: writesThenRun(files, 'reuse-analyzer'), agents: reviewer(shown), ...rest });
 
+  const eightWithout = (member) => required(['code-reviewer', ...bigSeven.filter((m) => m !== member)]);
+  const afterBig = (...records) => (repo) => [writeOf(path.join(repo, 'impl.ts'), sourceLines(200), { at: stamp(1) }), ...records];
+  const skillCall = (skill, { id = 'skill', at = 2 } = {}) => toolCall('Skill', { skill }, { id, at: stamp(at) });
+
+  await t.test('skill members: a main-thread Skill delete-list call after 200 lines drops delete-list from required and owed-files', () => {
+    const before = classifyTranscript({ main: afterBig() });
+    assert.match(before, allEight);
+    assert.equal(owedFor(before, 'delete-list'), 'impl.ts');
+    const out = classifyTranscript({ main: afterBig(skillCall('delete-list')) });
+    assert.match(out, eightWithout('delete-list'));
+    assert.equal(owedFor(out, 'delete-list'), undefined);
+    assert.equal(owedFor(out, 'security-review'), 'impl.ts');
+    assert.match(classifyTranscript({ main: afterBig(skillCall('plugin:security-review')) }), eightWithout('security-review'));
+  });
+
+  const skillTwins = [
+    ['an Agent dispatch named delete-list', afterBig(dispatchOf('delete-list', { id: 'skill', at: stamp(2) })), {}],
+    ['a Skill call before the writes', (repo) => [skillCall('delete-list', { at: 0 }), ...afterBig()(repo)], {}],
+    ['a Skill call with an errored result', afterBig(skillCall('delete-list'), resultOf('skill', { error: true, at: stamp(2) })), {}],
+    ['a Skill call named for an agent member', afterBig(skillCall('reuse-analyzer')), {}],
+  ];
+  for (const [name, main, input] of skillTwins) {
+    await t.test(`skill members twin: ${name} leaves all eight listed and delete-list owed`, () => {
+      const out = classifyTranscript({ main, input });
+      assert.match(out, allEight);
+      assert.equal(owedFor(out, 'delete-list'), 'impl.ts');
+    });
+  }
+
+  await t.test('skill members twin: a Skill call stamped at the review cutoff keeps delete-list listed', () => {
+    assert.match(classifyTranscript({ main: afterBig(skillCall('delete-list')), input: { review_cutoff: stamp(2) } }), allEight);
+  });
+
+  await t.test('skill members twin: an Agent dispatch named security-review and a Skill call inside a subagent clear nothing', () => {
+    const agentNamed = classifyTranscript({ main: afterBig(dispatchOf('security-review', { id: 'skill', at: stamp(2) })) });
+    assert.match(agentNamed, allEight);
+    assert.equal(owedFor(agentNamed, 'security-review'), 'impl.ts');
+    const inSubagent = classifyTranscript({ main: afterBig(), agents: { 'agent-s1.jsonl': () => [skillCall('delete-list')] } });
+    assert.match(inSubagent, allEight);
+    assert.equal(owedFor(inSubagent, 'delete-list'), 'impl.ts');
+  });
+
   await t.test('shown: a linked run that was shown a.ts only leaves reuse-analyzer listed with b.ts owed', () => {
     const out = reuseRun();
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
   });
 
   const owesB = (out) => {
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
   };
 
@@ -290,11 +334,11 @@ test('review-classify unreviewed source lines', async (t) => {
 
   await t.test('quiet: a path in a tool_result clears its file', () => {
     const agents = reviewer(['a.ts'], { after: [resultOf('t1', { content: [{ type: 'text', text: 'src listing: b.ts' }] })] });
-    assert.match(reuseRun({ agents }), allFiveWithout('reuse-analyzer'));
+    assert.match(reuseRun({ agents }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('quiet: a run shown both paths drops reuse-analyzer', () => {
-    assert.match(reuseRun({ shown: ['a.ts', 'b.ts'] }), allFiveWithout('reuse-analyzer'));
+    assert.match(reuseRun({ shown: ['a.ts', 'b.ts'] }), allEightWithout('reuse-analyzer'));
   });
 
   const styledSource = "export const A = () => <div className='p-4' />;\n";
@@ -320,52 +364,52 @@ test('review-classify unreviewed source lines', async (t) => {
   const worktreeFiles = { '.claude/worktrees/wt/a.ts': sourceLines(200), '.claude/worktrees/wt/b.ts': sourceLines(200) };
 
   await t.test('quiet: files written in a worktree clear when the run names them by their path inside it', () => {
-    assert.match(reuseRun({ files: worktreeFiles, shown: ['a.ts', 'b.ts'] }), allFiveWithout('reuse-analyzer'));
+    assert.match(reuseRun({ files: worktreeFiles, shown: ['a.ts', 'b.ts'] }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('shown: a worktree file the run never names stays owed under its worktree path', () => {
     const out = reuseRun({ files: worktreeFiles, shown: ['a.ts'] });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'reuse-analyzer'), '.claude/worktrees/wt/b.ts');
   });
 
   await t.test('shown: before the review cutoff reuse-analyzer lists both files, owed-files keeps b.ts only', () => {
     const out = reuseRun({ input: { review_cutoff: stamp(2) } });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
   });
 
   await t.test('shown: a run before the review cutoff shown a.ts only keeps reuse-analyzer listed and owes b.ts', () => {
     const out = reuseRun({ input: { review_cutoff: stamp(5) } });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'reuse-analyzer'), 'b.ts');
   });
 
   await t.test('quiet: before the review cutoff, a run shown both paths lists reuse-analyzer with no entry for it', () => {
     const out = reuseRun({ shown: ['a.ts', 'b.ts'], input: { review_cutoff: stamp(2) } });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'reuse-analyzer'), undefined);
   });
 
   await t.test('quiet: a file no longer on disk is cleared by the later run', () => {
-    assert.match(reuseRun({ onDisk: { 'a.ts': twoFiles['a.ts'] } }), allFiveWithout('reuse-analyzer'));
+    assert.match(reuseRun({ onDisk: { 'a.ts': twoFiles['a.ts'] } }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('quiet: a run whose result holds no agentId clears both files', () => {
     const main = (repo) => [...writesThenRun(twoFiles)(repo), dispatchOf('reuse-analyzer', { id: 'run', at: stamp(2) }), resultOf('run', { at: stamp(3) })];
-    assert.match(classifyTranscript({ onDisk: twoFiles, main }), allFiveWithout('reuse-analyzer'));
+    assert.match(classifyTranscript({ onDisk: twoFiles, main }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('quiet: a linked id with no agent-r1.jsonl clears both files', () => {
-    assert.match(classifyTranscript({ onDisk: twoFiles, main: writesThenRun(twoFiles, 'reuse-analyzer') }), allFiveWithout('reuse-analyzer'));
+    assert.match(classifyTranscript({ onDisk: twoFiles, main: writesThenRun(twoFiles, 'reuse-analyzer') }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('quiet: a linked id whose agent-r1.jsonl cannot be read clears both files', () => {
-    assert.match(classifyTranscript({ onDisk: twoFiles, main: writesThenRun(twoFiles, 'reuse-analyzer'), unreadable: ['agent-r1.jsonl'] }), allFiveWithout('reuse-analyzer'));
+    assert.match(classifyTranscript({ onDisk: twoFiles, main: writesThenRun(twoFiles, 'reuse-analyzer'), unreadable: ['agent-r1.jsonl'] }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('quiet: 30 lines left unshown are under 200, so reuse-analyzer is dropped', () => {
-    assert.match(reuseRun({ files: { 'a.ts': sourceLines(250), 'b.ts': sourceLines(30) } }), allFiveWithout('reuse-analyzer'));
+    assert.match(reuseRun({ files: { 'a.ts': sourceLines(250), 'b.ts': sourceLines(30) } }), allEightWithout('reuse-analyzer'));
   });
 
   await t.test('owed-files: seven owed files print the five largest, largest first, then +2', () => {
@@ -394,7 +438,7 @@ test('review-classify unreviewed source lines', async (t) => {
   await t.test('guard: a catch file shown to silent-failure-hunter stays required by signal with no owed entry', () => {
     const files = { 'a.ts': sourceLines(200, withCatch) };
     const out = classifyTranscript({ onDisk: files, main: writesThenRun(files, 'silent-failure-hunter'), agents: reviewer(['a.ts']) });
-    assert.match(out, allFive);
+    assert.match(out, allEight);
     assert.equal(owedFor(out, 'silent-failure-hunter'), undefined);
   });
 
@@ -402,7 +446,7 @@ test('review-classify unreviewed source lines', async (t) => {
     const files = { 'a.ts': sourceLines(200) };
     const main = (repo) => [
       ...writesThenRun(files)(repo),
-      ...bigFour.flatMap((member, i) => [dispatchOf(member, { id: `big${i}`, at: stamp(2) }), resultOf(`big${i}`, { at: stamp(3) })]),
+      ...bigSeven.flatMap((member, i) => [runOf(member, { id: `big${i}`, at: stamp(2) }), resultOf(`big${i}`, { at: stamp(3) })]),
     ];
     const out = classifyTranscript({ onDisk: files, main });
     assert.match(out, / required=code-reviewer /);

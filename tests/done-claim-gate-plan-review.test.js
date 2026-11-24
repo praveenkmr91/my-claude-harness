@@ -189,6 +189,7 @@ test('done-claim gate: required review agents', async (t) => {
   };
   const writeOf = (repo, file, content, timestamp) => ({ blocks: [{ type: 'tool_use', id: `write-${file}`, name: 'Write', input: { file_path: path.join(repo, file), content } }], timestamp });
   const dispatchOf = (member, timestamp, id = `dispatch-${member}`) => ({ blocks: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type: member, description: 'review', prompt: 'review', effort: 'low' } }], timestamp });
+  const skillOf = (skill, timestamp, id = `skill-${skill}`) => ({ blocks: [{ type: 'tool_use', id, name: 'Skill', input: { skill } }], timestamp });
   const resultOf = (id, isError, timestamp, text = 'out') => ({ record: { type: 'user', timestamp, message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: text }] } } });
   const checked = (timestamp) => ({ command: 'pnpm lint && node --test tests/*.test.js', output: 'ℹ fail 0', timestamp });
   const committed = (timestamp) => ({ command: 'git commit -m x', output: '', timestamp });
@@ -209,16 +210,18 @@ test('done-claim gate: required review agents', async (t) => {
     const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
     const fires = runWithResults(CLAIM, [thirty, checked(stamp(3))], opts(repo));
     blocked(fires, 'code-reviewer');
-    assert.match(fires.stderr, /: source written in this session still owes each an agent run\. Dispatch each member as an agent with an `effort`/);
+    assert.match(fires.stderr, /: source written in this session still owes each a run\. Run `delete-list` and `security-review` as `Skill` calls and the rest as agents, each with an `effort`/);
     quiet(runWithResults(CLAIM, [thirty, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo)));
     for (const line of ['code-reviewer: 0 findings', 'code-reviewer: skip — reviewed by hand', 'code-reviewer: not run — small change']) {
       blocked(runWithResults(`${CLAIM}\n${line}`, [thirty, checked(stamp(3))], opts(repo)), 'code-reviewer');
     }
   });
 
-  const BIG_MEMBERS = ['silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer'];
+  const BIG_MEMBERS = ['silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'delete-list', 'adversarial-reviewer', 'security-review'];
+  const SKILL_BIG = ['delete-list', 'security-review'];
+  const bigDispatches = (timestamp, without) => BIG_MEMBERS.filter((member) => member !== without).map((member) => (SKILL_BIG.includes(member) ? skillOf(member, timestamp) : dispatchOf(member, timestamp)));
 
-  await t.test('a claim over 200 unreviewed lines with code-reviewer dispatched is blocked for the four Big members alone', () => {
+  await t.test('a claim over 200 unreviewed lines with code-reviewer dispatched is blocked for the seven Big members alone', () => {
     const repo = scratchRepo();
     const big = writeOf(repo, 'impl.ts', sourceLines(200), stamp(1));
     const fires = runWithResults(CLAIM, [big, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo));
@@ -228,10 +231,33 @@ test('done-claim gate: required review agents', async (t) => {
     assert.match(message, /Give each everything written since its last run, never the last commit alone\.$/);
   });
 
-  await t.test('a claim over 200 lines is quiet once all five members were dispatched after the write', () => {
+  await t.test('a claim over 200 lines is quiet once code-reviewer and the seven Big members ran after the write', () => {
     const repo = scratchRepo();
-    const dispatches = ['code-reviewer', ...BIG_MEMBERS].map((member) => dispatchOf(member, stamp(2)));
+    const dispatches = [dispatchOf('code-reviewer', stamp(2)), ...bigDispatches(stamp(2))];
     quiet(runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), ...dispatches, checked(stamp(3))], opts(repo)));
+  });
+
+  await t.test('a claim over 250 lines with the five agent members run owes delete-list and security-review until a Skill call clears them', () => {
+    const repo = scratchRepo();
+    const agentRuns = ['code-reviewer', ...BIG_MEMBERS.filter((member) => !SKILL_BIG.includes(member))].map((member) => dispatchOf(member, stamp(2)));
+    const written = writeOf(repo, 'impl.ts', sourceLines(250), stamp(1));
+    const typedLines = `${CLAIM}\ndelete-list: 0 findings\nsecurity-review: skip — reviewed by hand`;
+    blocked(runWithResults(typedLines, [written, ...agentRuns, checked(stamp(3))], opts(repo)), 'delete-list, security-review');
+    const asAgents = SKILL_BIG.map((member) => dispatchOf(member, stamp(2)));
+    blocked(runWithResults(CLAIM, [written, ...agentRuns, ...asAgents, checked(stamp(3))], opts(repo)), 'delete-list, security-review');
+    const typedCommand = { record: { type: 'user', timestamp: stamp(2), message: { content: '<command-name>/delete-list</command-name>' } } };
+    blocked(runWithResults(CLAIM, [written, ...agentRuns, typedCommand, checked(stamp(3))], opts(repo)), 'delete-list, security-review');
+    blocked(runWithResults(CLAIM, [written, ...agentRuns, skillOf('delete-list', stamp(2)), checked(stamp(3))], opts(repo)), 'security-review');
+    quiet(runWithResults(CLAIM, [written, ...agentRuns, ...SKILL_BIG.map((member) => skillOf(member, stamp(2))), checked(stamp(3))], opts(repo)));
+  });
+
+  await t.test('a Skill call before the last write clears nothing; an errored one clears nothing', () => {
+    const repo = scratchRepo();
+    const agentRuns = ['code-reviewer', ...BIG_MEMBERS.filter((member) => !SKILL_BIG.includes(member))].map((member) => dispatchOf(member, stamp(2)));
+    const skills = (timestamp) => SKILL_BIG.map((member) => skillOf(member, timestamp));
+    blocked(runWithResults(CLAIM, [...skills(stamp(0)), writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), ...agentRuns, checked(stamp(3))], opts(repo)), 'delete-list, security-review');
+    const errored = [...skills(stamp(2)), resultOf('skill-delete-list', true, stamp(2)), resultOf('skill-security-review', true, stamp(2))];
+    blocked(runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), ...agentRuns, ...errored, checked(stamp(3))], opts(repo)), 'delete-list, security-review');
   });
 
   const reviewerShown = (...shown) => {
@@ -250,7 +276,7 @@ test('done-claim gate: required review agents', async (t) => {
       fs.writeFileSync(path.join(repo, name), sourceLines(count));
       return writeOf(repo, name, sourceLines(count), stamp(1));
     });
-    const dispatches = ['code-reviewer', ...BIG_MEMBERS].filter((member) => member !== without).map((member) => dispatchOf(member, stamp(2)));
+    const dispatches = [dispatchOf('code-reviewer', stamp(2)), ...bigDispatches(stamp(2), without)];
     const link = linked ? [resultOf('dispatch-reuse-analyzer', false, stamp(2), 'done\nagentId: r1 (use SendMessage to continue)')] : [];
     return [...writes, ...dispatches, ...link, checked(stamp(3))];
   };
@@ -269,10 +295,13 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults(BULK_CLAIM, bigRuns(repo, TWO_FILES, { linked: true }), opts(repo, { transcriptPath: reviewerShown('a.ts', 'b.ts') })));
   });
 
-  await t.test('quiet: the unshown block is not added once two such blocks are in the window', () => {
+  await t.test('the unshown block still holds once two such blocks are in the window; a run shown both files is quiet', () => {
     const repo = scratchRepo();
     const runs = [...bigRuns(repo, TWO_FILES, { linked: true }), agentFeedback(), agentFeedback()];
-    quiet(runWithResults(BULK_CLAIM, runs, opts(repo, { transcriptPath: reviewerShown('a.ts') })));
+    const fires = runWithResults(BULK_CLAIM, runs, opts(repo, { transcriptPath: reviewerShown('a.ts') }));
+    blocked(fires, 'reuse-analyzer');
+    assert.ok(fires.stderr.split('\n').includes('reuse-analyzer has not been shown: b.ts.'), fires.stderr);
+    quiet(runWithResults(BULK_CLAIM, runs, opts(repo, { transcriptPath: reviewerShown('a.ts', 'b.ts') })));
   });
 
   await t.test('a Big member with no dispatch in the turn is named with its files', () => {
@@ -290,16 +319,15 @@ test('done-claim gate: required review agents', async (t) => {
     assert.ok(fires.stderr.split('\n').includes('reuse-analyzer has not been shown: my file.ts, f1.ts, f2.ts, f3.ts, f4.ts and 2 more.'), fires.stderr);
   });
 
-  await t.test('a later typed turn that only commits is blocked for the four when the earlier turn dispatched code-reviewer alone', () => {
+  await t.test('a later typed turn that only commits is blocked for the Big members when the earlier turn dispatched code-reviewer alone', () => {
     const repo = scratchRepo();
     const runs = [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), dispatchOf('code-reviewer', stamp(2)), { prompt: 'next', timestamp: stamp(3) }, committed(stamp(5))];
     blocked(runWithResults('Committed as abc1234.', runs, opts(repo)), BIG_MEMBERS.join(', '));
   });
 
-  await t.test('a later typed turn that dispatches the four and commits is quiet', () => {
+  await t.test('a later typed turn that runs the Big members and commits is quiet', () => {
     const repo = scratchRepo();
-    const dispatches = BIG_MEMBERS.map((member) => dispatchOf(member, stamp(4)));
-    const runs = [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), dispatchOf('code-reviewer', stamp(2)), { prompt: 'next', timestamp: stamp(3) }, ...dispatches, committed(stamp(5))];
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), dispatchOf('code-reviewer', stamp(2)), { prompt: 'next', timestamp: stamp(3) }, ...bigDispatches(stamp(4)), committed(stamp(5))];
     quiet(runWithResults('Committed as abc1234.', runs, opts(repo)));
   });
 
@@ -450,6 +478,55 @@ test('done-claim gate: required review agents', async (t) => {
     assert.doesNotMatch(res.stderr, NOT_RUN);
   });
 
+  await t.test('after two blocks a Big member in owed-files still blocks a claim, on the retry too; a reply that claims nothing is released', () => {
+    const repo = scratchRepo();
+    const written = writeOf(repo, 'impl.ts', sourceLines(200), stamp(1));
+    const twoBlocks = [written, agentFeedback(), agentFeedback()];
+    const retry = (reply, ...runs) => runWithResults(reply, runs, opts(repo, { stopHookActive: true }));
+    const bigOnly = BIG_MEMBERS.join(', ');
+    blocked(runWithResults(CLAIM, [...twoBlocks, checked(stamp(3))], opts(repo)), bigOnly);
+    blocked(retry('The branch is ready to merge.', ...twoBlocks), bigOnly);
+    blocked(retry('Committed as abc1234.', ...twoBlocks, committed(stamp(4))), bigOnly);
+    quiet(retry('Findings are below.', ...twoBlocks));
+    quiet(retry('The branch is ready to merge.', ...twoBlocks.slice(0, 1), dispatchOf('code-reviewer', stamp(2)), ...bigDispatches(stamp(2)), agentFeedback(), agentFeedback()));
+  });
+
+  await t.test('after two blocks a grep naming git commit, or a commit that errored, is no commit; a successful one still holds the Big members', () => {
+    const repo = scratchRepo();
+    const twoBlocks = [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), agentFeedback(), agentFeedback(), checked(stamp(3))];
+    const reply = 'Findings are below.';
+    const grep = { command: 'grep -n "git commit" x.sh', output: 'x.sh:1', timestamp: stamp(4) };
+    const failedCommit = { ...committed(stamp(4)), isError: true, output: 'Exit code 1' };
+    for (const stopHookActive of [true, false]) {
+      quiet(runWithResults(reply, [...twoBlocks, grep], opts(repo, { stopHookActive })));
+      quiet(runWithResults(reply, [...twoBlocks, failedCommit], opts(repo, { stopHookActive })));
+      blocked(runWithResults(reply, [...twoBlocks, committed(stamp(4))], opts(repo, { stopHookActive })), BIG_MEMBERS.join(', '));
+    }
+  });
+
+  await t.test('after two blocks a last-line commit ask holds the Big members; the same reply without the ask is released', () => {
+    const repo = scratchRepo();
+    const twoBlocks = [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), agentFeedback(), agentFeedback()];
+    for (const stopHookActive of [true, false]) {
+      blocked(runWithResults(ASK, twoBlocks, opts(repo, { stopHookActive })), BIG_MEMBERS.join(', '));
+      quiet(runWithResults('Diff is above.', twoBlocks, opts(repo, { stopHookActive })));
+    }
+  });
+
+  await t.test('after two blocks a commit owing only code-reviewer and a signalled member is released', () => {
+    const repo = scratchRepo();
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(30, withCatch), stamp(1)), { prompt: 'next', timestamp: stamp(3) }, agentFeedback(), agentFeedback(), committed(stamp(4))];
+    quiet(runWithResults('Committed as abc1234.', runs, opts(repo)));
+    blocked(runWithResults('Committed as abc1234.', runs.filter((run) => run !== runs[3]), opts(repo)), 'code-reviewer, silent-failure-hunter');
+  });
+
+  await t.test('a first line opening "Step N" stays exempt from the Big members, on the first run and the retry', () => {
+    const repo = scratchRepo();
+    const runs = [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), checked(stamp(3))];
+    quiet(runWithResults('Step 2 passes verify.', runs, opts(repo)));
+    quiet(runWithResults('Step 2 passes verify.', runs, opts(repo, { stopHookActive: true })));
+  });
+
   await t.test('a dispatch with an errored result does not clear a signalled lens', () => {
     const repo = scratchRepo();
     fs.writeFileSync(path.join(repo, 'api.ts'), 'p.catch(() => null);');
@@ -499,11 +576,11 @@ test('done-claim gate: required review agents', async (t) => {
     blocked(runWithResults(CLAIM, runs, opts(repo)), ['code-reviewer', ...BIG_MEMBERS].join(', '));
   });
 
-  await t.test('a later claim turn that only ran an agent is blocked for the four Big members; quiet once the earlier turn dispatched all five', () => {
+  await t.test('a later claim turn that only ran an agent is blocked for the Big members; quiet once the earlier turn ran code-reviewer and all seven', () => {
     const repo = scratchRepo();
-    const later = (...earlier) => [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), ...earlier.map((member) => dispatchOf(member, stamp(2))), { prompt: 'next', timestamp: stamp(3) }, dispatchOf('Explore', stamp(4))];
-    blocked(runWithResults(CLAIM, later('code-reviewer'), opts(repo)), BIG_MEMBERS.join(', '));
-    quiet(runWithResults(CLAIM, later('code-reviewer', ...BIG_MEMBERS), opts(repo)));
+    const later = (...earlier) => [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), ...earlier, { prompt: 'next', timestamp: stamp(3) }, dispatchOf('Explore', stamp(4))];
+    blocked(runWithResults(CLAIM, later(dispatchOf('code-reviewer', stamp(2))), opts(repo)), BIG_MEMBERS.join(', '));
+    quiet(runWithResults(CLAIM, later(dispatchOf('code-reviewer', stamp(2)), ...bigDispatches(stamp(2))), opts(repo)));
   });
 
   await t.test('a turn with no edit is not blocked by a question about a past commit, a grep naming one, or "commitment"', () => {

@@ -8,7 +8,7 @@
 
 - Members run on Opus even from a Fable session; the tier hook places them there unless Praveen's last typed turn contains `fable battery` / `battery fable` or says yes to a reply that ends a sentence with `Fable battery?`, the reserved phrase the hook keys on. Propose it only when the diff earns it, cost named.
 - A model typed with the verb (`fable battery`, `battery sonnet`) goes to every member as `model:`, overriding the table. Sonnet is his cheap pass, never proposed: the launch line says so, since it missed real bugs Opus found in a tier eval. Haiku stays denied.
-- HIGH risk flagged by the routing hook → add the adversarial-reviewer agent, plus security-review on the main thread. Bulk flagged → add /delete-list + /shortcut-debt. Neither flag → the members above, nothing more.
+- HIGH risk flagged by the routing hook → add the adversarial-reviewer agent, plus security-review on the main thread. Bulk flagged → add /delete-list + /shortcut-debt. Neither flag → the members above, nothing more. Big work (Required members below) owes adversarial-reviewer, security-review and /delete-list with or without a flag; /shortcut-debt is never owed.
 - The launch line names the diff under review (e.g. "plan commit `00b1bfa5`, local, no PR").
 - Beyond the required members, add the ones the diff calls for and name each member's effort on the launch line.
 - All output is leads; confirm each at source before relaying.
@@ -18,10 +18,10 @@
 - **Unreviewed line.** A source line from a Write, Edit or MultiEdit call, main thread or subagent, written since the last `code-reviewer` dispatch that did not error. The Big bullet counts a member's lines since that member's own last such dispatch, test files excluded.
 - **Floor.** Under 20 unreviewed lines `required=` lists neither `code-reviewer` nor a signalled member; the Big bullet never lists a member with under 20 lines unreviewed by it.
 - **Members.** Beyond `code-reviewer`, `required=` lists silent-failure-hunter, type-design-analyzer, comment-analyzer or modern-ts-analyzer, each only when the unreviewed text itself holds its signal, so a signalled member stays listed until `code-reviewer` runs; the Big bullet lists the first two without one.
-- **Big.** `required=` also lists each of these that has 200 or more such lines, or a high-risk path among them: silent-failure-hunter, type-design-analyzer, reuse-analyzer and placement-analyzer; three new files alone list none, unlike the Big tier of `~/.claude/review-routing.md`.
+- **Big.** `required=` also lists each of these that has 200 or more such lines, or a high-risk path among them: silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer and security-review; three new files alone list none, unlike the Big tier of `~/.claude/review-routing.md`.
 - **Range.** Every owed member is given everything written since its last run, never the last commit alone; no hook checks that range. A rerun owed after a round that only applied the members' own confirmed findings goes at `effort: low` with a brief that asks for confirmed defects only and lists every decision already made as not to be raised; a rerun at the first round's depth re-finds decided items and grows another fix round.
-- **Cleared by** an agent dispatch of the member in the claiming turn with no errored result; a typed findings, skip or not-run line never clears one.
-- **Not owed** on a first line opening `Step N`, on a builder's `[REPORT`, or in a window a delivered REPORT opened.
+- **Cleared by** an agent dispatch of the member in the claiming turn with no errored result, or for `delete-list` and `security-review` a main-thread `Skill` call; a typed findings, skip or not-run line, a typed `/delete-list` or `/security-review`, and an agent dispatch named for either skill never clear one.
+- **Not owed** on a first line opening `Step N`. A builder's `[REPORT`, and a window a delivered REPORT opened, owe only the members in `owed-files=`, once that window edited code or got an implementer hand-back. After two blocks in a window only the Big members in `owed-files=` still block a claim, commit ask or commit.
 - **Effort** is set per member on each dispatch (levels: the Effort bullet of `~/.claude/review-routing.md`); a dispatch with none is denied.
 
 ## What calls for each member

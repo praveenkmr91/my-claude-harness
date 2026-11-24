@@ -1,8 +1,8 @@
 #!/bin/bash
 # Stop hook, and PreToolUse SendMessage on a `[REPORT` send (window = since the previous sent REPORT, not the typed prompt, so a typed "granted" cannot empty it).
 # Claim = first line of the final reply (or the REPORT) only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
-# One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which also runs on the retry while fewer than two such blocks are in the window, so the block message must carry the exact verdict format; a blocked REPORT re-blocks until it changes.
-# Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The REVIEW AGENTS NOT RUN check alone also runs on a turn that commits or asks to without a code edit, and on one that ran an agent and claims done while `required=` lists a member. A `Pass: <verb>` line in the reply is checked on every turn.
+# One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which also runs on the retry while fewer than two such blocks are in the window, and past two for a claim, commit ask or successful `git commit` in command position while a Big member sits in `owed-files=`; the block message must carry the exact verdict format; a blocked REPORT re-blocks until it changes.
+# Claim and lens checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The REVIEW AGENTS NOT RUN check alone also runs on a turn that commits or asks to without a code edit, and on one that ran an agent and claims done while `required=` lists a member. A REPORT send, and a Stop in a window a REPORT opened, owe only the members in `owed-files=` once the window edited code or got an `implementer` hand-back; `delete-list` and `security-review` clear by a `Skill` call, the rest by an agent. A `Pass: <verb>` line in the reply is checked on every turn.
 # A plan build's done-claim or shipping commit also needs one `/learn` pass in the transcript (typed or Skill) or a `learn: skip — <reason>` line: of 84 build sessions, 13 ran /learn (measured 2026-11-06).
 
 INPUT=$(cat)
@@ -171,13 +171,21 @@ def classify():
 def unshown_line(member,files):
     paths,more=files
     return f"{member} has not been shown: {', '.join(paths)}{f' and {more} more' if more else ''}."
-def required_status(required,owed_files):
+skill_members=('delete-list','security-review')
+# owed_only keeps just the members the classifier lists in owed-files=, for a REPORT and the window it opened.
+def required_status(required,owed_files,owed_only=False):
     owed=[] if required=='none' else required.split(',')
+    if owed_only: owed=[m for m in owed if m in owed_files]
     last_write=max((e for e,p,i in write_calls if code.search(p) and call_ok(i)),default=0)
-    undone=[m for m in owed if m in owed_files or not any(n in ('Agent','Task') and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
+    undone=[m for m in owed if m in owed_files or not any(n in (('Skill',) if m in skill_members else ('Agent','Task')) and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
     if not undone: return owed,None
-    if feedback_blocks>=2: return [m for m in owed if m not in undone],None
-    block=f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session still owes each an agent run. Dispatch each member as an agent with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. Give each everything written since its last run, never the last commit alone."
+    if feedback_blocks>=2:
+        if not (report or claim or commit_ask or committed_ok): return [m for m in owed if m not in undone],None
+        released=[m for m in undone if m not in owed_files]
+        undone=[m for m in undone if m in owed_files]
+        owed=[m for m in owed if m not in released]
+        if not undone: return owed,None
+    block=f"REVIEW AGENTS NOT RUN for {', '.join(undone)}: source written in this session still owes each a run. Run `delete-list` and `security-review` as `Skill` calls and the rest as agents, each with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. After two such blocks only the Big members above still block; a turn that claims nothing, asks nothing and committed nothing is released. Give each everything written since its last run, never the last commit alone."
     return owed,'\n'.join([block]+[unshown_line(m,owed_files[m]) for m in undone if m in owed_files])
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
@@ -225,16 +233,18 @@ claim=None if first.rstrip().endswith('?') else re.search(r'(?<!not )(?<!fix )(?
 idle_ask=commit_ask and re.search(r'(?<!\bthat )(?<!\bthe )\bcommit\b',last,re.I)
 idle_commit=re.compile(r'(?:^|[;&|])\s*(?:\w+=\S*\s+)*'+commit_cmd.pattern,re.M)
 idle_committed=any(idle_commit.search(c) for c in cmds)
+committed_ok=any(idle_commit.search(c) and call_ok(i) for c,i in zip(cmds,cmd_ids))
 # A first line opening "Step N" claims one plan step, whose done bar is a hand pass (review-routing.md); the whole build's claim and the shipping commit need real lenses.
 step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
-exempt=(bool(step_claim) and not committed) or report or window_report
+step_turn=bool(step_claim) and not committed
+exempt=step_turn or report or window_report
 code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)
 if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, or the reply asks to commit, rewording to "Step N" must not pass.
     step_exempt=bool(step_claim) and not (committed or commit_ask or feedback_blocks)
-    if not (window_report or step_exempt) and (feedback_blocks==1 or feedback_blocks<2 and (claim or commit_ask or committed)):
+    if not step_exempt and (code_turn or not window_report) and (feedback_blocks==1 or claim or commit_ask or (committed if feedback_blocks<2 else committed_ok)):
         _,_,required,owed_files=classify()
-        block=required_status(required,owed_files)[1]
+        block=required_status(required,owed_files,window_report)[1]
         if block:
             print(block,file=sys.stderr)
             sys.exit(2)
@@ -314,7 +324,9 @@ if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
 if claim_word or commit_ask or committed:
     verb,lenses,required,owed_files=classify()
-    owed,owed_block=([],None) if exempt else required_status(required,owed_files)
+    owed,owed_block=([],None) if step_turn else required_status(required,owed_files,report or window_report)
+    # A REPORT keeps the lens lines it owes today: only the block above is new there.
+    if report or window_report: owed=[]
     strict=(built and claim and not step_claim and not report) or ship
     def lens_done(l):
         if l=='impeccable': return l in ran

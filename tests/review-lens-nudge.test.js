@@ -108,7 +108,7 @@ test('review-lens-nudge: names the required members when unreviewed lines pass t
   try {
     const text = session.nudge(session.write('api.ts', 30));
     assert.match(text, /^Review lenses for this change: .*silent-failure-hunter.*\. Before/);
-    assert.match(text, / Required members: code-reviewer, silent-failure-hunter\. Run each as an agent with an `effort` before a done-claim; a typed line does not count for them\.$/);
+    assert.match(text, / Required members: code-reviewer, silent-failure-hunter\. Run `delete-list` and `security-review` as skills and the rest as agents, each with an `effort` before a done-claim; a typed line does not count for them\.$/);
   } finally {
     session.cleanup();
   }
@@ -134,11 +134,11 @@ test('review-lens-nudge: under the floor the text is the existing one', () => {
   }
 });
 
-test('review-lens-nudge: a 200-line write names the four Big members in the required members', () => {
+test('review-lens-nudge: a 200-line write names the seven Big members in the required members', () => {
   const session = nudgeSession();
   try {
     const text = session.nudge(session.write('api.ts', 200));
-    assert.match(text, / Required members: code-reviewer, silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer\. Run each as an agent/);
+    assert.match(text, / Required members: code-reviewer, silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer, security-review\. Run `delete-list` and `security-review` as skills and the rest as agents, each with an `effort`/);
   } finally {
     session.cleanup();
   }
