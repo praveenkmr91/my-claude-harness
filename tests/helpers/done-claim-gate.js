@@ -17,7 +17,7 @@ const LENS_SKIPS = 'reuse-analyzer: skip — rename only\nplacement-analyzer: sk
 const LEARN_SKIP = 'learn: skip — nothing new this build';
 const RAW_OUTPUT = 'Raw output: /private/tmp/s/scratchpad/step1-checks.txt';
 const CODE_REVIEW = { type: 'tool_use', id: 'code-review-run', name: 'Agent', input: { subagent_type: 'code-reviewer', prompt: 'review' } };
-const LENS_AGENTS =['reuse-analyzer', 'placement-analyzer'].map((subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } }));
+const LENS_AGENTS = ['reuse-analyzer', 'placement-analyzer'].map((subagent_type) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type } }));
 
 const handBack = (name) => ({
   type: 'user',
@@ -77,7 +77,7 @@ function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = t
 const run = (reply, opts) => runFull(reply, opts).status;
 
 // `send: true` replays the reply as a SendMessage whose tool_use is not yet in the transcript.
-function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since, stopHookActive = false, home, transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`) } = {}) {
+function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since, stopHookActive = false, home, pathPrefix, transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`) } = {}) {
   const lines = [{ type: 'user', timestamp: since, message: { content: 'go' } }];
   const prelude = [];
   if (lint) prelude.push({ type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
@@ -101,7 +101,7 @@ function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.
   if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } });
   fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
   const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, cwd, ...(stopHookActive && { stop_hook_active: true }) };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env: home ? { ...env, HOME: home } : env });
+  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env: { ...env, ...(home && { HOME: home }), ...(pathPrefix && { PATH: `${pathPrefix}:${env.PATH}` }) } });
 }
 
 module.exports = {

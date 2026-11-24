@@ -4,7 +4,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 
 const HOOK_PATH = path.resolve(__dirname, '..', '..', 'hooks', 'review-classify.py');
 
@@ -60,7 +60,8 @@ const editOf = (file, newString, opts) => toolCall('Edit', { file_path: file, ol
 const dispatchOf = (subagentType, opts) => toolCall('Agent', { subagent_type: subagentType, description: 'review', prompt: 'review' }, opts);
 const resultOf = (id, { error = false, at, content = 'out' } = {}) => ({ type: 'user', timestamp: at, message: { content: [{ type: 'tool_result', tool_use_id: id, ...(error && { is_error: true }), content }] } });
 
-function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit = {}, input = {}, stdin }) {
+// `stderr`, an array, receives the hook's stderr text; execFileSync drops it on exit 0.
+function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit = {}, input = {}, stdin, stderr }) {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env });
   const write = (files) => {
@@ -82,6 +83,11 @@ function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit
     for (const name of unreadable) fs.symlinkSync(path.join(dir, 'missing'), path.join(dir, name));
   }
   const body = stdin ?? JSON.stringify({ transcript_path: transcript, ...input });
+  if (stderr) {
+    const done = spawnSync('python3', [HOOK_PATH], { input: body, cwd: repo, encoding: 'utf8', env });
+    stderr.push(done.stderr);
+    return done.stdout;
+  }
   return execFileSync('python3', [HOOK_PATH], { input: body, cwd: repo, encoding: 'utf8', env });
 }
 

@@ -1,4 +1,4 @@
-# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_scope=report for a REPORT, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, code-added=, required= and owed-files= — keep those keys.
+# Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_scope=report for a REPORT, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, required= (matched as `code-added=<n> required=`) and owed-files= — keep those keys.
 # required= is the only clearing path: a write to a code file outside TEST_FILE_ANY is cleared for a member by a finished, non-errored main-thread run of that member started after the write and shown the file; every run up to this call counts. code-reviewer is owed at 20+ uncleared lines, silent-failure-hunter and type-design-analyzer at 20+ when their own uncleared web text holds their signal, and those two plus placement-analyzer and adversarial-reviewer when the 20+ reach 200 or a path is high-risk; security-review is owed at 20+ lines only with a high-risk path. security-review runs as a main-thread Skill call, the rest as agents. review_scope=report lists only the members the Big rule owes. owed-files= names each owed member's uncleared files.
 import functools
 import glob
@@ -208,6 +208,8 @@ def scan_transcript(top, main):
                         calls.append((rec.get('timestamp') or '', block.get('name'), block.get('input') or {}, block.get('id'), is_main))
                         if is_main and member_of(block.get('name'), block.get('input') or {}):
                             reviewers.add(block.get('id'))
+                            if block['input'].get('run_in_background') is True:
+                                background.add(block.get('id'))
                         if is_main and block.get('name') == 'SendMessage':
                             origin = next((original for original, agent_id in agent_ids.items() if original in reviewers and agent_id == (block.get('input') or {}).get('to')), None)
                             if origin:
@@ -356,6 +358,18 @@ def member_owed(member, paths, text, report_scope):
     return big_owed(paths) or (not report_scope and member in signals(text))
 
 
+def owed_summary(member_lines, member_texts, report_scope):
+    owed = [member for member in OWED_MEMBERS if member_owed(member, member_lines.get(member, {}), member_texts.get(member, ''), report_scope)]
+    entries = []
+    for member in owed:
+        ranked = sorted(member_lines[member].items(), key=lambda item: (-item[1], item[0]))
+        listed = [urllib.parse.quote(path, safe='/', errors='surrogateescape') for path, _ in ranked[:5]]
+        if len(ranked) > 5:
+            listed.append('+%d' % (len(ranked) - 5))
+        entries.append('%s:%s' % (member, ','.join(listed)))
+    return ','.join(owed) or 'none', entries
+
+
 def signals(text):
     lines = text.split('\n')
     found = []
@@ -423,6 +437,7 @@ def classify(payload):
 
     top = None
     ref = 'HEAD'
+    base_window = False
     since = ''
     member_lines = {}
     member_texts = {}
@@ -431,6 +446,17 @@ def classify(payload):
     untracked = ''
     scope = []
     scope_code = []
+    scanned_ok = False
+    required = 'none'
+    entries = []
+    code_added = 0
+
+    # No git scope, but a scanned transcript still owes its reviews.
+    def without_scope():
+        if not scanned_ok:
+            return no_scope
+        return '<review-joins code-added=%d required=%s%s%s>' % (code_added, required, ' effort=%s' % effort if effort else '', ' owed-files=%s' % ';'.join(entries) if entries else '')
+
     if pr_diff:
         names = []
         for line in pr_diff.split('\n'):
@@ -445,12 +471,19 @@ def classify(payload):
         if transcript and os.access(transcript, os.R_OK):
             try:
                 since, scanned, member_lines, member_texts, restyled = scan_transcript(top, transcript)
-            except Exception:
+                scanned_ok = True
+            except Exception as error:
+                print('review-classify scan failed: %r' % error, file=sys.stderr)
                 since, scanned, member_lines, member_texts, restyled = '', '', {}, {}, None
+                required = None
             edited = chomp(scanned)
+        if required is not None:
+            required, entries = owed_summary(member_lines, member_texts, report_scope)
+            code_added = sum(member_lines.get('code-reviewer', {}).values())
         # Steps amend into one commit, so --since cannot isolate a step, and the step window outranks session edits.
         if base and run('git', 'cat-file', '-e', base + '^{commit}')[1]:
             ref = base
+            base_window = True
             since = ''
             edited = ''
         # The dirty tree often carries another task's in-flight work; it is scope only when this session edited nothing here.
@@ -462,7 +495,7 @@ def classify(payload):
             try:
                 os.chdir(top or '.')
             except OSError:
-                return None
+                return without_scope()
             files = scoped
             scope = scoped.split('\n')
             scope_code = [path for path in scope if path and WEB_FILE.search(path) and not TEST_PATH.search(path)]
@@ -472,7 +505,7 @@ def classify(payload):
             files = '\n'.join(sort_unique([name for name in names if name]))
         untracked = run('git', 'ls-files', '--others', '--exclude-standard', '--', *scope)[0]
     if not files:
-        return no_scope
+        return without_scope()
     file_lines = files.split('\n')
 
     react = 'yes' if any(REACT_FILE.search(line) for line in file_lines) else 'no'
@@ -542,10 +575,6 @@ def classify(payload):
     if has_test_script(package_top) and any(TESTABLE_FILE.search(line) for line in file_lines) and not any(TEST_FILE_ANY.search(line) for line in file_lines):
         lens('pr-test-analyzer')
 
-    owed = [member for member in OWED_MEMBERS if member_owed(member, member_lines.get(member, {}), member_texts.get(member, ''), report_scope)]
-    required = ','.join(owed) or 'none'
-    code_added = sum(member_lines.get('code-reviewer', {}).values())
-
     if pr_diff:
         diff_text = pr_diff
         untracked = ''
@@ -555,19 +584,13 @@ def classify(payload):
     if not untracked and comment_only(diff_text):
         verb = 'review'
         lenses = ['comment-analyzer']
-        required = 'none'
+        # A review_base window can hold earlier uncleared code, so only the session-scope diff clears.
+        if not base_window and required is not None:
+            required = 'none'
+            entries = []
 
-    entries = []
-    for member in OWED_MEMBERS:
-        if member in required.split(','):
-            ranked = sorted(member_lines[member].items(), key=lambda item: (-item[1], item[0]))
-            listed = [urllib.parse.quote(path, safe='/', errors='surrogateescape') for path, _ in ranked[:5]]
-            if len(ranked) > 5:
-                listed.append('+%d' % (len(ranked) - 5))
-            entries.append('%s:%s' % (member, ','.join(listed)))
-
-    return '<review-joins verb=%s lenses=%s react=%s high-risk=%s bulk=%s code-added=%d required=%s added=%d new-files=%d%s%s%s>' % (
-        verb, ','.join(lenses), react, risk or 'none', bulk, code_added, required, added, new_files,
+    return '<review-joins verb=%s lenses=%s react=%s high-risk=%s bulk=%s code-added=%d%s added=%d new-files=%d%s%s%s>' % (
+        verb, ','.join(lenses), react, risk or 'none', bulk, code_added, ' required=%s' % required if required is not None else '', added, new_files,
         ' pr=%s' % (pr or 'current') if pr_diff else '',
         ' effort=%s' % effort if effort else '',
         ' owed-files=%s' % ';'.join(entries) if entries else '')

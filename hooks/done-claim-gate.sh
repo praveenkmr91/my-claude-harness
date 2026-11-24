@@ -30,7 +30,7 @@ def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
-# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with a sha-less (`-q`) commit in the next escapes the shipping check; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim or commit over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
+# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with a sha-less (`-q`) commit in the next escapes the shipping check; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset(by_report=False,after_stop=False):
     global texts,cmds,cmd_ids,commit_shas,results,edits,lens_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,window_report,stop_window
@@ -153,14 +153,14 @@ def classify(report_scope=False):
         try:
             res=subprocess.run(['python3',os.path.expanduser('~/.claude/hooks/review-classify.py')],input=json.dumps(payload),cwd=cwd,capture_output=True,text=True,timeout=6)
             joins=res.stdout
-            if not joins and res.stderr: classify_skipped('review-classify failed: '+res.stderr.splitlines()[0])
+            if res.stderr and not re.search(r'code-added=\d+ required=',joins): classify_skipped('review-classify failed: '+res.stderr.splitlines()[0])
         except subprocess.TimeoutExpired:
             classify_skipped('review-classify timed out after 6s; review joins skipped')
             joins=''
         m=re.search(r'verb=(\S+) lenses=(\S+)',joins)
         if m: verb,lenses=m.groups()
-        m=re.search(r'code-added=\d+ required=(\S+)',joins)
-        if m: required=m.group(1)
+        found=re.findall(r'code-added=\d+ required=([^\s>]+)',joins)
+        if found: required=found[-1]
         # `high-risk=` prints raw paths ahead of the other keys, so the last match is the classifier's own.
         found=re.findall(r'owed-files=([^\s>]*)',joins)
         for entry in found[-1].split(';') if found else []:
@@ -174,7 +174,7 @@ def unshown_line(member,files):
 def required_status(required,owed_files):
     if required=='none': return None
     owed=required.split(',')
-    block=f"REVIEW AGENTS NOT RUN for {', '.join(owed)}: source written in this session still owes each a run. Run `security-review` as a `Skill` call and the rest as agents, each with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count, and a run clears a file only once its transcript shows it. Give each everything written since its last run, never the last commit alone."
+    block=f"REVIEW AGENTS NOT RUN for {', '.join(owed)}: source written in this session still owes each a run. Run `security-review` as a `Skill` call and the rest as agents, each with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. An agent run clears the files its transcript shows; `security-review` clears on its Skill call. Give each everything written since its last run, never the last commit alone."
     return '\n'.join([block]+[unshown_line(m,owed_files[m]) for m in owed if m in owed_files])
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
@@ -213,12 +213,16 @@ if report and '/scratchpad/' not in final:
 # commit_at's value and path classes stop at a separator and a quote, so each token parses one way; otherwise a long command backtracks past the Stop timeout.
 commit_at=re.compile(r'(?:^|[;&|({`]|\b(?:ba|z)?sh\s+-\w*c\s+[\'"]|\beval\s+[\'"]?)\s*(?:(?:(?:time|then|do|if|elif|else|while|until|env|command|exec|nice)|!|xargs(?:\s+-[^\s;&|`]+)*|timeout\s+[^\s;&|`]+|\w+=(?:"[^"]*"|\'[^\']*\'|[^\s;&|`\'"]*))\s+)*(?:[^\s;&|`]*/)?'+commit_cmd.pattern,re.M)
 committed=any(commit_at.search(c) for c in cmds)
+# None = the commits' diffs could not be read: a timeout, a git error, or no sha printed.
 def commits_delete_plan():
-    if not (commit_shas and cwd and os.path.isdir(cwd)): return False
-    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*commit_shas,'--'],cwd=cwd,capture_output=True,text=True,timeout=3).stdout
-    except subprocess.TimeoutExpired: return False
-    return bool(plan_deleted.search(shown))
-ship=committed and (commits_delete_plan() or any(plan_rm.search(c) for c in cmds))
+    if not (commit_shas and cwd and os.path.isdir(cwd)): return None
+    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*commit_shas,'--'],cwd=cwd,capture_output=True,text=True,timeout=3)
+    except (subprocess.TimeoutExpired,OSError): return None
+    if shown.returncode: return None
+    return bool(plan_deleted.search(shown.stdout))
+plan_deleted_by_commit=commits_delete_plan() if committed else False
+ship=committed and (bool(plan_deleted_by_commit) or any(plan_rm.search(c) for c in cmds))
+commit_unread=committed and plan_deleted_by_commit is None
 code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)
 agent_ran=any(n in ('Agent','Task') for n,_,_ in lens_calls)
 lines=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
@@ -244,11 +248,11 @@ def clause_claim(clause):
 claim=next((m for clause in re.findall(r'[^.!?;:—]+[.!?;:—]?',first) if (m:=clause_claim(clause))),None)
 # A first line opening "Step N" claims one plan step, which owes no review (review-routing.md); the whole build's claim and the shipping commit are the checkpoint.
 step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
-step_turn=bool(step_claim) and not ship
+step_turn=bool(step_claim) and not ship and not commit_unread
 stop_exempt=window_report and stop_window and not report and not code_turn
 if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, rewording to "Step N" must not pass.
-    step_exempt=bool(step_claim) and not (ship or feedback_blocks)
+    step_exempt=bool(step_claim) and not (ship or commit_unread or feedback_blocks)
     if not step_exempt and not stop_exempt and (claim or ship):
         _,_,required,owed_files=classify(window_report)
         block=required_status(required,owed_files)

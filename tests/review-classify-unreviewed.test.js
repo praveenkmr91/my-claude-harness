@@ -46,6 +46,7 @@ test('review-classify unreviewed source lines', async (t) => {
   await t.test('quiet: the same 30 lines as code keep code-reviewer required', () => {
     const code = sourceLines(30);
     const out = classifyTranscript({ commit: { 'a.ts': 'export const a = 1;\n' }, onDisk: { 'a.ts': `export const a = 1;\n${code}` }, main: written('a.ts', code) });
+    assert.doesNotMatch(out, / lenses=comment-analyzer /);
     assert.match(out, / required=code-reviewer /);
   });
 
@@ -390,6 +391,24 @@ test('review-classify unreviewed source lines', async (t) => {
     });
   }
 
+  const rewordedLaunch = (background) => classifyTranscript({
+    onDisk: { 'a.ts': sourceLines(30) },
+    main: (repo) => [
+      writeOf(path.join(repo, 'a.ts'), sourceLines(30), { at: stamp(1) }),
+      toolCall('Agent', { subagent_type: 'code-reviewer', description: 'review', prompt: 'review', ...(background && { run_in_background: true }) }, { id: 'run', at: stamp(2) }),
+      resultOf('run', { at: stamp(2), content: [{ type: 'text', text: 'Agent started.\nagentId: r1 (internal ID)' }] }),
+    ],
+    agents: reviewer(['a.ts']),
+  });
+
+  await t.test('background: run_in_background with a reworded launch text and no notification clears nothing', () => {
+    assert.match(rewordedLaunch(true), / code-added=30 required=code-reviewer /);
+  });
+
+  await t.test('background twin: the same reworded launch without run_in_background clears the file', () => {
+    assert.match(rewordedLaunch(false), / code-added=0 required=none /);
+  });
+
   const resumeVia = (to) => [toolCall('SendMessage', { to, message: 'Continue the review where you stopped' }, { id: 'sm', at: stamp(4) }), resultOf('sm', { at: stamp(4) })];
 
   await t.test('background resume: a completed notification under the SendMessage id clears the failed run', () => {
@@ -586,12 +605,52 @@ test('review-classify unreviewed source lines', async (t) => {
     assert.doesNotMatch(out, /owed-files=/);
   });
 
-  await t.test('guard: a scan that raises still prints the joins line with nothing required', () => {
+  const committedBig = { 'impl.ts': sourceLines(250) };
+  const noNetDiff = (extra) => classifyTranscript({ commit: committedBig, onDisk: committedBig, input: { review_base: 'HEAD' }, ...extra });
+
+  await t.test('no scope: a review_base with an empty net diff still lists the members 250 uncleared lines owe', () => {
+    const out = noNetDiff({ main: written('impl.ts', sourceLines(250)) });
+    assert.match(out, bigFive);
+    assert.equal(owedFor(out, 'placement-analyzer'), 'impl.ts');
+  });
+
+  await t.test('no scope twin: the same window with every member run and shown the file lists nothing', () => {
+    const out = noNetDiff(allRuns(['code-reviewer', ...four]));
+    assert.match(out, / required=none[ >]/);
+    assert.doesNotMatch(out, /owed-files=/);
+  });
+
+  await t.test('a comment-only window diff over earlier uncleared code is still listed', () => {
+    const code = sourceLines(250);
+    const out = classifyTranscript({ commit: { 'impl.ts': code }, onDisk: { 'impl.ts': `${code}// note\n` }, input: { review_base: 'HEAD' }, main: written('impl.ts', code) });
+    assert.match(out, / lenses=comment-analyzer /);
+    assert.match(out, bigFive);
+  });
+
+  await t.test('a comment-only window diff twin: the same window with every member run and shown the file lists nothing', () => {
+    const code = sourceLines(250);
+    const out = classifyTranscript({ commit: { 'impl.ts': code }, onDisk: { 'impl.ts': `${code}// note\n` }, input: { review_base: 'HEAD' }, ...allRuns(['code-reviewer', ...four]) });
+    assert.match(out, / lenses=comment-analyzer /);
+    assert.match(out, / required=none /);
+  });
+
+  await t.test('guard: a scan that raises names the failure on stderr and prints no required=', () => {
+    const stderr = [];
     const out = classifyTranscript({
       onDisk: { 'impl.ts': sourceLines(30) },
       main: (repo) => [[], writeOf(path.join(repo, 'impl.ts'), sourceLines(30), { at: stamp(1) })],
+      stderr,
     });
-    assert.match(out, / code-added=0 required=none /);
+    assert.match(out, / code-added=0 added=30 /);
+    assert.doesNotMatch(out, /required=/);
+    assert.match(stderr.join(''), /^review-classify scan failed: AttributeError/);
+  });
+
+  await t.test('guard twin: a scan that completes prints required= and nothing on stderr', () => {
+    const stderr = [];
+    const out = classifyTranscript({ onDisk: { 'impl.ts': sourceLines(30) }, main: written('impl.ts', sourceLines(30)), stderr });
+    assert.match(out, / code-added=30 required=code-reviewer /);
+    assert.equal(stderr.join(''), '');
   });
 
   await t.test('empty stdin exits 0', () => {

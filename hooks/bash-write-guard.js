@@ -274,7 +274,7 @@ process.stdin.on('end', () => {
 
   process.stderr.write(
     `BLOCKED: shell write to ${targets.join(', ')}. Use Write or Edit to create or change source, config and doc files — ` +
-      'the Write|Edit hooks (comment check, util guard, implementer nudge, review lenses) never see a heredoc, redirect, ' +
+      'the Write|Edit hooks (comment check, util guard, implementer nudge) never see a heredoc, redirect, ' +
       'tee, inline-script or copy-from-scratch write. sed -i one-liners, git mv, and output under /tmp or the scratchpad stay allowed, except on plan files.\n',
   );
   process.exit(2);

@@ -355,12 +355,27 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults('Committed as abc1234.', [written, checked(stamp(3)), committed(stamp(4))], opts(repo)));
   });
 
+  const landed = (timestamp) => ({ ...committed(timestamp), output: '[master abc1234] x' });
+
   await t.test('"Step 3 done." with a plain commit over 300 uncovered lines owes no review; with the shipping commit it names every owed member', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(300), stamp(1));
-    quiet(runWithResults('Step 3 done.', [written, checked(stamp(3)), committed(stamp(4))], opts(repo)));
+    quiet(runWithResults('Step 3 done.', [written, checked(stamp(3)), landed(stamp(4))], opts(repo)));
     blocked(runWithResults('Step 3 done.', [written, checked(stamp(3)), shipped(stamp(4))], opts(repo)), ALL_NAMES);
     quiet(runWithResults(`Step 3 done.\n${LEARN_SKIP}`, [written, ...allRuns(stamp(2)), checked(stamp(3)), shipped(stamp(4))], opts(repo)));
+  });
+
+  await t.test('"Step 3 done." over a commit whose diff cannot be read is not exempt: a commit that printed no sha, or a git lookup that times out', () => {
+    const repo = scratchRepo();
+    const written = writeOf(repo, 'impl.ts', sourceLines(300), stamp(1));
+    const slowGit = fs.mkdtempSync(path.join(tmpDir, 'shim-'));
+    const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+    fs.writeFileSync(path.join(slowGit, 'git'), `#!/bin/bash\ncase "$*" in *no-walk*) sleep 4;; esac\nexec ${realGit} "$@"\n`, { mode: 0o755 });
+    for (const stopHookActive of [false, true]) {
+      blocked(runWithResults('Step 3 done.', [written, checked(stamp(3)), committed(stamp(4))], opts(repo, { stopHookActive })), ALL_NAMES);
+      blocked(runWithResults('Step 3 done.', [written, checked(stamp(3)), landed(stamp(4))], opts(repo, { stopHookActive, pathPrefix: slowGit })), ALL_NAMES);
+      quiet(runWithResults('Step 3 done.', [written, checked(stamp(3)), landed(stamp(4))], opts(repo, { stopHookActive })));
+    }
   });
 
   await t.test('the shipping commit over uncovered code is a checkpoint with no claim; runs after the write clear it', () => {
@@ -425,6 +440,33 @@ test('done-claim gate: required review agents', async (t) => {
       assert.deepEqual(JSON.parse(res.stdout), { systemMessage: warning });
     });
   }
+
+  await t.test('the gate reads required= by its last match, as owed-files= already is', () => {
+    const home = fs.mkdtempSync(path.join(tmpDir, 'home-'));
+    fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true });
+    const stubJoins = (...required) => `import sys\nprint("<review-joins verb=review lenses=reuse-analyzer ${required.map((r) => `code-added=1 required=${r}`).join(' ')} added=1>")\n`;
+    const run = (...required) => {
+      fs.writeFileSync(path.join(home, '.claude', 'hooks', 'review-classify.py'), stubJoins(...required));
+      const repo = scratchRepo();
+      return runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), checked(stamp(3))], opts(repo, { home }));
+    };
+    blocked(run('none', 'code-reviewer'), 'code-reviewer');
+    quiet(run('code-reviewer', 'none'));
+  });
+
+  await t.test('a classifier line without required= and with stderr warns once and blocks nothing; one with required=none and stderr stays silent', () => {
+    const home = fs.mkdtempSync(path.join(tmpDir, 'home-'));
+    fs.mkdirSync(path.join(home, '.claude', 'hooks'), { recursive: true });
+    const run = (joins) => {
+      fs.writeFileSync(path.join(home, '.claude', 'hooks', 'review-classify.py'), `import sys\nprint("${joins}")\nprint("review-classify scan failed: boom", file=sys.stderr)\n`);
+      const repo = scratchRepo();
+      return runWithResults(CLAIM, [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), checked(stamp(3))], opts(repo, { home }));
+    };
+    const skipped = run('<review-joins verb=review lenses=reuse-analyzer code-added=0 added=30>');
+    assert.equal(skipped.status, 0, skipped.stderr);
+    assert.deepEqual(JSON.parse(skipped.stdout), { systemMessage: 'review-classify failed: review-classify scan failed: boom' });
+    assert.equal(run('<review-joins verb=review lenses=reuse-analyzer code-added=0 required=none added=30>').stdout, '');
+  });
 
   await t.test('a signalled member is named alone once code-reviewer was dispatched', () => {
     const repo = scratchRepo();
@@ -515,14 +557,14 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(retry(CLAIM, written, feedbackOf('REVIEW NOT RUN for reuse-analyzer: this turn edited code and claims done.'), dispatchOf('code-reviewer', stamp(3))));
   });
 
-  await t.test('a third block is added: with two such blocks in the window a claim is blocked again, a signalled member included', () => {
+  await t.test('repeated blocks in the window never release a claim: it is blocked while a member is owed, a signalled member included', () => {
     const repo = scratchRepo();
     const twoBlocks = (content) => [writeOf(repo, 'impl.ts', content, stamp(1)), agentFeedback(), agentFeedback(), checked(stamp(3))];
     blocked(runWithResults(CLAIM, twoBlocks(sourceLines(30)), opts(repo)), 'code-reviewer');
     blocked(runWithResults(CLAIM, twoBlocks(sourceLines(30, withCatch)), opts(repo)), 'code-reviewer, silent-failure-hunter');
   });
 
-  await t.test('after two blocks a claim holds every owed member, on the retry too; a commit or a reply that claims nothing passes', () => {
+  await t.test('a claim over 200 uncleared lines holds every Big member however many blocks came before, on the retry too; a commit or a reply that claims nothing passes', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(200), stamp(1));
     const twoBlocks = [written, agentFeedback(), agentFeedback()];
@@ -534,7 +576,7 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(retry('The branch is ready to merge.', written, ...allRuns(stamp(2)), agentFeedback(), agentFeedback()));
   });
 
-  await t.test('after two blocks no commit shape owes a review: a grep, an errored commit and a landed one pass; a claim over them is blocked', () => {
+  await t.test('however many blocks came before, no commit shape owes a review: a grep, an errored commit and a landed one pass; a claim over them is blocked', () => {
     const repo = scratchRepo();
     const twoBlocks = [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), agentFeedback(), agentFeedback(), checked(stamp(3))];
     const grep = { command: 'grep -n "git commit" x.sh', output: 'x.sh:1', timestamp: stamp(4) };

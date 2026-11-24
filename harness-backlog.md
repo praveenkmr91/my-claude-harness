@@ -6,7 +6,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ### Review gate upgrades
 
-- **Evidence:** `done-claim-gate.sh` now makes a claim, commit ask, commit or REPORT owe the session's unrun review members whatever the turn wrote, once the session wrote code or ran an agent. Three upgrades stay out; each bullet below carries its own evidence.
+- **Evidence:** `done-claim-gate.sh` now makes a done-claim, a REPORT or the shipping commit owe the session's unrun review members whatever the turn wrote, once the session wrote code or ran an agent. Three upgrades stay out; each bullet below carries its own evidence.
 - **Why parked:** the build covered the routes the census found escaping review; each upgrade needs state or a hard stop the gate does not carry today.
 - **Fix:** three upgrades, each with what it buys and what it costs:
     - Size Big by git range across sessions, with per-repo stamps of each member's last run. It catches the `352bbe1d` case: the planner's status answer (line 8177) replays to exit 0, and nothing was written in that session. It costs a state file per repo, heuristic repo discovery and git time inside the classifier's 6 s budget.
@@ -41,13 +41,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** no evidence of a third read without an ask; the dry-run census (`state/census/dry-run-scope/`) reports review tokens per plan, dry runs plus cold reads, against a 513k baseline.
 - **Fix:** an Agent-dispatch hook that denies a third `cold-reader` dispatch on one plan chunk unless the typed prompt asks for it, and denies a `cold-reader` prompt that is more than the plan path. Starts from the missing count.
 - **Worth it when:** that census's comparison line shows review tokens per plan above 513k, or a transcript shows a third cold read no one asked for.
-
-### Done-claim gate accepts hand-written skip lines on implementer builds
-
-- **Evidence:** 2026-11-09, Hayah rename across three portals: `done-claim-gate.sh` passed hand-written `<lens>: skip — <reason>` lines on three `implementer` sweep commits (306–386 lines each), though `review-routing.md` "verify" says a hand-written findings line does not count on an implementer build. Praveen had to ask "did u review" before the diff was read.
-- **Why parked:** one session; the residue census rule (`subagent-tiers.md`) now gives the skip line something concrete to cite.
-- **Fix:** when the turn dispatched `implementer`, the gate requires each lens line to be an agent or skill run, or a skip that names the residue census; a bare reason fails. Firing / near-twin / empty-input test triple.
-- **Worth it when:** a second session ships an implementer build on skip lines alone.
 
 ### Skills have no evals
 
@@ -122,13 +115,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** unknown whether the gate's condition is hard to satisfy or the model answers it wrongly; fixing blind risks loosening a real gate.
 - **Fix:** read five of the longest chains, classify each block as gate-too-strict vs model-wrong, then adjust `hooks/done-claim-gate.sh` or its message accordingly.
 - **Worth doing when:** a session loses three or more turns to one chain again.
-
-### Review-lens verdict ceremony
-
-- **Evidence:** 98 "REVIEW NOT RUN" Stop blocks in 32 sessions; 77 were answered with a text-only verdict line, not a review.
-- **Why parked:** the accepted verdict forms were widened since, which may remove most of these; measure before changing more.
-- **Fix:** if still high, prompt the verdict lines at the lens nudge instead of at Stop, or skip the gate for edits confined to `~/.claude`.
-- **Worth doing when:** a fresh census still shows more than one block per code session.
 
 ### Write-guard sweep fallback still over-blocks
 
