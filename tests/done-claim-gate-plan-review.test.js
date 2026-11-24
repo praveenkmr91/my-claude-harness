@@ -19,7 +19,8 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
   };
   const writePlan = (file = PLAN) => ({ type: 'tool_use', name: 'Write', input: { file_path: file } });
   const editPlan = (file = PLAN) => ({ type: 'tool_use', name: 'Edit', input: { file_path: file } });
-  const review = (subagent_type, prompt) => ({ type: 'tool_use', name: 'Agent', input: { subagent_type, prompt } });
+  const review = (subagent_type, prompt, id) => ({ type: 'tool_use', name: 'Agent', ...(id && { id }), input: { subagent_type, prompt } });
+  const toolResult = (id, isError) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: isError ? 'denied' : 'ok', is_error: isError }] } });
   const advisor = { type: 'server_tool_use', name: 'advisor', input: {} };
   const authorReview = { type: 'text', text: 'Pass: review — steps re-read against the tree, no gaps.' };
   const readPlan = (file = PLAN) => ({ type: 'tool_use', name: 'Read', input: { file_path: file } });
@@ -44,18 +45,27 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     assert.equal(runPlan(records(asks.waiting), asks.waiting).status, 0);
   });
 
-  await t.test('blocks when the plan was edited after its last review, quiet once a cold read follows the edit', () => {
-    const blocks = [writePlan(), review('dry-runner', `Dry-run ${PLAN}`), advisor, editPlan()];
+  await t.test('an edit after the cold read leaves (A) quiet and owes only the author review, quiet once a read and `Pass: review` follow the edit', () => {
+    const blocks = [writePlan(), review('cold-reader', PLAN), advisor, editPlan()];
     const fires = runPlan(turn(blocks, asks.typeRepo), asks.typeRepo);
     assert.equal(fires.status, 2, fires.stderr);
-    assert.match(fires.stderr, /\(A\)/);
+    assert.match(fires.stderr, /\(C\)/);
+    assert.doesNotMatch(fires.stderr, /\(A\)/);
     assert.doesNotMatch(fires.stderr, /\(B\)/);
-    const quiet = runPlan(turn([...blocks, review('cold-reader', PLAN), readPlan(), authorReview], asks.typeRepo), asks.typeRepo);
+    const quiet = runPlan(turn([...blocks, readPlan(), authorReview], asks.typeRepo), asks.typeRepo);
     assert.equal(quiet.status, 0, quiet.stderr);
   });
 
+  await t.test('a dry-runner alone is no review: (A) fires, and a cold-reader on the same plan clears it', () => {
+    const dryOnly = runPlan(turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`), advisor, readPlan(), authorReview], asks.type), asks.type);
+    assert.equal(dryOnly.status, 2, dryOnly.stderr);
+    assert.match(dryOnly.stderr, /\(A\) no cold-reader ran on it/);
+    const coldRead = runPlan(turn([writePlan(), review('cold-reader', `Cold-read ${PLAN}`), advisor, readPlan(), authorReview], asks.type), asks.type);
+    assert.equal(coldRead.status, 0, coldRead.stderr);
+  });
+
   await t.test('blocks a reviewed plan with no advisor after its first review, quiet once the advisor ran', () => {
-    const blocks = [writePlan(), review('dry-runner', `Dry-run ${PLAN}`)];
+    const blocks = [writePlan(), review('cold-reader', `Cold-read ${PLAN}`)];
     const fires = runPlan(turn(blocks, asks.say), asks.say);
     assert.equal(fires.status, 2, fires.stderr);
     assert.match(fires.stderr, /\(B\)/);
@@ -71,6 +81,34 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     assert.equal(prefixed.status, 0, prefixed.stderr);
   });
 
+  await t.test('a cold read of `build-ui.md` does not cover `ui.md`, one naming `ui.md` does', () => {
+    const UI = '/h/.claude/plans/ui.md';
+    const sibling = [prompt('plan A'), assistant(writePlan('/h/.claude/plans/build-ui.md'), review('cold-reader', '/h/.claude/plans/build-ui.md'), advisor), prompt('plan B')];
+    const planB = assistant(writePlan(UI), readPlan(UI), authorReview);
+    const final = assistant({ type: 'text', text: asks.type });
+    const fires = runPlan([...sibling, planB, final], asks.type);
+    assert.equal(fires.status, 2, fires.stderr);
+    assert.match(fires.stderr, /\(A\)/);
+    const named = [prompt('plan A'), assistant(writePlan('/h/.claude/plans/other.md'), review('cold-reader', `Cold-read ui.md in ${UI}`), advisor), prompt('plan B')];
+    const quiet = runPlan([...named, planB, final], asks.type);
+    assert.equal(quiet.status, 0, quiet.stderr);
+  });
+
+  await t.test('a cold-reader dispatch that errored is no review, the same dispatch with a clean result is', () => {
+    const tail = [advisor, readPlan(), authorReview];
+    const errored = runPlan([prompt('plan it'), assistant(writePlan(), review('cold-reader', PLAN, 'tu-c')), toolResult('tu-c', true), assistant(...tail), assistant({ type: 'text', text: asks.type })], asks.type);
+    assert.equal(errored.status, 2, errored.stderr);
+    assert.match(errored.stderr, /\(A\)/);
+    const clean = runPlan([prompt('plan it'), assistant(writePlan(), review('cold-reader', PLAN, 'tu-c')), toolResult('tu-c', false), assistant(...tail), assistant({ type: 'text', text: asks.type })], asks.type);
+    assert.equal(clean.status, 0, clean.stderr);
+  });
+
+  await t.test('a cold read of the plan under ~/.claude/plans still covers it once it moves to docs/plans', () => {
+    const moved = [writePlan(), review('cold-reader', PLAN), advisor, editPlan('/repo/docs/plans/x.md'), readPlan('/repo/docs/plans/x.md'), authorReview];
+    const quiet = runPlan(turn(moved, asks.typeRepo), asks.typeRepo);
+    assert.equal(quiet.status, 0, quiet.stderr);
+  });
+
   await t.test('a `plan gate: skip — <reason>` line in the turn suppresses the block', () => {
     const reply = `plan gate: skip — trivial one-line plan\n${asks.type}`;
     assert.equal(runPlan(turn([writePlan()], reply), reply).status, 0);
@@ -83,13 +121,14 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     assert.equal(runPlan(turn([writePlan('/h/.claude/plans/x.research.md')], asks.type), asks.type).status, 0);
   });
 
-  await t.test('tracking spans turns: a review in turn 1 covers an ask in turn 2, a plan edit in turn 2 voids it', () => {
+  await t.test('tracking spans turns: a review in turn 1 covers an ask in turn 2, a plan edit in turn 2 owes only the author review', () => {
     const turn1 = [prompt('plan it'), assistant(writePlan(), review('cold-reader', PLAN), advisor, readPlan(), authorReview), assistant({ type: 'text', text: 'Plan is ready.' })];
     const quiet = runPlan([...turn1, prompt('looks good'), assistant({ type: 'text', text: asks.type })], asks.type);
     assert.equal(quiet.status, 0, quiet.stderr);
     const fires = runPlan([...turn1, prompt('change step 2'), assistant(editPlan()), assistant({ type: 'text', text: asks.type })], asks.type);
     assert.equal(fires.status, 2, fires.stderr);
-    assert.match(fires.stderr, /\(A\)/);
+    assert.match(fires.stderr, /\(C\)/);
+    assert.doesNotMatch(fires.stderr, /\(A\)/);
   });
 
   await t.test('an empty transcript, and a plan reply with no implement ask, pass', () => {
@@ -100,27 +139,28 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
   });
 
   await t.test('a Fable thread\'s plan ask needs no advisor consult', () => {
-    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`), readPlan(), authorReview], asks.say)), interrupt];
+    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('cold-reader', `Cold-read ${PLAN}`), readPlan(), authorReview], asks.say)), interrupt];
     const quiet = runPlan(records, asks.say);
     assert.equal(quiet.status, 0, quiet.stderr);
   });
 
-  await t.test('a Fable thread\'s plan ask still needs a review after the last edit', () => {
-    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`), editPlan()], asks.say)), interrupt];
+  await t.test('a Fable thread\'s plan ask after an edit owes the author review, not a new cold read', () => {
+    const records = [...onModel('claude-fable-5-2', turn([writePlan(), review('cold-reader', `Cold-read ${PLAN}`), editPlan()], asks.say)), interrupt];
     const fires = runPlan(records, asks.say);
     assert.equal(fires.status, 2, fires.stderr);
-    assert.match(fires.stderr, /\(A\)/);
+    assert.match(fires.stderr, /\(C\)/);
+    assert.doesNotMatch(fires.stderr, /\(A\)/);
     assert.doesNotMatch(fires.stderr, /\(B\)/);
   });
 
   await t.test('an Opus thread\'s plan ask still needs the advisor consult', () => {
-    const fires = runPlan(onModel('claude-opus-5-5', turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.say)), asks.say);
+    const fires = runPlan(onModel('claude-opus-5-5', turn([writePlan(), review('cold-reader', `Cold-read ${PLAN}`)], asks.say)), asks.say);
     assert.equal(fires.status, 2, fires.stderr);
     assert.match(fires.stderr, /\(B\)/);
   });
 
   await t.test('blocks a reviewed plan with no `Pass: review` of its own after the last edit, on every model', () => {
-    const blocks = [writePlan(), review('dry-runner', `Dry-run ${PLAN}`), advisor];
+    const blocks = [writePlan(), review('cold-reader', `Cold-read ${PLAN}`), advisor];
     const fires = runPlan(turn(blocks, asks.type), asks.type);
     assert.equal(fires.status, 2, fires.stderr);
     assert.match(fires.stderr, /\(C\)/);
@@ -138,12 +178,12 @@ test('done-claim gate: plan presented unreviewed', async (t) => {
     const lineBeforeRead = runPlan(turn([...blocks, authorReview, readPlan()], asks.type), asks.type);
     assert.equal(lineBeforeRead.status, 2, lineBeforeRead.stderr);
     assert.match(lineBeforeRead.stderr, /\(C\)/);
-    const staleRead = runPlan(turn([writePlan(), review('dry-runner', `Dry-run ${PLAN}`), advisor, readPlan(), editPlan(), review('dry-runner', `Dry-run ${PLAN}`), authorReview], asks.type), asks.type);
+    const staleRead = runPlan(turn([writePlan(), review('cold-reader', `Cold-read ${PLAN}`), advisor, readPlan(), editPlan(), review('cold-reader', `Cold-read ${PLAN}`), authorReview], asks.type), asks.type);
     assert.equal(staleRead.status, 2, staleRead.stderr);
     assert.match(staleRead.stderr, /\(C\)/);
     assert.doesNotMatch(staleRead.stderr, /\(A\)/);
     assert.doesNotMatch(staleRead.stderr, /\(B\)/);
-    const stale =runPlan(turn([writePlan(), authorReview, review('dry-runner', `Dry-run ${PLAN}`), advisor, editPlan(), review('dry-runner', `Dry-run ${PLAN}`)], asks.type), asks.type);
+    const stale =runPlan(turn([writePlan(), authorReview, review('cold-reader', `Cold-read ${PLAN}`), advisor, editPlan(), review('cold-reader', `Cold-read ${PLAN}`)], asks.type), asks.type);
     assert.equal(stale.status, 2, stale.stderr);
     assert.match(stale.stderr, /\(C\)/);
     assert.doesNotMatch(stale.stderr, /\(A\)/);

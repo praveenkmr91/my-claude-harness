@@ -216,9 +216,6 @@ test.describe('rule and hook agree', () => {
     ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-battery.md', /## Required members/],
     ['hooks/review-classify.py', /^BIG_MEMBERS = \('silent-failure-hunter', 'type-design-analyzer', 'reuse-analyzer', 'placement-analyzer', 'delete-list', 'adversarial-reviewer', 'security-review'\)$/m, 'review-battery.md', /\*\*Big\.\*\* .*silent-failure-hunter, type-design-analyzer, reuse-analyzer, placement-analyzer, delete-list, adversarial-reviewer and security-review/],
     ['hooks/enforce-subagent-model.sh', /names its effort/, 'subagent-tiers-enforcement.md', /with no `effort`/],
-    ['hooks/step-gate.sh', /No dry-runner dispatch/, 'peer-sessions.md', /step-gate\.sh enforces/],
-    ['hooks/step-gate.sh', /No dry-runner dispatch/, 'plan-build.md', /first implementer dispatch until a dry-runner/],
-    ['hooks/step-gate.sh', /No dry-runner dispatch/, 'README.md', /first dispatch until its dry run/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
     test(`${hook} ↔ ${doc}: ${docPattern.source}`, () => {

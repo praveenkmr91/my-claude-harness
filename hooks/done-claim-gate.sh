@@ -61,7 +61,7 @@ stop_msg=re.compile(r'<cross-session-message[^>]*>\s*\[STOP\b')
 harness=os.path.expanduser('~/.claude/')
 reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 # Plan-review tracking is transcript-wide and never reset(): plan edits and their reviews span turns.
-ev=0; plan_edits={}; plan_reviews=[]; advisor_at=[]; author_review_at=[]; plan_reads=[]; learned=False; model=''
+ev=0; plan_edits={}; plan_reviews=[]; errored_ids=set(); advisor_at=[]; author_review_at=[]; plan_reads=[]; learned=False; model=''
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
 # The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file").
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
@@ -87,6 +87,7 @@ for line in transcript:
             for b in c or []:
                 if isinstance(b,dict) and b.get('type')=='tool_result':
                     results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
+                    if b.get('is_error'): errored_ids.add(b.get('tool_use_id'))
                     if b.get('tool_use_id') in commit_ids and not b.get('is_error') and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]
                     for m in output_file.finditer(results[b.get('tool_use_id')][1]): agent_out[m.group(2)]=m.group(1)
         # A blocked REPORT lands as an errored result and keeps the window, so an unchanged resend blocks again; a pending send has no result yet.
@@ -113,7 +114,7 @@ for line in transcript:
             if b.get('name') in ('Write','Edit'):
                 edited=b.get('input',{}).get('file_path','')
                 if re.search(r'/plans/[^/]+\.md$',edited) and not edited.endswith('.research.md'): plan_edits[edited]=ev
-            elif b.get('name') in ('Agent','Task') and lens_ran(b) in ('cold-reader','dry-runner'): plan_reviews.append((ev,b.get('input',{}).get('prompt') or ''))
+            elif b.get('name') in ('Agent','Task') and lens_ran(b)=='cold-reader': plan_reviews.append((ev,b.get('input',{}).get('prompt') or '',b.get('id')))
             elif b.get('name')=='Read': plan_reads.append((ev,b.get('input',{}).get('file_path','')))
             message=b.get('input',{}).get('message')
             # A REPORT's lens and skip lines satisfy the Stop arm after the send.
@@ -207,9 +208,11 @@ implement_ask=not report and plan_edits and ask_line and re.search(r'\b(implemen
 if implement_ask and not re.search(label_open+r'plan gate'+label_close+skip_reason,'\n'.join(texts),re.M|re.I):
     plan_path=max(plan_edits,key=plan_edits.get)
     plan_name=os.path.basename(plan_path)
-    covering=[e for e,prompt in plan_reviews if plan_path in prompt or plan_name in prompt]
+    # The basename matches only as a whole path component, so a read of `build-ui.md` is not one of `ui.md`; the basename alone still follows a plan moved between `plans/` dirs.
+    named_in=re.compile(r'(?:^|[/\s`"\'(])'+re.escape(plan_name)+r'\b')
+    covering=[e for e,prompt,i in plan_reviews if i not in errored_ids and (plan_path in prompt or named_in.search(prompt))]
     unreviewed=[]
-    if not any(e>plan_edits[plan_path] for e in covering): unreviewed.append('(A) no cold-reader or dry-runner ran on it after its last edit')
+    if not covering: unreviewed.append('(A) no cold-reader ran on it')
     if covering and 'fable' not in model.lower() and not any(a>covering[0] for a in advisor_at): unreviewed.append('(B) no advisor consult followed its first review')
     read_after=[e for e,p in plan_reads if p==plan_path and e>plan_edits[plan_path]]
     if not read_after or not (pass_review.search(final) or any(a>=read_after[0] for a in author_review_at)): unreviewed.append('(C) no `Pass: review` of your own followed a Read of the plan after its last edit')

@@ -57,8 +57,7 @@ const HANDOFF_ENVELOPE = `<cross-session-message from="uds:/tmp/x.sock" from-nam
 const handoff = () => ({ type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${HANDOFF_ENVELOPE}` } });
 const handoffAttachment = () => ({ type: 'attachment', attachment: { type: 'queued_command', commandMode: 'prompt', isMeta: true, prompt: HANDOFF_ENVELOPE } });
 const LAUNCHED = toolResult('Async agent launched successfully. agentId: a1b2c3');
-const DRY_RUN = [dispatch('dry-runner', PLAN_PROMPT, 'tu-dry'), toolResult('Async agent launched successfully. agentId: d1', false, 'tu-dry')];
-const STEP_DONE = [...DRY_RUN, dispatch('implementer'), LAUNCHED, handBack()];
+const STEP_DONE = [dispatch('implementer'), LAUNCHED, handBack()];
 
 let seq = 0;
 function transcript(entries) {
@@ -101,7 +100,6 @@ module.exports = {
   handoff,
   handoffAttachment,
   LAUNCHED,
-  DRY_RUN,
   STEP_DONE,
   run,
   assertQuiet,

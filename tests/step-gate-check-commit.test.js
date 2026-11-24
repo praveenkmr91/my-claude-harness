@@ -8,7 +8,6 @@ const {
   dispatch,
   toolResult,
   handBackAttachment,
-  DRY_RUN,
   LAUNCHED,
   STEP_DONE,
   run,
@@ -99,13 +98,13 @@ test('step gate: check commit', async (t) => {
   });
 
   await t.test('a hand-back queued as an attachment is an anchor', () => {
-    const { code, stderr } = run([...DRY_RUN, dispatch('implementer'), LAUNCHED, handBackAttachment('implementer')]);
+    const { code, stderr } = run([dispatch('implementer'), LAUNCHED, handBackAttachment('implementer')]);
     assert.equal(code, 2);
     assert.match(stderr, /handed back with no check or commit from this thread since/);
     assert.equal(run([...STEP_DONE, bash('npx tsc --noEmit'), bash('git commit -m "step 1"'), dispatch('implementer'), LAUNCHED, handBackAttachment()]).code, 2);
   });
 
   await t.test('an attachment hand-back from another agent kind is no anchor', () => {
-    assertQuiet(run([...DRY_RUN, dispatch('checker'), LAUNCHED, handBackAttachment('checker')]));
+    assertQuiet(run([dispatch('checker'), LAUNCHED, handBackAttachment('checker')]));
   });
 });

@@ -2,7 +2,7 @@
 # Agent PreToolUse hook, enforcing arm of ~/.claude/plan-build.md "The build carries the gates"; main thread only, subagents skipped.
 #   Blocks an implementer dispatch in a plan build (this or an earlier implementer prompt since the last HANDOFF names an existing plan file) until this thread, since the last implementer hand-back,
 #   ran a check (lint, type check, tests, or a checker dispatch) and a commit, or the dispatch prompt opens with `step gate: skip — <check|commit|step>: <why>`, one line per gate.
-#   Every plan-build implementer dispatch also needs a non-errored `dry-runner` dispatch on a plan, or a review-skip dispatch (`step gate: skip — review: <why>`), since the last HANDOFF (any time, with no HANDOFF); a dispatch still running and a denied dispatch never gate the next.
+#   A dispatch still running and a denied dispatch never gate the next.
 #   A check or commit counts only when its tool_result is not an error; nothing downstream re-checks a red run, so this hook does.
 IN=$(cat)
 
@@ -19,14 +19,13 @@ CHECK='(^|[;&|(\n]\s*)((command|time|env(\s+\w+=\S*)*|if|then|!)\s+)?(\w+=\S*\s+
 COMMIT='(^|[;&|(\n]\s*)((command|time|env(\s+\w+=\S*)*|if|then|!)\s+)?(\w+=\S*\s+)*git(\s+(-[Cc]\s+\S+|--?\w[\w-]*(=\S+)?))*\s+(commit(?!\s+(--dry-run|-h|--help)\b)|commit-tree|update-ref)\b'
 NOOP='--(version|help|dry-run)\b'
 SKIP='^\s*step gate: skip[[:space:]]*(—|–|-)+[[:space:]]*(check|commit|step|review):[[:space:]]*[^[:space:]<]'
-PLAN='/plans/[^/\s]+\.md'
 PLAN_PATH='[^\s"'\''`]*/plans/[^/\s"'\''`]+\.md'
 HANDOFF='<cross-session-message[^>]*>\s*\[HANDOFF '
 # Gate names from the prompt's leading skip lines, one line per gate, so a dispatch missing both a check and a commit can skip both.
 SKIPS_DEF='def skips: def lead: if length > 0 and (.[0] | test($skip)) then (.[0] | match($skip).captures[1].string), (.[1:] | lead) else empty end; split("\n") | map(select(test("\\S"))) | lead;'
 
 # Parsed, not grepped: tool_result text, hand-back bodies and harness sessions quote `git commit` and `tsc`.
-EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg noop "$NOOP" --arg plan "$PLAN" --arg planpath "$PLAN_PATH" --arg handoff "$HANDOFF" --arg skip "$SKIP" 'include "turns"; '"$SKIPS_DEF"' fromjson? |
+EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg noop "$NOOP" --arg planpath "$PLAN_PATH" --arg handoff "$HANDOFF" 'include "turns"; fromjson? |
   (select(.type? == "user" and .origin.handback? == true and .origin.name? == "implementer") | "H"),
   (select(.type? == "attachment" and .attachment.origin.handback? == true and .attachment.origin.name? == "implementer") | "H"),
   (select(.type? == "user") | .message.content | strings | select(test($handoff)) | "O"),
@@ -34,9 +33,7 @@ EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "
   (select(.type? == "user") | .message.content[]? | select(.type? == "tool_result" and .is_error? == true) | "E \(.tool_use_id)"),
   (select(.type? == "assistant") | .message.content[]? | select(.type? == "tool_use") |
     if .name == "Agent" then (select(.input.subagent_type? == "checker") | "C \(.id)"),
-      (select(.input.subagent_type? == "implementer") | .input.prompt? // "" | match($planpath; "g") | "P " + .string),
-      (select(.input.subagent_type? == "dry-runner" and (.input.prompt? // "" | test($plan))) | "R \(.id)"),
-      (select(.input.subagent_type? == "implementer" and (.input.prompt? // "" | [skips] | any(. == "review"))) | "R \(.id)")
+      (select(.input.subagent_type? == "implementer") | .input.prompt? // "" | match($planpath; "g") | "P " + .string)
     elif .name == "Bash" then .id as $id | .input.command? // "" | gsub($quoted; .q[:1] + (.q[1:-1] | gsub("."; "_")) + .q[-1:])
       | select(test($noop) | not) | (select(test($check)) | "C \($id)"), (select(test($commit)) | "K \($id)")
     else empty end)' 2>/dev/null)
@@ -68,13 +65,10 @@ keep_existing_plans() {
 MISSING=$(printf '%s\n' "$EVENTS" "$PROMPT_EVENTS" \
   | keep_existing_plans \
   | awk '$0 == "H" { h = 1; c = sc = sk = ss = 0; delete cs; delete ks; delete es; next }
-    $0 == "O" { delete rs; p = 0; next }
-    $0 == "P" { p = 1 } $1 == "C" && NF == 2 { cs[$2] = 1 } $1 == "K" { ks[$2] = 1 } $1 == "E" { es[$2] = 1; delete rs[$2] } $1 == "R" { rs[$2] = 1 }
-    $0 == "S check" { sc = 1 } $0 == "S commit" { sk = 1 } $0 == "S step" { ss = 1 } $0 == "S review" { sr = 1 }
+    $0 == "O" { p = 0; next }
+    $0 == "P" { p = 1 } $1 == "C" && NF == 2 { cs[$2] = 1 } $1 == "K" { ks[$2] = 1 } $1 == "E" { es[$2] = 1 }
+    $0 == "S check" { sc = 1 } $0 == "S commit" { sk = 1 } $0 == "S step" { ss = 1 }
     END {
-      review = sr
-      for (id in rs) if (!(id in es)) review = 1
-      if (p && !review) { print "dry-run"; exit }
       if (!p || !h || ss) exit
       for (id in cs) if (!(id in es)) c = 1
       for (id in ks) if (!(id in es)) k = 1
@@ -83,9 +77,5 @@ MISSING=$(printf '%s\n' "$EVENTS" "$PROMPT_EVENTS" \
     }')
 
 [ -n "$MISSING" ] || exit 0
-if [ "$MISSING" = dry-run ]; then
-  printf 'No dry-runner dispatch on this plan since the HANDOFF (or in this session). Per `plan-build.md` the plan is dry-run against the current tree before its first step: dispatch `dry-runner` with the plan path, judge its output, then dispatch `implementer`; or open the prompt with `step gate: skip — review: <why>`. A dry run that ran in another session is a skip naming that session; reply text written this turn is not seen, and a plain retry stays blocked.\n' >&2
-  exit 2
-fi
 printf 'The last `implementer` step handed back with no %s from this thread since. Per `plan-build.md` each step verifies, lints, type-checks and commits before the next dispatch. Run the step'\''s checks (or dispatch `checker`) and commit, or open the dispatch prompt with `step gate: skip — <check|commit>: <why>`, one line per gate (`commit: same-step fix` for a review fix before the commit; `step: <question answered>` when the hand-back was a question); reply text written this turn is not seen, and a plain retry stays blocked.\n' "$MISSING" >&2
 exit 2
