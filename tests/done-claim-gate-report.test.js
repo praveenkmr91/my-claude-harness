@@ -376,6 +376,17 @@ test('done-claim gate: report', async (t) => {
     sent(stopAfter(builderThread([60, 60]), reply, [commit]));
   });
 
+  await t.test('a REPORT sent after a delivered STOP-answering REPORT, with no edit in its window, is refused for the Big members still unrun; run, it is sent', () => {
+    const stopEnvelope = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[STOP demo] Stop after this step and report.\n</cross-session-message>';
+    const answered = [
+      { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${stopEnvelope}` } } },
+      { sent: `[REPORT demo step 2] Stopped before step 2 started.\n${RAW_OUTPUT}`, output: 'Message sent to planner-1', timestamp: stamp(30) },
+    ];
+    const implementerRun = { blocks: [{ type: 'tool_use', id: 'dispatch-implementer', name: 'Agent', input: { subagent_type: 'implementer', description: 'build', prompt: 'build' } }], timestamp: stamp(5) };
+    refusedFor(sendReport(builderThread([250]), [implementerRun, ...answered]), BIG_NAMES);
+    sent(sendReport(builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))]), [implementerRun, ...answered]));
+  });
+
   await t.test('the retry in a window a REPORT opened holds the Big members for a claim or one block; after two blocks only a claim holds them', () => {
     const retry = (reply, blocks) => stopAfter(builderThread([60, 250]), reply, Array.from({ length: blocks }, feedback), true);
     const claim = 'Done: step built.\ndelete-list: skip — fixture files';
