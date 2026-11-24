@@ -29,9 +29,6 @@ function run(mode, toolInput) {
   return { code: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
-const writeContent = (file, content) => run('pre', { file_path: file, content });
-const reasonOf = (res) => JSON.parse(res.stdout).hookSpecificOutput.permissionDecisionReason;
-
 function check(content) {
   const file = path.join(tmpDir, `check-${checkCount++}.md`);
   fs.writeFileSync(file, content);
@@ -43,63 +40,14 @@ function check(content) {
 let checkCount = 0;
 const rulesOf = (content) => check(content).findings.map((finding) => finding.split(' ')[1]);
 
-const STEPS_PREAMBLE_LINES = [
-  'Each step ends with lint, `pnpm typecheck`, its `→ verify:`, a diff review and one local commit.',
-  'A step that renders a key adds it to the CSVs (en and zh, the Copy table) and runs',
-  '`pnpm translations:keys` in the same commit. Steps 1–5 are independent; 6–10 need them.',
-];
-
 test('plan lint', async (t) => {
-  const plain = planFile(path.join(tmpDir, 'plain'));
-
-  await t.test('denies a journal word in prose', () => {
-    const res = writeContent(plain, '# Plan\n\nWe found the bug in the loader.\n');
-    assert.equal(res.code, 0);
-    const decision = JSON.parse(res.stdout).hookSpecificOutput;
-    assert.equal(decision.hookEventName, 'PreToolUse');
-    assert.equal(decision.permissionDecision, 'deny');
-    assert.match(decision.permissionDecisionReason, /3 P1 We found the bug in the loader\./);
-    assert.match(decision.permissionDecisionReason, /rephrase as an instruction or a decision; move facts/);
-  });
-
-  await t.test('denies an Edit new_string the same way', () => {
-    const res = run('pre', { file_path: plain, old_string: 'a', new_string: 'It turned out to be slow.' });
-    assert.match(reasonOf(res), /1 P1 It turned out to be slow\./);
-  });
-
-  await t.test('denies a capital I but not the i.e. abbreviation', () => {
-    assert.match(reasonOf(writeContent(plain, 'I checked it.')), /P1/);
-    assert.equal(writeContent(plain, 'Use a fixed width, i.e. 12px.').stdout, '');
-  });
-
-  await t.test('allows the same word in backticks', () => {
-    const res = writeContent(plain, 'Never write `we found` in a plan.\n');
-    assert.equal(res.code, 0);
-    assert.equal(res.stdout, '');
-  });
-
-  await t.test('allows the word inside a code fence and inside quotes', () => {
-    assert.equal(writeContent(plain, 'Steps:\n\n```\nwe found it\n```\n').stdout, '');
-    assert.equal(writeContent(plain, 'The banner reads "we found nothing".\n').stdout, '');
-  });
-
-  await t.test('allows a sourced fact row', () => {
-    const res = writeContent(plain, 'Sampled on ocbc-dev\n');
-    assert.equal(res.code, 0);
-    assert.equal(res.stdout, '');
-  });
-
-  await t.test('allows a path outside the plan directories', () => {
-    const res = writeContent(path.join(tmpDir, 'notes.md'), 'We found it.\n');
-    assert.equal(res.code, 0);
-    assert.equal(res.stdout, '');
-  });
+  const UNVERIFIED = '# Plan\n\n## Steps\n\n1. **Do it.**\n';
 
   await t.test('post exits 2 with findings on stderr for a file on disk', () => {
-    const file = planFile(path.join(tmpDir, 'post'), 'x.md', '# Plan\n\nwe found it\n');
+    const file = planFile(path.join(tmpDir, 'post'), 'x.md', UNVERIFIED);
     const res = run('post', { file_path: file });
     assert.equal(res.code, 2);
-    assert.match(res.stderr, /3 P1 we found it/);
+    assert.match(res.stderr, /5 P3 1\. \*\*Do it\.\*\*/);
   });
 
   await t.test('post passes a clean file', () => {
@@ -110,125 +58,62 @@ test('plan lint', async (t) => {
   });
 
   await t.test('handles a plan under ~/.claude/plans', () => {
-    fs.writeFileSync(homePlan, 'we found it\n');
-    assert.equal(JSON.parse(run('pre', { file_path: homePlan, content: 'we found it\n' }).stdout).hookSpecificOutput.permissionDecision, 'deny');
+    fs.writeFileSync(homePlan, UNVERIFIED);
     assert.equal(run('post', { file_path: homePlan }).code, 2);
-    assert.equal(writeContent(homePlan, 'Run the check.\n').stdout, '');
+    fs.writeFileSync(homePlan, 'Run the check.\n');
+    assert.equal(run('post', { file_path: homePlan }).code, 0);
   });
 
   await t.test('lints any path with a plans directory segment', () => {
     const inPlans = path.join(tmpDir, 'plans', 'x.md');
     const inNotPlans = path.join(tmpDir, 'notplans', 'x.md');
-    assert.match(reasonOf(writeContent(inPlans, 'we found it\n')), /1 P1 we found it/);
-    assert.equal(writeContent(inNotPlans, 'we found it\n').stdout, '');
+    for (const file of [inPlans, inNotPlans]) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, UNVERIFIED);
+    }
+    assert.equal(run('post', { file_path: inPlans }).code, 2);
+    assert.equal(run('post', { file_path: inNotPlans }).code, 0);
   });
 
   await t.test('skips a research file beside the plans', () => {
     const research = path.join(tmpDir, 'plans', 'x.research.md');
     fs.mkdirSync(path.dirname(research), { recursive: true });
-    fs.writeFileSync(research, 'we found it\n');
-    assert.equal(writeContent(research, 'we found it\n').stdout, '');
+    fs.writeFileSync(research, UNVERIFIED);
     assert.equal(run('post', { file_path: research }).code, 0);
   });
 
-  await t.test('pre applies P1 only and ignores a 300-char paragraph', () => {
-    assert.equal(writeContent(plain, `${'x '.repeat(150).trim()}\n`).stdout, '');
-  });
-
-  await t.test('post applies P2 to a long paragraph on disk', () => {
-    const file = planFile(path.join(tmpDir, 'post-long'), 'x.md', `${'x '.repeat(150).trim()}\n`);
-    const res = run('post', { file_path: file });
-    assert.equal(res.code, 2);
-    assert.match(res.stderr, /1 P2 x x/);
-  });
-
   await t.test('fails open on malformed input', () => {
-    const res = spawnSync('node', [HOOK_PATH, 'pre'], { input: 'not json', encoding: 'utf8' });
+    const res = spawnSync('node', [HOOK_PATH, 'post'], { input: 'not json', encoding: 'utf8' });
     assert.equal(res.status, 0);
     assert.equal(res.stdout, '');
   });
 
-  await t.test('pre and post exit 0 with no output on empty input', () => {
-    for (const mode of ['pre', 'post']) {
-      const res = run(mode);
-      assert.equal(res.code, 0);
-      assert.equal(res.stdout, '');
-      assert.equal(res.stderr, '');
-    }
-  });
-});
-
-test('check P1', async (t) => {
-  await t.test('fails a journal marker and a first-person I, one finding per line', () => {
-    const res = check('Turned out the API is flat.\nI checked it.\n');
-    assert.equal(res.code, 1);
-    assert.deepEqual(res.findings, ['1 P1 Turned out the API is flat.', '2 P1 I checked it.']);
-    assert.equal(
-      res.stderr.trimEnd().split('\n').at(-1),
-      'rephrase as an instruction or a decision; move facts, code reads, rejected alternatives, samples and dated material to <name>.research.md',
-    );
-  });
-
-  await t.test('passes markers inside backticks, quotes, fences and a Source column', () => {
-    const res = check(
-      [
-        'Use `we found` as a token, and "we found" or “we found” as text.',
-        '',
-        '```',
-        'we found it, I think',
-        '```',
-        '',
-        '| Field | Source |',
-        '| ----- | ------ |',
-        '| id    | we found it in the sample |',
-        '',
-      ].join('\n'),
-    );
+  await t.test('exits 0 with no output on empty input', () => {
+    const res = run('post');
     assert.equal(res.code, 0);
+    assert.equal(res.stdout, '');
     assert.equal(res.stderr, '');
   });
 
-  await t.test('still scans the other columns of a table with a Source column', () => {
-    assert.deepEqual(rulesOf(['| Field | Source |', '| --- | --- |', '| we found | sample |'].join('\n')), ['P1']);
-  });
-
-  await t.test('passes interface wording: re.I, I/O, not-found, initially collapsed', () => {
-    const text = 'Pass flags=re.I to the I/O reader.\nThe not-found page renders with the panel initially collapsed.\n';
-    assert.deepEqual(rulesOf(text), []);
-  });
-
-  await t.test('still fails the journal twins of that wording', () => {
-    const text = 'The reader failed. I retried it.\nThe page was not found.\nInitially the panel was built as a modal.\n';
-    assert.deepEqual(rulesOf(text), ['P1', 'P1', 'P1']);
-  });
-
-  await t.test('passes "Sampled on ocbc-dev" and "i.e."', () => {
-    assert.equal(check('Sampled on ocbc-dev, i.e. the shared contact.\n').code, 0);
+  await t.test('a leftover pre registration stays silent on a plan with findings', () => {
+    const file = planFile(path.join(tmpDir, 'pre'), 'x.md', UNVERIFIED);
+    const res = run('pre', { file_path: file, content: UNVERIFIED });
+    assert.equal(res.code, 0);
+    assert.equal(res.stdout, '');
+    assert.equal(res.stderr, '');
   });
 });
 
-test('check P2', async (t) => {
-  await t.test('fails a paragraph over 200 characters and passes 200 or fewer', () => {
-    assert.deepEqual(rulesOf('x '.repeat(101).trim()), ['P2']);
-    assert.deepEqual(rulesOf('x '.repeat(100).trim()), []);
+test('check dropped style rules', async (t) => {
+  await t.test('passes a journal word, a first-person I and a 300-character paragraph', () => {
+    assert.equal(check('We found it. It turned out slow. I checked it.\n').code, 0);
+    assert.equal(check(`${'x '.repeat(150).trim()}\n`).code, 0);
   });
 
-  await t.test('fails the Steps preamble as three wrapped lines and as one line', () => {
-    const step = '\n\n1. **Do it.**\n→ verify: `ls`';
-    assert.deepEqual(check(`## Steps\n\n${STEPS_PREAMBLE_LINES.join('\n')}${step}`).findings, [`3 P2 ${STEPS_PREAMBLE_LINES[0]}`]);
-    assert.deepEqual(rulesOf(`## Steps\n\n${STEPS_PREAMBLE_LINES.join(' ')}${step}`), ['P2']);
-  });
-
-  await t.test('allows 500 characters inside Context and not after it', () => {
-    const paragraph = 'x '.repeat(200).trim();
-    assert.deepEqual(rulesOf(`## Context\n\n${paragraph}`), []);
-    assert.deepEqual(rulesOf(`## Context\n\n${paragraph}\n\n## Rules\n\n${paragraph}`), ['P2']);
-    assert.deepEqual(rulesOf(`## Context\n\n${'x '.repeat(260).trim()}`), ['P2']);
-  });
-
-  await t.test('does not count headings, list items, continuations, table rows or verify lines', () => {
-    const long = 'x '.repeat(150).trim();
-    assert.deepEqual(rulesOf([`# ${long}`, `- ${long}`, `  ${long}`, `| ${long} |`, `→ verify: ${long}`].join('\n')), []);
+  await t.test('passes a dated heading, a dated line and a research-style heading', () => {
+    assert.equal(check('## Addendum 2026-09-20\n').code, 0);
+    assert.equal(check('- Status 2026-10-13: built and verified.\n').code, 0);
+    assert.equal(check('## Repo vs demo (traced)\n').code, 0);
   });
 });
 
@@ -333,49 +218,6 @@ test('check P4', async (t) => {
   });
 });
 
-test('check P5', async (t) => {
-  await t.test('fails a section heading naming a trace, a sample or a date', () => {
-    assert.deepEqual(check('## Repo vs demo (traced)\n').findings, ['1 P5 ## Repo vs demo (traced)']);
-    assert.deepEqual(check('## Demo journey (sampled 2026-10-13)\n').findings, ['1 P5 ## Demo journey (sampled 2026-10-13)']);
-  });
-
-  await t.test('passes ordinary headings, a path in backticks and a ### heading', () => {
-    const text = ['## Patterns to mirror', '', '## Contracts the plan rests on', '', '## Files in `logs/`', '', '### Log out step'].join('\n');
-    assert.deepEqual(rulesOf(text), []);
-  });
-
-  await t.test('pre ignores a research heading', () => {
-    assert.equal(writeContent(path.join(tmpDir, 'plans', 'x.md'), '## Repo vs demo\n').stdout, '');
-  });
-});
-
-test('check P6', async (t) => {
-  await t.test('fails a dated status line, a dated prose line and a dated ### heading', () => {
-    assert.deepEqual(check('- Status 2026-10-13: built and verified.\n').findings, ['1 P6 - Status 2026-10-13: built and verified.']);
-    assert.deepEqual(rulesOf('Decided with the user (Praveen, 2026-09-19).\n'), ['P6']);
-    assert.deepEqual(rulesOf('### Revised 2026-09-19\n'), ['P6']);
-  });
-
-  await t.test('passes a date in backticks, quotes, a fence and a Source column', () => {
-    assert.deepEqual(rulesOf('Path `out/2026-10-04/x.json`.\n'), []);
-    assert.deepEqual(rulesOf('Wording "confirmed 2026-10-08".\n'), []);
-    assert.deepEqual(rulesOf('Steps:\n\n```\nrun of 2026-10-13\n```\n'), []);
-    assert.deepEqual(rulesOf(['| Fact | Source |', '|---|---|', '| flat API | sample 2026-10-13 |'].join('\n')), []);
-  });
-
-  await t.test('passes version and node strings', () => {
-    assert.deepEqual(rulesOf('Pin v8.0.6 and read node 1156:37436.\n'), []);
-  });
-
-  await t.test('gives a dated ## heading P5 only', () => {
-    assert.deepEqual(rulesOf('## Addendum 2026-09-20\n'), ['P5']);
-  });
-
-  await t.test('pre ignores a date', () => {
-    assert.equal(writeContent(path.join(tmpDir, 'plans', 'x.md'), '- Status 2026-10-13\n').stdout, '');
-  });
-});
-
 test('check P7', async (t) => {
   const P7_HINT = 'name each criterion in the step that delivers it';
   const REPHRASE_HINT =
@@ -473,9 +315,9 @@ test('check P7', async (t) => {
     assert.equal(alone.stderr.trimEnd().split('\n').at(-1), P7_HINT);
     assert.doesNotMatch(alone.stderr, /rephrase/);
 
-    const withP1 = check(['I checked it.', ...A2_UNNAMED].join('\n'));
-    assert.deepEqual(withP1.findings, ['1 P1 I checked it.', '5 P7 criterion A2 has no step']);
-    assert.deepEqual(withP1.stderr.trimEnd().split('\n').slice(-2), [P7_HINT, REPHRASE_HINT]);
+    const withP10 = check(['## Facts', ...A2_UNNAMED].join('\n'));
+    assert.deepEqual(withP10.findings, ['1 P10 ## Facts', '5 P7 criterion A2 has no step']);
+    assert.deepEqual(withP10.stderr.trimEnd().split('\n').slice(-2), [P7_HINT, REPHRASE_HINT]);
   });
 
   await t.test('post exits 2 with the P7 line for a plan on disk', () => {
@@ -540,8 +382,8 @@ test('check P8', async (t) => {
     assert.deepEqual(both.stderr.trimEnd().split('\n').slice(-2), [P7_HINT, P8_HINT]);
     assert.doesNotMatch(both.stderr, /rephrase/);
 
-    const withP1 = check(['I checked it.', ...text].join('\n'));
-    assert.deepEqual(withP1.stderr.trimEnd().split('\n').slice(-3), [P7_HINT, P8_HINT, REPHRASE_HINT]);
+    const withP10 = check(['## Facts', ...text].join('\n'));
+    assert.deepEqual(withP10.stderr.trimEnd().split('\n').slice(-3), [P7_HINT, P8_HINT, REPHRASE_HINT]);
   });
 
   await t.test('post exits 2 with P8 for a headings-only plan on disk', () => {
@@ -675,6 +517,17 @@ test('check P10', async (t) => {
     assert.deepEqual(rulesOf(['| Field | Source |', '| --- | --- |', '| id | Rejected: by the bank |'].join('\n')), []);
   });
 
+  await t.test('masks only the Source column of a table, not the other columns', () => {
+    const table = (row) => ['| Field | Source |', '| --- | --- |', row].join('\n');
+    assert.deepEqual(check(table('| Rejected: a cache | sample |')).findings, ['3 P10 | Rejected: a cache | sample |']);
+    assert.deepEqual(rulesOf(table('| a cache | Rejected: a cache |')), []);
+  });
+
+  await t.test('stays quiet for Rejected: inside curly quotes and fires without them', () => {
+    assert.deepEqual(rulesOf('- The badge reads “Rejected: card expired”.\n'), []);
+    assert.deepEqual(rulesOf('- The badge reads Rejected: card expired.\n'), ['P10']);
+  });
+
   await t.test('prints the rephrase hint', () => {
     const res = check('## Facts\n');
     assert.equal(res.code, 1);
@@ -738,12 +591,6 @@ test('check P11', async (t) => {
     const res = check(FACTS_AND_TWO_CHUNKS);
     assert.deepEqual(res.findings, ['1 P10 ## Facts', '15 P11 ## Chunk 2: detail it']);
     assert.deepEqual(res.stderr.trimEnd().split('\n').slice(-2), [P11_HINT, REPHRASE_HINT]);
-  });
-
-  await t.test('pre does not deny a write holding a Facts section and two detailed chunks', () => {
-    const res = writeContent(planFile(path.join(tmpDir, 'pre-p10')), FACTS_AND_TWO_CHUNKS);
-    assert.equal(res.code, 0);
-    assert.equal(res.stdout, '');
   });
 
   await t.test('post exits 2 naming P10 and P11 for the same plan on disk', () => {

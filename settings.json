@@ -509,11 +509,6 @@
           },
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/hooks/plan-lint.js\" pre",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "bash $HOME/.claude/hooks/opus-write-nudge.sh",
             "timeout": 5
           },

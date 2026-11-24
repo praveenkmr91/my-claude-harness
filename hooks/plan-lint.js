@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PreToolUse and PostToolUse on Write|Edit of a plan file: refuses research narrative, evidence sections and a second detailed chunk in a plan.
+// PostToolUse on Write|Edit of a plan file: refuses a step without a verify line, unparsed or unnamed structure, evidence sections and a second detailed chunk in a plan.
 'use strict';
 
 const fs = require('node:fs');
@@ -14,29 +14,13 @@ const ONE_DETAILED_CHUNK =
   'detail one chunk at a time: a landed chunk keeps its heading and one line naming the criteria it delivered; its steps and verify lines leave';
 const OWN_HINT_RULES = ['P7', 'P8', 'P9', 'P11'];
 
-// Interface wording is not a journal: `re.I`, `I/O`, `not-found`, `initially collapsed`.
-const FIRST_PERSON = /(?<![\w./-])I(?![\w/-])/;
-const UI_STATE = 'collapsed|expanded|open|closed|hidden|visible|shown|selected|checked|unchecked|disabled|enabled|empty|focused';
-const JOURNAL_MARKER = new RegExp(
-  `(?<![\\w-])(we|found|turned out|turns out|investigated|investigation|probably|apparently|it seems|note that|interestingly|initially(?! (?:${UI_STATE})\\b)|originally|previously|at first)(?![\\w-])`,
-  'i',
-);
-
 const FENCE = /^\s*```/;
 const MASKED_SPAN = /`[^`\n]*`|"[^"\n]*"|“[^”\n]*”/g;
 const TABLE_ROW = /^\s*\|/;
-const HEADING = /^#{1,6}\s/;
 const SECTION_HEADING = /^## /;
-const RESEARCH_HEADING =
-  /\b(sampled|traced|journey|findings?|research|investigation|log|notes|history|vs\.?|addendum|unverified)\b|\d{4}-\d{2}-\d{2}/i;
 const EVIDENCE_HEADING = /^#{1,6}\s+(facts|blocked on)\b/i;
 const REJECTED_LABEL = /Rejected:/;
-const DATE = /\b\d{4}-\d{2}-\d{2}\b/;
-const CONTEXT_HEADING = /^## Context\s*$/;
 const OPEN_HEADING = /^## Open(\s|$)/;
-const LIST_ITEM = /^\s*([-*+]|\d+\.)\s/;
-const INDENTED = /^\s{2,}\S/;
-const VERIFY_LINE = /^\s*→ verify/;
 const STEP =
   /^(\d{1,2}(?:\.\d{1,2})+\.? \*\*|\d{1,2}\. \*\*|#{3,4} \d{1,2}(?:\.\d{1,2})+\.?(\s|$)|#{3,4} \d{1,2}\.(\s|$)|## (?:Step \d+\b|S\d+(?=\s*(?:[:.—–-]|$))))/;
 const HEADING_STEP = /^## (?:Step \d+\b|S\d+(?=\s*(?:[:.—–-]|$)))/;
@@ -56,8 +40,6 @@ const UNPARSED_STEP_HEADING = /^## (Steps\s*$|Step \d+\b|Chunk \d+\b|S\d+(?=\s*(
 const CRITERION_NAME = /\b([A-Z])(\d+)\b/g;
 const CRITERION_RANGE = /\b([A-Z])(\d+)[–-]\1?(\d+)\b/g;
 
-const PARAGRAPH_LIMIT = 200;
-const CONTEXT_PARAGRAPH_LIMIT = 500;
 const OPEN_BULLET_LIMIT = 3;
 const MAX_RANGE_SPAN = 99;
 
@@ -98,70 +80,12 @@ function maskedLines(lines, fenced) {
   });
 }
 
-function journalFindings(lines, masked) {
-  return lines.flatMap((line, index) => {
-    const text = masked[index];
-    return FIRST_PERSON.test(text) || JOURNAL_MARKER.test(text)
-      ? [{ line: index + 1, rule: 'P1', text: line.trim() }]
-      : [];
-  });
-}
-
-function researchHeadings(lines, masked) {
-  return lines.flatMap((line, index) =>
-    SECTION_HEADING.test(line) && RESEARCH_HEADING.test(masked[index])
-      ? [{ line: index + 1, rule: 'P5', text: line.trim() }]
-      : [],
-  );
-}
-
 function evidenceLines(lines, masked) {
   return lines.flatMap((line, index) =>
     EVIDENCE_HEADING.test(line) || REJECTED_LABEL.test(masked[index])
       ? [{ line: index + 1, rule: 'P10', text: line.trim() }]
       : [],
   );
-}
-
-function datedLines(lines, masked) {
-  return lines.flatMap((line, index) =>
-    !SECTION_HEADING.test(line) && DATE.test(masked[index])
-      ? [{ line: index + 1, rule: 'P6', text: line.trim() }]
-      : [],
-  );
-}
-
-const isProse = (line) =>
-  line.trim() !== '' &&
-  !HEADING.test(line) &&
-  !LIST_ITEM.test(line) &&
-  !INDENTED.test(line) &&
-  !TABLE_ROW.test(line) &&
-  !VERIFY_LINE.test(line);
-
-function longParagraphs(lines) {
-  const findings = [];
-  let inContext = false;
-  let runStart = 0;
-  let run = [];
-
-  [...lines, ''].forEach((line, index) => {
-    if (isProse(line)) {
-      if (run.length === 0) runStart = index;
-      run.push(line.trim());
-      return;
-    }
-
-    const limit = inContext ? CONTEXT_PARAGRAPH_LIMIT : PARAGRAPH_LIMIT;
-    if (run.join(' ').length > limit) {
-      findings.push({ line: runStart + 1, rule: 'P2', text: run[0] });
-    }
-    run = [];
-
-    if (SECTION_HEADING.test(line)) inContext = CONTEXT_HEADING.test(line);
-  });
-
-  return findings;
 }
 
 function sectionEnd(lines, start) {
@@ -340,27 +264,21 @@ function unparsedShapes(lines) {
   return findings;
 }
 
-function lintPlan(text, { fragment }) {
+function lintPlan(text) {
   const lines = text.split(/\r?\n/);
   const fenced = fencedLines(lines);
   const masked = maskedLines(lines, fenced);
-  const findings = journalFindings(lines, masked);
+  const outsideFences = lines.map((line, index) => (fenced[index] ? '' : line));
 
-  if (!fragment) {
-    const outsideFences = lines.map((line, index) => (fenced[index] ? '' : line));
-    findings.push(
-      ...longParagraphs(outsideFences),
-      ...unverifiedSteps(outsideFences),
-      ...longOpenBullets(outsideFences),
-      ...criteriaWithoutStep(outsideFences),
-      ...unparsedShapes(outsideFences),
-      ...detailedDraftLines(outsideFences),
-      ...extraDetailedChunks(outsideFences),
-      ...researchHeadings(outsideFences, masked),
-      ...evidenceLines(outsideFences, masked),
-      ...datedLines(outsideFences, masked),
-    );
-  }
+  const findings = [
+    ...unverifiedSteps(outsideFences),
+    ...longOpenBullets(outsideFences),
+    ...criteriaWithoutStep(outsideFences),
+    ...unparsedShapes(outsideFences),
+    ...detailedDraftLines(outsideFences),
+    ...extraDetailedChunks(outsideFences),
+    ...evidenceLines(outsideFences, masked),
+  ];
 
   return findings.sort((a, b) => a.line - b.line);
 }
@@ -385,7 +303,7 @@ function runCheck(paths) {
     } catch {
       return [{ rule: 'unreadable', line: `${file}: unreadable` }];
     }
-    return lintPlan(text, { fragment: false }).map((f) => ({ rule: f.rule, line: `${file}:${f.line} ${f.rule} ${f.text}` }));
+    return lintPlan(text).map((f) => ({ rule: f.rule, line: `${file}:${f.line} ${f.rule} ${f.text}` }));
   });
 
   if (entries.length === 0) process.exit(0);
@@ -407,34 +325,21 @@ function runHook(mode) {
     const file = input.tool_input?.file_path;
     if (typeof file !== 'string' || !PLAN_PATH.test(file)) process.exit(0);
 
+    if (mode !== 'post') process.exit(0);
+
     let text;
-    if (mode === 'pre') {
-      text = input.tool_input.content ?? input.tool_input.new_string;
-      if (typeof text !== 'string') process.exit(0);
-    } else if (mode === 'post') {
-      try {
-        text = fs.readFileSync(file, 'utf8');
-      } catch {
-        process.exit(0);
-      }
-    } else {
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
       process.exit(0);
     }
 
-    const findings = lintPlan(text, { fragment: mode === 'pre' }).filter((f) => mode === 'post' || f.rule === 'P1');
+    const findings = lintPlan(text);
     if (findings.length === 0) process.exit(0);
 
     const report = [formatFindings(findings), ...hintLines(findings.map((f) => f.rule))].join('\n');
-    if (mode === 'post') {
-      process.stderr.write(`${report}\n`);
-      process.exit(2);
-    }
-    process.stdout.write(
-      JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: report },
-      }),
-    );
-    process.exit(0);
+    process.stderr.write(`${report}\n`);
+    process.exit(2);
   });
 }
 
