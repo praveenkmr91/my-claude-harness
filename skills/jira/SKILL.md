@@ -10,6 +10,7 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP â€
 - `cloudId`: `additiv.atlassian.net`.
 - `getJiraIssue` with only the `fields` the task needs; add `comment` to see the thread. A whole thread or a JQL sweep goes to `external-io`.
 - Re-read the ticket before drafting: someone may have answered or edited it since the last read.
+- The connector's deprecated-V1-endpoint notice is the organisation's to fix, not Praveen's. Never list it as his pending item or next step.
 
 ## Every write waits for a yes to that exact change
 - Draft the comment in chat and post it only after a "post" or "yes" to that draft. "Proceed", "go" or "do what you need" about other work is not approval to post.
