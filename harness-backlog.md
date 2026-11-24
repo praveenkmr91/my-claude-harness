@@ -50,13 +50,6 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Fix:** add a `skill` kind to the existing harness (`automation/eval-lib.sh` switches on `kind`), one case per judgment-carrying skill, starting with `tailwind-v4` and `tdd`: prompt, planted expectation, judge score. Run before and after a skill edit. Not `claude plugin eval`: a second eval convention beside this one.
 - **Worth it when:** the first edit to `tailwind-v4` or `tdd`, or the first skill regression noticed in a transcript.
 
-### Direct-lookup nudge on a known target
-
-- **Evidence:** session `0c6dfb54`: `inline-call-nudge.sh` fired twice mid-investigation while every lookup read one known hook and its test file; each answer was `direct: continue`.
-- **Why parked:** one session; the nudge's ≤3-call rule is deliberate.
-- **Fix:** count distinct files looked up rather than calls, so repeated reads of one known target do not trip it.
-- **Worth it when:** a census shows `direct: continue` answering most of the nudge's firings.
-
 ### Plan churn: decisions settle after steps are written
 
 - **Evidence:** census of 169 plan-file edits in three sessions (`plans/peer-plan-review.research.md`). Reviews (cold read, dry run, advisor) start 47%, but the rework came from decisions: in `0bdc42f6` the N/A-key decision flipped three times (Decided list edited 13 times), and one 8,155-char rewrite was then reworked by 16 edits, ending in a step retitled "Reverted".
@@ -98,7 +91,7 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 - **Evidence:** 30-day census of main-thread Edit/Write on source files (2026-10-22, `edit-census-filtered.py` in that session's scratchpad): 88 of 1,428 (turn, file) pairs carry 5+ edits, across 52 of 166 editing sessions; 14 pairs carry 10+. The top rows are new hook scripts and spec files being built up, not visible thrash.
 - **Why parked:** a nudge at 5 fires in a third of editing sessions, mostly on ordinary iteration; at 10 it would fire ~14 times a month on turns nobody has read yet. The `systematic-debugging` skill's trigger (two failed hypotheses) already names the real signal by rule.
-- **Fix:** read five of the 10+ turns; if most are edit → failing test → edit loops, a PostToolUse Write|Edit hook (shape of `inline-call-nudge.sh`) counting per `(session, file)` since the last typed prompt, nudging once at 10 toward `systematic-debugging`. Idea from Claude Forge's `loop-detection.sh`.
+- **Fix:** read five of the 10+ turns; if most are edit → failing test → edit loops, a PostToolUse Write|Edit hook counting per `(session, file)` since the last typed prompt, nudging once at 10 toward `systematic-debugging`. Idea from Claude Forge's `loop-detection.sh`.
 
 ### commit-trailer-check.sh reads the wrong commit in two shapes
 

@@ -142,11 +142,6 @@
             "type": "command",
             "command": "jq -r '.prompt // \"\"' | grep -qE '<task-notification>|\\[SYSTEM NOTIFICATION' || cat $HOME/.claude/persona-core.md",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh reset",
-            "timeout": 5
           }
         ]
       },
@@ -253,38 +248,6 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/commit-trailer-check.sh",
             "if": "Bash(git:*)",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Grep|Glob|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Agent|SendMessage|Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh reset",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "Read|Grep|Glob|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash $HOME/.claude/hooks/inline-call-nudge.sh",
             "timeout": 5
           }
         ]
