@@ -24,7 +24,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 - a11y-audit never auto-joins.
 - Per joined lens outside `required=`: hand pass first, reading its definition (`~/.claude/agents/`); agent only on a lead. One line per lens: `<lens>: N findings` or `<lens>: skip — <reason>`; write a skip reason only after reading the diff, an implementer's included (sweeps: `subagent-tiers.md` residue census).
 - PR ask ("check PR", "review PR 12", a PR URL; joins show `pr=`) → the `code-review` skill on that PR, lenses scored from its diff. `--comment` only on explicit ask; the battery (`~/.claude/review-battery.md`) only on full / deep.
-- Auto: code edits nudge the lens list mid-turn; the Stop gate blocks a code turn's done-claim or commit ask until every named lens has its line; at 20 or more unreviewed source lines, the `required=` members run as agents or skills and no typed line counts.
+- Auto: code edits nudge the lens list mid-turn; the Stop gate blocks a code turn's claim or commit ask until every named lens has its line, and any later claim, commit ask or commit until the `required=` members ran as agents or skills, not typed lines.
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses).
 

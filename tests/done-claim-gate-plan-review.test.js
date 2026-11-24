@@ -675,6 +675,8 @@ test('done-claim gate: required review agents', async (t) => {
       'zsh -c "git commit -m x"',
       'bash -lc "git commit -m x"',
       'if git commit -m x; then :; fi',
+      'V="x" git commit -m x',
+      'A="x"\nB=\'y\'\ngit commit -m x',
     ];
     for (const command of shapes) {
       const res = codeTurn(repo, command);
@@ -692,6 +694,23 @@ test('done-claim gate: required review agents', async (t) => {
     const started = Date.now();
     const res = codeTurn(repo, 'x=1  '.repeat(4000));
     assert.equal(res.status, 0, res.stderr);
+    assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+  });
+
+  await t.test('40 quoted assignments on separate lines before an echo run the gate in under 2 seconds', () => {
+    const repo = scratchRepo();
+    const command = `${Array.from({ length: 40 }, (_, i) => `V${i}="x"`).join('\n')}\necho "$V0"`;
+    const transcriptPath = path.join(tmpDir, `t${nextSeq()}.jsonl`);
+    const records = [
+      { type: 'user', timestamp: stamp(0), message: { content: 'go' } },
+      { type: 'assistant', timestamp: stamp(1), message: { content: [{ type: 'tool_use', id: 'run0', name: 'Bash', input: { command } }] } },
+      { type: 'user', timestamp: stamp(1), message: { content: [{ type: 'tool_result', tool_use_id: 'run0', is_error: false, content: 'x' }] } },
+      { type: 'assistant', timestamp: stamp(2), message: { content: [{ type: 'text', text: 'Findings are below.' }] } },
+    ];
+    fs.writeFileSync(transcriptPath, records.map((r) => JSON.stringify(r)).join('\n'));
+    const started = Date.now();
+    const res = spawnSync('bash', [HOOK_PATH], { input: JSON.stringify({ transcript_path: transcriptPath, cwd: repo }), encoding: 'utf8', env, timeout: 10000 });
+    assert.equal(res.status, 0, `${res.stderr} (${res.signal})`);
     assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
   });
 
@@ -794,6 +813,29 @@ test('done-claim gate: required review agents', async (t) => {
       quiet(stop('Yes, it\'s done.', ...written, ...bigDispatches(stamp(2)), ...answered, afterStop));
       quiet(stop('Yes, it\'s done.', ...written, ...bigDispatches(stamp(2)), typed));
     }
+  });
+
+  await t.test('a code turn inside the window a STOP-answering REPORT opened is checked, even after a planner NOTE; the same window with no write is quiet', () => {
+    const repo = scratchRepo();
+    const envelope = (body) => `<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n${body}\n</cross-session-message>`;
+    const window = [
+      { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${envelope('[STOP demo] Stop after this step and report.')}` } } },
+      { sent: `[REPORT demo step 1] Stopped before step 2 started.\n${RAW_OUTPUT}`, output: 'Message sent to planner-1', timestamp: stamp(2) },
+      { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${envelope('[NOTE demo] Carry on with step 2.')}` } } },
+    ];
+    const built = runWithResults('Done. Step 2 is built.', [...window, writeOf(repo, 'src/impl.ts', sourceLines(40), stamp(3))], opts(repo));
+    assert.equal(built.status, 2, built.stderr);
+    assert.match(built.stderr, /DONE-CLAIM WITHOUT EVIDENCE/);
+    quiet(runWithResults('Done. REPORT sent.', window, opts(repo)));
+  });
+
+  await t.test('on a code turn a hedge word does not void a claim; on a no-tool no-code turn it does', () => {
+    const line = 'Done, nothing is left to be reviewed.';
+    const codeClaim = runFull(line);
+    assert.equal(codeClaim.status, 2, codeClaim.stderr);
+    assert.match(codeClaim.stderr, /DONE-CLAIM WITHOUT EVIDENCE: the first line claims 'Done'/);
+    const repo = scratchRepo();
+    for (const text of [line, 'Not quite done.']) quiet(runWithResults(text, stopTurn(repo), opts(repo)));
   });
 
   await t.test('a claim is the first clause without a hedge; a first line ending in a question claims nothing', () => {

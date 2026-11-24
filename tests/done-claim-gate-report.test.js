@@ -397,6 +397,26 @@ test('done-claim gate: report', async (t) => {
     refusedFor(retry(claim, 2), BIG_NAMES);
   });
 
+  await t.test('an edit-free REPORT after a step committed with a printed sha, on a clean tree, still owes the Big members; run, it is sent', () => {
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
+    spawnSync('git', ['init', '-q'], { cwd: repo, env });
+    const file = path.join(repo, 'impl.ts');
+    fs.writeFileSync(file, sourceLines(200));
+    spawnSync('git', ['add', '-A'], { cwd: repo, env });
+    const printed = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-m', 'step'], { cwd: repo, env, encoding: 'utf8' }).stdout.split('\n')[0];
+    assert.match(printed, /^\[\S+ (?:\(root-commit\) )?[0-9a-f]{7,40}\] step$/);
+    const stopEnvelope = '<cross-session-message from="uds:/tmp/x.sock" from-name="planner-1" from-mode="prompting">\n[STOP demo] Stop after this step and report.\n</cross-session-message>';
+    const write = { blocks: [{ type: 'tool_use', id: 'write-impl', name: 'Write', input: { file_path: file, content: sourceLines(200) } }], timestamp: stamp(1) };
+    const committedStep = { command: 'git commit -m step', output: printed, timestamp: stamp(3) };
+    const answered = [
+      { record: { type: 'user', isMeta: true, message: { content: `Another Claude session sent a message:\n${stopEnvelope}` } } },
+      { sent: `[REPORT demo step 1] Stopped before step 2 started.\n${RAW_OUTPUT}`, output: 'Message sent to planner-1', timestamp: stamp(4) },
+    ];
+    const second = (...reviews) => runWithResults(`[REPORT demo step 2] Nothing built since step 1.\n${RAW_OUTPUT}`, [write, agentRuns(stamp(2), ['code-reviewer']), ...reviews, committedStep, ...answered], { send: true, lint: false, editedFile: null, cwd: repo, since: stamp(0) });
+    refusedFor(second(), BIG_NAMES);
+    sent(second(agentRuns(stamp(2)), skillRuns(stamp(2))));
+  });
+
   await t.test('a REPORT on bulk work whose owed members all ran still owes its typed delete-list line', () => {
     const thread = builderThread([250], [agentRuns(stamp(21)), skillRuns(stamp(22))]);
     const noLine = { ...thread, message: thread.message.replace(/delete-list: skip.*\n/, '') };

@@ -4,16 +4,15 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 
 ## Open
 
-### Status answers and no-edit builder reports skip the Big review bar
+### Review gate upgrades
 
-- **Evidence:** a census of nine sessions after the DPLK-281 miss found five where a status or commit-only turn was the route that escaped review. Replaying the planner's status answer in session `352bbe1d` (line 8177) through `done-claim-gate.sh` exits 0. Its earlier claim, "DPLK-281's frontend work is complete", has no word the claim pattern matches. Commit `ea2d928` covered the other routes: the member set, builder REPORTs and the two-block give-up.
-- **Why parked:** handed to another session on 2026-11-24, with the full evidence in `plans/review-gate-status-turns.research.md`.
-- **Fix:** a status turn's claim owes the members the classifier lists in `owed-files=`. The claim pattern gains `complete`. A REPORT whose window holds no edit also owes them. Files: `hooks/done-claim-gate.sh` (the claim pattern and the no-code-turn exit), `tests/done-claim-gate-plan-review.test.js`, `tests/done-claim-gate-lenses.test.js`.
-- **Upgrades considered:**
-    - Sizing work by ticket range across repos would catch the `352bbe1d` case, where nothing was written in that session. It costs heuristic repo discovery and git time inside the classifier's 6 s budget.
-    - Owing `code-reviewer` on Big REPORTs adds the battery's fifth member there. It costs a second size bar for one member.
-    - A fail-closed classifier timeout on claim turns would stop the gate failing open. It costs a hard stop whenever git is slow, and a cold run already took 7.35 s on a replay.
-- **Worth it when:** a status answer or a no-edit REPORT claims Big work done and Praveen has to ask for the review.
+- **Evidence:** `done-claim-gate.sh` now makes a claim, commit ask, commit or REPORT owe the session's unrun review members whatever the turn wrote, once the session wrote code or ran an agent. Three upgrades stay out; each bullet below carries its own evidence.
+- **Why parked:** the build covered the routes the census found escaping review; each upgrade needs state or a hard stop the gate does not carry today.
+- **Fix:** three upgrades, each with what it buys and what it costs:
+    - Size Big by git range across sessions, with per-repo stamps of each member's last run. It catches the `352bbe1d` case: the planner's status answer (line 8177) replays to exit 0, and nothing was written in that session. It costs a state file per repo, heuristic repo discovery and git time inside the classifier's 6 s budget.
+    - `code-reviewer` on Big REPORTs adds the battery's fifth member there. It costs a second size bar for one member.
+    - A fail-closed classifier timeout on claim turns closes the 6 s fail-open that 3 of 21 large-session rows hit even warm. It costs a hard stop whenever git is slow, and a cold run already took 7.35 s on a replay.
+- **Worth it when:** a status answer in a session that wrote nothing, or a Big REPORT, claims the work done and Praveen has to ask for the review.
 
 ### Plan gate reads a future "implement" as an ask to implement now
 
