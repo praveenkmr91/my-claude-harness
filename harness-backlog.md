@@ -7,13 +7,20 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 ### Status answers and no-edit builder reports skip the Big review bar
 
 - **Evidence:** a census of nine sessions after the DPLK-281 miss found five where a status or commit-only turn was the route that escaped review. Replaying the planner's status answer in session `352bbe1d` (line 8177) through `done-claim-gate.sh` exits 0. Its earlier claim, "DPLK-281's frontend work is complete", has no word the claim pattern matches. Commit `ea2d928` covered the other routes: the member set, builder REPORTs and the two-block give-up.
-- **Why parked:** the remaining routes rest on one replayed session. Praveen chose to wait for a second sighting.
+- **Why parked:** handed to another session on 2026-11-24, with the full evidence in `plans/review-gate-status-turns.research.md`.
 - **Fix:** a status turn's claim owes the members the classifier lists in `owed-files=`. The claim pattern gains `complete`. A REPORT whose window holds no edit also owes them. Files: `hooks/done-claim-gate.sh` (the claim pattern and the no-code-turn exit), `tests/done-claim-gate-plan-review.test.js`, `tests/done-claim-gate-lenses.test.js`.
 - **Upgrades considered:**
     - Sizing work by ticket range across repos would catch the `352bbe1d` case, where nothing was written in that session. It costs heuristic repo discovery and git time inside the classifier's 6 s budget.
     - Owing `code-reviewer` on Big REPORTs adds the battery's fifth member there. It costs a second size bar for one member.
     - A fail-closed classifier timeout on claim turns would stop the gate failing open. It costs a hard stop whenever git is slow, and a cold run already took 7.35 s on a replay.
 - **Worth it when:** a status answer or a no-edit REPORT claims Big work done and Praveen has to ask for the review.
+
+### Plan gate reads a future "implement" as an ask to implement now
+
+- **Evidence:** session `bb3f0c74` (2026-11-24): `done-claim-gate.sh` blocked six replies with PLAN PRESENTED UNREVIEWED. Two were false: they closed with "…and bring it back for \"implement\"", which names a later approval, and `later_approval` (`done-claim-gate.sh:205`) strips only `for your implement`. A third asked to implement a spike written to `/tmp/spike`, outside the session scratchpad that `build-approval-gate.sh` already exempts; that ask was self-inflicted. The other three asked to implement a plan edited since its last review, and were right.
+- **Why parked:** one session; each false fire cost one `plan gate: skip` line.
+- **Fix:** `later_approval` also strips a quoted `"implement"` after `for` or `back for`. Firing / near-twin / empty-input tests, the near-twin being "type \"implement chunk 1\"" after an unreviewed edit.
+- **Worth it when:** another session takes a skip line on a reply that asked nothing.
 
 ### Facts under a plain label line pass the plan lint
 
