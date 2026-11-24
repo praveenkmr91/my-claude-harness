@@ -83,6 +83,25 @@ test('hydrogen context hook', async (t) => {
     assert.equal(run(call(newSession(), plainRepo)), '');
   });
 
+  const MONOREPO_PATH = path.join(os.homedir(), 'Documents', 'projects', 'hydrogen', 'hydrogen', 'data');
+  const diveCall = (sessionId, cwd, searchPath) =>
+    JSON.stringify({ session_id: sessionId, cwd, tool_name: 'Grep', tool_input: { pattern: 'useDocument', path: searchPath } });
+
+  await t.test('a dive into the Hydrogen monorepo from a Hydrogen app points at the catalogue script once', () => {
+    const sessionId = newSession();
+    const context = contextOf(run(diveCall(sessionId, themedRepo, MONOREPO_PATH)));
+    assert.match(context, /Hydrogen dive detected/);
+    assert.match(context, /automation\/hydrogen-catalogue\.cjs/);
+    assert.equal(run(diveCall(sessionId, themedRepo, MONOREPO_PATH)), '');
+  });
+
+  await t.test('a dive stays quiet outside a Hydrogen app, outside the monorepo, and when the call already reads the map', () => {
+    assert.equal(run(diveCall(newSession(), plainRepo, MONOREPO_PATH)), '');
+    assert.equal(run(diveCall(newSession(), themedRepo, '/tmp/elsewhere/hydrogen-notes')), '');
+    const mapPath = '~/Documents/projects/hera/.claude/skills/generate-component-map/assets/hydrogen-component-map.json';
+    assert.equal(run(diveCall(newSession(), themedRepo, mapPath)), '');
+  });
+
   await t.test('an empty payload passes with no output', () => {
     assert.equal(run(''), '');
   });

@@ -10,7 +10,7 @@ You are a reuse reviewer. Your single lens: does the diff sit at the right rung 
 ## Read first
 
 - The project's CLAUDE.md, then `~/.claude/hydrogen.md` §Paths and §Reuse hierarchy when the repo is a Hydrogen app. Those two files own the ladder and the discovery procedure; do not re-derive them.
-- Discovery is map-first (the component map path named in hydrogen.md), then monorepo grep, then the project's own `src/` for siblings. A negative claim ("nothing exists") needs enumeration of the domain, not a null grep.
+- Discovery is catalogue-first (`node ~/.claude/automation/hydrogen-catalogue.cjs <app root|monorepo>`, per hydrogen.md), then HERA's component map for props and enums, then monorepo grep, then the project's own `src/` for siblings. A negative claim ("nothing exists") needs enumeration of the domain, not a null grep.
 
 ## Scope
 

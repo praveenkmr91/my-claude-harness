@@ -19,7 +19,7 @@ once() { [ -e "$FLAGS-$1" ] && return 1; touch "$FLAGS-$1"; }
 case "$IN" in
   *hydrogen-component-map*) ;;
   */projects/hydrogen/hydrogen*|*@additiv-hydrogen*)
-    once map && OUT="Hydrogen dive detected. If this is component DISCOVERY (which component/prop/enum exists), read the 288-package map FIRST: ~/Documents/projects/hera/.claude/skills/generate-component-map/assets/hydrogen-component-map.json — shortlist there, then verify the pick against source/installed dist (hydrogen.md §Source-vs-installed). If you are verifying specific behavior, carry on." ;;
+    once map && OUT="Hydrogen dive detected. If this is component DISCOVERY (which component/hook/endpoint wrapper exists, who imports it), run the catalogue FIRST: node ~/.claude/automation/hydrogen-catalogue.cjs <app root|monorepo> (prints the catalogue path; jq it), or dispatch hydrogen-lookup. For props and enums read HERA's map second: ~/Documents/projects/hera/.claude/skills/generate-component-map/assets/hydrogen-component-map.json. Verify the pick against source/installed dist (hydrogen.md §Source-vs-installed). If you are verifying specific behavior, carry on." ;;
 esac
 
 LEFT=""
