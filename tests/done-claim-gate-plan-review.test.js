@@ -531,7 +531,7 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(retry('The branch is ready to merge.', ...twoBlocks.slice(0, 1), dispatchOf('code-reviewer', stamp(2)), ...bigDispatches(stamp(2)), agentFeedback(), agentFeedback()));
   });
 
-  await t.test('after two blocks a grep naming git commit, or a commit that errored, is no commit; a successful one still holds the Big members', () => {
+  await t.test('after two blocks a grep naming git commit is no commit; a commit, landed or errored, still holds the Big members', () => {
     const repo = scratchRepo();
     const twoBlocks = [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), agentFeedback(), agentFeedback(), checked(stamp(3))];
     const reply = 'Findings are below.';
@@ -539,7 +539,7 @@ test('done-claim gate: required review agents', async (t) => {
     const failedCommit = { ...committed(stamp(4)), isError: true, output: 'Exit code 1' };
     for (const stopHookActive of [true, false]) {
       quiet(runWithResults(reply, [...twoBlocks, grep], opts(repo, { stopHookActive })));
-      quiet(runWithResults(reply, [...twoBlocks, failedCommit], opts(repo, { stopHookActive })));
+      blocked(runWithResults(reply, [...twoBlocks, failedCommit], opts(repo, { stopHookActive })), BIG_MEMBERS.join(', '));
       blocked(runWithResults(reply, [...twoBlocks, committed(stamp(4))], opts(repo, { stopHookActive })), BIG_MEMBERS.join(', '));
     }
   });
@@ -630,6 +630,89 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults('Three hooks match it: a, b and c.', turns({ command: 'grep -rn "git commit" hooks/', output: 'hooks/a.sh', timestamp: stamp(4) }), opts(repo)));
     quiet(runWithResults('It is stable.\nDo you want me to check the team\'s commitment on v2?', turns(), opts(repo)));
     blocked(runWithResults('Committed as abc1234.', turns({ command: 'git add -A && git commit -m x', output: '', timestamp: stamp(4) }), opts(repo)), 'code-reviewer');
+  });
+
+  const COMMITTED = 'Committed as abc1234.';
+  const noCodeTurn = (repo, ...tail) => [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), { prompt: 'next', timestamp: stamp(3) }, ...tail];
+
+  await t.test('a commit inside a subshell counts; a grep naming git commit in the same position does not', () => {
+    const repo = scratchRepo();
+    const at = (command) => runWithResults(COMMITTED, noCodeTurn(repo, { command, output: '', timestamp: stamp(4) }), opts(repo));
+    blocked(at('( git commit -m x )'), 'code-reviewer');
+    quiet(at('( grep -n "git commit" f )'));
+    quiet(at('grep -n "git commit" f'));
+  });
+
+  await t.test('a commit that errored still counts, since `-q` prints no sha line; an errored grep naming it does not', () => {
+    const repo = scratchRepo();
+    const errored = (command) => runWithResults(COMMITTED, noCodeTurn(repo, { command, isError: true, output: 'Exit code 1', timestamp: stamp(4) }), opts(repo));
+    blocked(errored('git commit -qm x && false'), 'code-reviewer');
+    quiet(errored('grep -n "git commit" f'));
+  });
+
+  const codeTurn = (repo, command) => runWithResults('Findings are below.', [{ command, output: 'f:1', timestamp: stamp(2) }], { cwd: repo, since: stamp(0), lint: false });
+
+  await t.test('a code turn that only greps for git commit owes no LINT/TSC; the same turn committing does', () => {
+    const repo = scratchRepo();
+    const grep = codeTurn(repo, 'grep "git commit" f');
+    assert.equal(grep.status, 0, grep.stderr);
+    assert.doesNotMatch(grep.stderr, /LINT\/TSC NOT RUN/);
+    const commit = codeTurn(repo, 'git commit -m x');
+    assert.equal(commit.status, 2, commit.stderr);
+    assert.match(commit.stderr, /LINT\/TSC NOT RUN: this turn edited web code and ran git commit/);
+  });
+
+  await t.test('a commit behind a wrapper, prefix, path or shell opener counts on a code turn; text that names the wrapper does not', () => {
+    const repo = scratchRepo();
+    const shapes = [
+      'exec git commit -q --amend -F m',
+      'printf x | xargs -0 git commit -q',
+      'env GIT_AUTHOR_NAME=x git commit -m x',
+      'GIT_AUTHOR_NAME="A B" git commit -m x',
+      'X="$(git log -1 --format=%an)" git commit-tree t -p HEAD -m x',
+      'timeout 60 git commit -m x',
+      '/usr/bin/git commit -m x',
+      'zsh -c "git commit -m x"',
+      'bash -lc "git commit -m x"',
+      'if git commit -m x; then :; fi',
+    ];
+    for (const command of shapes) {
+      const res = codeTurn(repo, command);
+      assert.equal(res.status, 2, `${command}\n${res.stderr}`);
+      assert.match(res.stderr, /LINT\/TSC NOT RUN/, command);
+    }
+    for (const command of ['echo "exec git commit"', 'grep -rn "xargs git commit" f']) {
+      const res = codeTurn(repo, command);
+      assert.equal(res.status, 0, `${command}\n${res.stderr}`);
+    }
+  });
+
+  await t.test('a 20,000-character command of assignments and spaces with no commit runs the gate in under 2 seconds', () => {
+    const repo = scratchRepo();
+    const started = Date.now();
+    const res = codeTurn(repo, 'x=1  '.repeat(4000));
+    assert.equal(res.status, 0, res.stderr);
+    assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+  });
+
+  await t.test('a "Step N" first line over an errored commit is checked like a landed one, on the first run and the retry; over a grep naming it, it stays exempt', () => {
+    const repo = scratchRepo();
+    const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
+    const failedCommit = { ...committed(stamp(4)), isError: true, output: 'Exit code 1' };
+    const grep = { command: 'grep "git commit" f', output: 'f:1', timestamp: stamp(4) };
+    for (const stopHookActive of [false, true]) {
+      const step = (run) => runWithResults('Step 2 done.', [thirty, checked(stamp(3)), run], opts(repo, { stopHookActive }));
+      blocked(step(failedCommit), 'code-reviewer');
+      blocked(step(committed(stamp(4))), 'code-reviewer');
+      quiet(step(grep));
+    }
+  });
+
+  await t.test('a commit inside `bash -c` counts; an echo naming it does not', () => {
+    const repo = scratchRepo();
+    const at = (command) => runWithResults(COMMITTED, noCodeTurn(repo, { command, output: '', timestamp: stamp(4) }), opts(repo));
+    blocked(at('bash -c "git commit -m x"'), 'code-reviewer');
+    quiet(at('echo "git commit -m x"'));
   });
 
   await t.test('an agent that wrote 30 lines makes a plan-only turn owe code-reviewer on a claim; 3 lines owe nothing', () => {

@@ -181,7 +181,7 @@ def required_status(required,owed_files,owed_only=False):
     undone=[m for m in owed if m in owed_files or not any(n in (('Skill',) if m in skill_members else ('Agent','Task')) and l==m and call_ok(i) and at>last_write for (n,l,i),at in zip(lens_calls,lens_at))]
     if not undone: return owed,None
     if feedback_blocks>=2:
-        if not (report or claim or commit_ask or committed_ok): return [m for m in owed if m not in undone],None
+        if not (report or claim or commit_ask or committed): return [m for m in owed if m not in undone],None
         released=[m for m in undone if m not in owed_files]
         undone=[m for m in undone if m in owed_files]
         owed=[m for m in owed if m not in released]
@@ -225,18 +225,18 @@ def writes_code(c): return any(code.search(t) for t in redirect_target.findall(c
 if report and '/scratchpad/' not in final:
     problems.append("REPORT WITHOUT RAW OUTPUT: a REPORT names the scratchpad file holding the last 20 lines of each check (peer-sessions.md); run the checks in this thread and cite it.")
 # A REPORT answering a STOP says where the builder stopped, so only its raw-output path is required.
-committed=any(commit_cmd.search(c) for c in cmds)
+# A commit counts in command position only, whatever its result: `git commit -q` prints no sha, so an errored `-q … && false` may have landed; a grep or echo naming `git commit` is no commit.
+# The value and path classes stop at a separator, or each `;` in a long command rescans the rest of it (quadratic, past the Stop timeout).
+commit_at=re.compile(r'(?:^|[;&|({`]|\b(?:ba|z)?sh\s+-\w*c\s+[\'"]|\beval\s+[\'"]?)\s*(?:(?:(?:time|then|do|if|elif|else|while|until|env|command|exec|nice)|!|xargs(?:\s+-[^\s;&|`]+)*|timeout\s+[^\s;&|`]+|\w+=(?:"[^"]*"|\'[^\']*\'|[^\s;&|`]*))\s+)*(?:[^\s;&|`]*/)?'+commit_cmd.pattern,re.M)
+committed=any(commit_at.search(c) for c in cmds)
 ship=committed and any(plan_rm.search(c) for c in cmds)
 lines=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
 first=lines[0] if lines else ''
 last=lines[-1] if lines else ''
 commit_ask=re.search(r'\bcommit(?!ted)',last,re.I) and re.search(r'\?|\bsay\b|approv|go ahead|want me',last,re.I)
 claim=None if first.rstrip().endswith('?') else re.search(r'(?<!not )(?<!fix )(?<!review )(?<!sweep )\b(done|fixed|works|passes|passing|green|ready to (ship|commit|merge))\b',first,re.I)
-# Without a code edit only a `git commit` in command position, and an ask that is not about a past commit, count: a grep or a question naming the word is no commit.
+# Without a code edit only an ask that is not about a past commit counts: a question naming the word is no ask.
 idle_ask=commit_ask and re.search(r'(?<!\bthat )(?<!\bthe )\bcommit\b',last,re.I)
-idle_commit=re.compile(r'(?:^|[;&|])\s*(?:\w+=\S*\s+)*'+commit_cmd.pattern,re.M)
-idle_committed=any(idle_commit.search(c) for c in cmds)
-committed_ok=any(idle_commit.search(c) and call_ok(i) for c,i in zip(cmds,cmd_ids))
 # A first line opening "Step N" claims one plan step, whose done bar is a hand pass (review-routing.md); the whole build's claim and the shipping commit need real lenses.
 step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
 step_turn=bool(step_claim) and not committed
@@ -245,7 +245,7 @@ code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code
 if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, or the reply asks to commit, rewording to "Step N" must not pass.
     step_exempt=bool(step_claim) and not (committed or commit_ask or feedback_blocks)
-    if not step_exempt and (code_turn or not window_report) and (feedback_blocks==1 or claim or commit_ask or (committed if feedback_blocks<2 else committed_ok)):
+    if not step_exempt and (code_turn or not window_report) and (feedback_blocks==1 or claim or commit_ask or committed):
         _,_,required,owed_files=classify()
         block=required_status(required,owed_files,window_report)[1]
         if block:
@@ -253,9 +253,9 @@ if inp.get('stop_hook_active') and not report:
             sys.exit(2)
     sys.exit(0)
 agent_ran=any(n in ('Agent','Task') for n,_,_ in lens_calls)
-agent_class=classify() if not (code_turn or exempt) and agent_ran and (claim or idle_ask or idle_committed) else None
+agent_class=classify() if not (code_turn or exempt) and agent_ran and (claim or idle_ask or committed) else None
 agent_build=bool(agent_class) and agent_class[2]!='none'
-if (report and stopped) or not (code_turn or agent_build or (idle_ask or idle_committed) and not report):
+if (report and stopped) or not (code_turn or agent_build or (idle_ask or committed) and not report):
     if problems:
         print('\n'.join(problems),file=sys.stderr)
         sys.exit(2)
