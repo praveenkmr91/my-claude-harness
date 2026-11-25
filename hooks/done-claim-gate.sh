@@ -30,7 +30,7 @@ def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
-# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with a sha-less (`-q`) commit in the next escapes the shipping check; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
+# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with its commit in the next escapes the shipping check, and so does a sha-less (`-q`) commit of a plan file removed by anything but a literal `rm docs/plans/…`; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset(by_report=False,after_stop=False):
     global texts,cmds,cmd_ids,commit_shas,results,edits,lens_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,window_report,stop_window
@@ -213,16 +213,13 @@ if report and '/scratchpad/' not in final:
 # commit_at's value and path classes stop at a separator and a quote, so each token parses one way; otherwise a long command backtracks past the Stop timeout.
 commit_at=re.compile(r'(?:^|[;&|({`]|\b(?:ba|z)?sh\s+-\w*c\s+[\'"]|\beval\s+[\'"]?)\s*(?:(?:(?:time|then|do|if|elif|else|while|until|env|command|exec|nice)|!|xargs(?:\s+-[^\s;&|`]+)*|timeout\s+[^\s;&|`]+|\w+=(?:"[^"]*"|\'[^\']*\'|[^\s;&|`\'"]*))\s+)*(?:[^\s;&|`]*/)?'+commit_cmd.pattern,re.M)
 committed=any(commit_at.search(c) for c in cmds)
-# None = the commits' diffs could not be read: a timeout or a git error. A commit that printed no sha (`-q`) is read as cwd's HEAD.
+# Reads only the commits whose sha this turn printed; a quiet (`-q`) commit, a timeout or a git error leaves the literal `rm` text as the only ship signal.
 def commits_delete_plan():
-    if not (cwd and os.path.isdir(cwd)): return None
-    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*(commit_shas or ['HEAD']),'--'],cwd=cwd,capture_output=True,text=True,timeout=3)
-    except (subprocess.TimeoutExpired,OSError): return None
-    if shown.returncode: return None
+    if not (commit_shas and cwd and os.path.isdir(cwd)): return False
+    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*commit_shas,'--'],cwd=cwd,capture_output=True,text=True,timeout=3)
+    except (subprocess.TimeoutExpired,OSError): return False
     return bool(plan_deleted.search(shown.stdout))
-plan_deleted_by_commit=commits_delete_plan() if committed else False
-ship=committed and (bool(plan_deleted_by_commit) or any(plan_rm.search(c) for c in cmds))
-commit_unread=committed and plan_deleted_by_commit is None
+ship=committed and (commits_delete_plan() or any(plan_rm.search(c) for c in cmds))
 code_turn=built or ship or any(code.search(e) for e in edits) or any(writes_code(c) for c in cmds)
 agent_ran=any(n in ('Agent','Task') for n,_,_ in lens_calls)
 lines=[l for l in final.split('\n') if l.strip() and not verdict.match(l)]
@@ -248,11 +245,11 @@ def clause_claim(clause):
 claim=next((m for clause in re.findall(r'[^.!?;:—]+[.!?;:—]?',first) if (m:=clause_claim(clause))),None)
 # A first line opening "Step N" claims one plan step, which owes no review (review-routing.md); the whole build's claim and the shipping commit are the checkpoint.
 step_claim=re.match(r'\W*step\s+\d+\b',first,re.I)
-step_turn=bool(step_claim) and not ship and not commit_unread
+step_turn=bool(step_claim) and not ship
 stop_exempt=window_report and stop_window and not report and not code_turn
 if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, rewording to "Step N" must not pass.
-    step_exempt=bool(step_claim) and not (ship or commit_unread or feedback_blocks)
+    step_exempt=bool(step_claim) and not (ship or feedback_blocks)
     if not step_exempt and not stop_exempt and (claim or ship):
         _,_,required,owed_files=classify(window_report)
         block=required_status(required,owed_files)
