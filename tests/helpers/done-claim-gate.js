@@ -4,7 +4,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { launch } = require('./launch');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const HOOK_PATH = path.join(ROOT, 'hooks', 'done-claim-gate.sh');
@@ -48,15 +48,15 @@ const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !ke
 
 let seq = 0;
 const nextSeq = () => seq++;
-const scratchRepo = () => {
+const scratchRepo = async () => {
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'repo-')));
-  spawnSync('git', ['init', '-q'], { cwd: repo, env });
+  await launch('git', ['init', '-q'], { cwd: repo, env });
   return repo;
 };
 
 // `send: true` replays the reply as a pending SendMessage (its tool_use already in the transcript) through the PreToolUse arm.
 // `written` is the line count of a Write into `cwd` (a scratch repo, so the classifier runs); a `reviews` entry with an `id` gets an answered result.
-function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, written = 0, prompt = 'go', handback, send = false } = {}) {
+async function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = true, stopHookActive = false, reviews = [], cwd, written = 0, prompt = 'go', handback, send = false } = {}) {
   const source = Array.from({ length: written }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
   const write = written ? [{ type: 'tool_use', name: 'Write', input: { file_path: path.join(cwd, 'impl.ts'), content: source } }] : [];
   const content = [...write, ...reviews, send ? reportSend(reply, 'send') : { type: 'text', text: reply }];
@@ -72,12 +72,12 @@ function runFull(reply, { bashCommand, editedFile = '/repo/src/app.ts', lint = t
     ...(answers.length ? [{ type: 'user', message: { content: answers } }] : []),
   ].map((r) => JSON.stringify(r)).join('\n'));
   const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, stop_hook_active: stopHookActive, cwd };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env });
+  return launch('bash', [HOOK_PATH], { input: JSON.stringify(payload), env });
 }
-const run = (reply, opts) => runFull(reply, opts).status;
+const run = async (reply, opts) => (await runFull(reply, opts)).status;
 
 // `send: true` replays the reply as a SendMessage whose tool_use is not yet in the transcript.
-function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since, stopHookActive = false, home, transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`) } = {}) {
+async function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.ts', send = false, cwd, since, stopHookActive = false, home, transcriptPath = path.join(tmpDir, `t${seq++}.jsonl`) } = {}) {
   const lines = [{ type: 'user', timestamp: since, message: { content: 'go' } }];
   const prelude = [];
   if (lint) prelude.push({ type: 'tool_use', id: 'lint', name: 'Bash', input: { command: 'pnpm lint && pnpm tsc --noEmit' } });
@@ -101,7 +101,7 @@ function runWithResults(reply, runs, { lint = true, editedFile = '/repo/src/app.
   if (!send) lines.push({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } });
   fs.writeFileSync(transcriptPath, lines.map((l) => JSON.stringify(l)).join('\n'));
   const payload = send ? sendPayload(transcriptPath, reply, cwd) : { transcript_path: transcriptPath, cwd, ...(stopHookActive && { stop_hook_active: true }) };
-  return spawnSync('bash', [HOOK_PATH], { input: JSON.stringify(payload), encoding: 'utf8', env: { ...env, ...(home && { HOME: home }) } });
+  return launch('bash', [HOOK_PATH], { input: JSON.stringify(payload), env: { ...env, ...(home && { HOME: home }) } });
 }
 
 module.exports = {
