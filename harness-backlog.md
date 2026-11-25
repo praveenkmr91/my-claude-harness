@@ -254,3 +254,10 @@ Measured harness friction, parked. One entry per item: the evidence, why it is n
 - **Why parked:** which rule leaves `CLAUDE.md` is the owner's choice; the other two have no counted fault.
 - **Fix:** move one `CLAUDE.md` rule into the doc it points to; implement or delete the review join; date-stamp eval results.
 - **Worth it when:** `CLAUDE.md` reaches about 1,600 words.
+
+### Five hook false blocks from the overengineering census
+
+- **Evidence:** `state/census/overengineering/friction.md` (109 sessions) and session `b2e43ce1`. `step-gate.sh`: 3 of 8 sampled blocks had a prompt that already opened with a well-formed `step gate: skip` line. `block-dangerous-git.sh`: a `cp` near `node_modules` matched a scratch folder named `cp-base`, and 32 bulk-stage blocks include path-scoped adds and text that only quoted the pattern. `done-claim-gate.sh`: a subagent's `/tmp` scratch `.js` copies count as web edits, so a harness-only turn owes a lint that does not exist; an `implementer` hand-back that wrote only `/tmp` scratch counts as a build, so a status reply owes `/learn`. `bash-write-guard.js`: a command naming a repo file with its output under `/tmp` is read as a write to that file.
+- **Why parked:** the five are unrelated; as one plan chunk they would have owed plan review for five small fixes.
+- **Fix:** each on its own when it next blocks a session: reproduce from the blocked transcript, fix, add the firing case and its quiet twin, commit. No plan file.
+- **Worth it when:** the next false block of that kind.
