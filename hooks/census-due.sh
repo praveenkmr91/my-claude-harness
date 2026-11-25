@@ -7,4 +7,4 @@ case "$(jq -r '.source // empty' <<<"$IN" 2>/dev/null)" in startup|resume) ;; *)
 DIR="$HOME/.claude/state/census"
 REPORT=$(ls -t "$DIR"/*/latest.md 2>/dev/null | head -1)
 [ -n "$REPORT" ] && [ "$REPORT" -nt "$DIR/acked" ] || exit 0
-printf 'Census recount report waiting: %s. Read it and give Praveen its before/after comparison in your first reply, unasked, then run: touch %s/acked\n' "$REPORT" "$DIR"
+printf 'Census recount report waiting: %s. Read it, and any baseline-*.md beside it (a baseline frozen before old transcripts were deleted), and give Praveen its before/after comparison in your first reply, unasked, then run: touch %s/acked\n' "$REPORT" "$DIR"
