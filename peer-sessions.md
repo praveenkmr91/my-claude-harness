@@ -33,7 +33,7 @@
 - The builder sends its REPORT without waiting, then starts the next step only on GO; an ANSWER at step end starts nothing unless it says GO. A STOP lands only between turns, so it cannot catch a step chained inside one.
 - On HANDOFF, before step 1, the builder runs the pre-build pass (`plan-build.md` "The build carries the gates"): `Pass: review` of the design against the tree. A verify that cannot pass, a census that differs or a cited line that reads differently → ASK or PROPOSE, then wait. The design review's gaps go to the planner as one NOTE.
 - The planner reads each REPORT on arrival and accepts a step only on its raw output or the diff, never on a chat claim. Findings in it are verified as `CLAUDE.md` "A reviewer's finding is a claim" says; a problem → STOP.
-- A chunk's last step is accepted once the done bar its chunk diff earns (`review-routing.md`) has run over the chunk's diff; for a Big chunk that is the battery, two review rounds, the trim (`/delete-list`, its cuts listed) and harden. A skip line for any member is a finding, never an accepted lens line. Ship GO waits for it.
+- A chunk's last step is accepted once the done bar its chunk diff earns (`review-routing.md`) has run over the chunk's diff; for a Big chunk that is two review rounds and the `required=` members over the chunk's range. A skip line for any member is a finding and clears nothing. Ship GO waits for it.
 - A peer session stops its own process: STOP is a message, never a kill. The builder answers STOP with a REPORT naming where it stopped.
 - A peer's handoff reports back to that peer too, unasked, even when it says "report to Praveen".
 
