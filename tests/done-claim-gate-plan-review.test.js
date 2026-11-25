@@ -376,6 +376,11 @@ test('done-claim gate: required review agents', async (t) => {
     const written = writeOf(repo, 'impl.ts', sourceLines(300), stamp(1));
     const printed = { command: 'cd docs/plans && git rm -q demo.md && cd ../.. && git commit -m ship', output: shippedEarlier.stdout, timestamp: stamp(4) };
     blocked(runWithResults(`Step 3 done.\n${LEARN_SKIP}`, [written, checked(stamp(3)), printed], opts(repo)), ALL_NAMES);
+    const printedThenErrored = { ...printed, command: `${printed.command} && false`, isError: true };
+    blocked(runWithResults(`Step 3 done.\n${LEARN_SKIP}`, [written, checked(stamp(3)), printedThenErrored], opts(repo)), ALL_NAMES);
+    const detached = { ...printed, output: shippedEarlier.stdout.replace(/^\[\S+ /, '[detached HEAD ') };
+    assert.match(detached.output, /^\[detached HEAD [0-9a-f]{7,}\]/);
+    blocked(runWithResults(`Step 3 done.\n${LEARN_SKIP}`, [written, checked(stamp(3)), detached], opts(repo)), ALL_NAMES);
     const quietLater = { command: 'git commit -qm wip', output: '', timestamp: stamp(4) };
     quiet(runWithResults('Step 3 done.', [written, checked(stamp(3)), quietLater], opts(repo)));
     const erroredLater = { ...quietLater, isError: true };

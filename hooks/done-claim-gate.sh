@@ -30,7 +30,7 @@ def lens_ran(b):
     i=b.get('input',{})
     if b.get('name')=='Skill': return i.get('skill','').split(':')[-1]
     if b.get('name') in ('Agent','Task'): return i.get('subagent_type','').split(':')[-1]
-# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with its commit in the next escapes the shipping check, and so does a sha-less (`-q`) commit of a plan file removed by anything but a literal `rm docs/plans/…`; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
+# shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with its commit in the next escapes the shipping check, and so does a commit whose sha never reaches the transcript (`-q`, piped or redirected output) of a plan file removed by anything but a literal `rm docs/plans/…`; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset(by_report=False,after_stop=False):
     global texts,cmds,cmd_ids,commit_shas,results,edits,lens_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,window_report,stop_window
@@ -62,10 +62,10 @@ reset(); report_ids=set(); commit_ids=set(); last_sha=None; base=None
 ev=0; plan_edits={}; plan_reviews=[]; errored_ids=set(); advisor_at=[]; learned=False; model=''; session_work=False
 code=re.compile(r'\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)\b')
 commit_cmd=re.compile(r'\bgit(?:\s+(?:-[Cc]\s+\S+|--?\w[\w-]*(?:=\S+)?))*\s+commit\b')
-# The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file"). `ship` reads that from the commits' own diffs; `plan_rm` is the fallback for a commit whose sha was not printed (`git commit -q`).
+# The shipping commit deletes the repo plan file (plan-mode.md "The plan is the file"). `ship` reads that from the commits' own diffs; `plan_rm` is the fallback for a commit whose sha was not printed (`git commit -q`, piped output); a printed sha is read even when the command then errored.
 plan_rm=re.compile(r'\brm\b[^\n;&|]*\bdocs/plans/[^\s;&|]+\.md\b')
 plan_deleted=re.compile(r'^D\t(?:.*/)?docs/plans/[^\t]+\.md$',re.M)
-commit_line=re.compile(r'^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]',re.M)
+commit_line=re.compile(r'^\[(?:detached HEAD|[^\]\s]+)(?: \(root-commit\))? ([0-9a-f]{7,40})\]',re.M)
 # Twin of the implementer hand-back selects (user and attachment) in hooks/step-gate.sh EVENTS.
 try: transcript=open(path)
 except OSError: sys.exit(0)
@@ -88,7 +88,7 @@ for line in transcript:
                 if isinstance(b,dict) and b.get('type')=='tool_result':
                     results[b.get('tool_use_id')]=(b.get('is_error'),result_text(b.get('content')))
                     if b.get('is_error'): errored_ids.add(b.get('tool_use_id'))
-                    if b.get('tool_use_id') in commit_ids and not b.get('is_error') and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]; commit_shas.extend(shas)
+                    if b.get('tool_use_id') in commit_ids and (shas:=commit_line.findall(results[b.get('tool_use_id')][1])): last_sha=shas[-1]; commit_shas.extend(shas)
                     for m in output_file.finditer(results[b.get('tool_use_id')][1]): agent_out[m.group(2)]=m.group(1)
         # A blocked REPORT lands as an errored result and keeps the window, so an unchanged resend blocks again; a pending send has no result yet.
         if not isinstance(c,str) and any(isinstance(b,dict) and b.get('type')=='tool_result' and b.get('tool_use_id') in report_ids and not b.get('is_error') for b in c or []): reset(True,stopped); base=last_sha
