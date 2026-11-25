@@ -186,6 +186,11 @@
             "type": "command",
             "command": "bash $HOME/.claude/hooks/learn-due.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/census-due.sh",
+            "timeout": 5
           }
         ]
       }
