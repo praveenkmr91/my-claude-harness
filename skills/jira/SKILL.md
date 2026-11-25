@@ -32,6 +32,7 @@ description: Use before any Jira read or write through the Atlassian Rovo MCP �
 - A question round is complete before it is drafted. When a design is on the table, trace it end to end first (create, interruption, resume, completion, every list or reader, sibling apps) and assume each likely answer, then ask every open point in one comment. A later round asks only what the answers newly raised; a question that existed before the last round was a miss.
 - Praveen's "are you sure?" about a draft re-checks every question in it against those sources, never just the one he named.
 - Name the environment of every piece of evidence ("verified on dev"). A finding from another env than the one the ticket was raised in (dev data on a UAT bug) is not a question unless reproduced there.
+- A comment that says something is fixed, or asks someone to retest, is drafted only after I ran that retest myself in the ticket's environment. A teammate's "done" is a claim until then. When the run needs an approval (a write on a shared environment), ask for it before drafting.
 - Plain comment → `contentFormat: "markdown"`.
 - @mention → `contentFormat: "adf"` with a mention node `{"type":"mention","attrs":{"id":"<accountId>","text":"@<Name>"}}`. The id comes from `lookupJiraAccountId` (`searchString`: name or email local part); never guess one.
 - ADF `code` combines only with `link`: with `strike`, `strong` or `em` on the same text node the whole write is rejected. Format that name as plain text.
