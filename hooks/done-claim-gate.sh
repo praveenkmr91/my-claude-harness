@@ -213,10 +213,10 @@ if report and '/scratchpad/' not in final:
 # commit_at's value and path classes stop at a separator and a quote, so each token parses one way; otherwise a long command backtracks past the Stop timeout.
 commit_at=re.compile(r'(?:^|[;&|({`]|\b(?:ba|z)?sh\s+-\w*c\s+[\'"]|\beval\s+[\'"]?)\s*(?:(?:(?:time|then|do|if|elif|else|while|until|env|command|exec|nice)|!|xargs(?:\s+-[^\s;&|`]+)*|timeout\s+[^\s;&|`]+|\w+=(?:"[^"]*"|\'[^\']*\'|[^\s;&|`\'"]*))\s+)*(?:[^\s;&|`]*/)?'+commit_cmd.pattern,re.M)
 committed=any(commit_at.search(c) for c in cmds)
-# None = the commits' diffs could not be read: a timeout, a git error, or no sha printed.
+# None = the commits' diffs could not be read: a timeout or a git error. A commit that printed no sha (`-q`) is read as cwd's HEAD.
 def commits_delete_plan():
-    if not (commit_shas and cwd and os.path.isdir(cwd)): return None
-    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*commit_shas,'--'],cwd=cwd,capture_output=True,text=True,timeout=3)
+    if not (cwd and os.path.isdir(cwd)): return None
+    try: shown=subprocess.run(['git','-c','core.quotepath=off','log','--no-walk=unsorted','--ignore-missing','--no-renames','--name-status','--diff-filter=D','--format=',*(commit_shas or ['HEAD']),'--'],cwd=cwd,capture_output=True,text=True,timeout=3)
     except (subprocess.TimeoutExpired,OSError): return None
     if shown.returncode: return None
     return bool(plan_deleted.search(shown.stdout))

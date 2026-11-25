@@ -365,17 +365,34 @@ test('done-claim gate: required review agents', async (t) => {
     quiet(runWithResults(`Step 3 done.\n${LEARN_SKIP}`, [written, ...allRuns(stamp(2)), checked(stamp(3)), shipped(stamp(4))], opts(repo)));
   });
 
-  await t.test('"Step 3 done." over a commit whose diff cannot be read is not exempt: a commit that printed no sha, or a git lookup that times out', () => {
+  await t.test('"Step 3 done." over a commit whose diff cannot be read is not exempt: a git lookup that times out; a readable commit is', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(300), stamp(1));
     const slowGit = fs.mkdtempSync(path.join(tmpDir, 'shim-'));
     const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
     fs.writeFileSync(path.join(slowGit, 'git'), `#!/bin/bash\ncase "$*" in *no-walk*) sleep 4;; esac\nexec ${realGit} "$@"\n`, { mode: 0o755 });
     for (const stopHookActive of [false, true]) {
-      blocked(runWithResults('Step 3 done.', [written, checked(stamp(3)), committed(stamp(4))], opts(repo, { stopHookActive })), ALL_NAMES);
       blocked(runWithResults('Step 3 done.', [written, checked(stamp(3)), landed(stamp(4))], opts(repo, { stopHookActive, pathPrefix: slowGit })), ALL_NAMES);
       quiet(runWithResults('Step 3 done.', [written, checked(stamp(3)), landed(stamp(4))], opts(repo, { stopHookActive })));
     }
+  });
+
+  await t.test('a commit that printed no sha is read as HEAD: "Step 3 done." ships when HEAD deleted a plan file, and stays exempt when it did not', () => {
+    const identity = { ...env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+    const quietCommit = (command) => {
+      const repo = scratchRepo();
+      fs.mkdirSync(path.join(repo, 'docs/plans'), { recursive: true });
+      fs.writeFileSync(path.join(repo, 'docs/plans/demo.md'), 'plan\n');
+      fs.writeFileSync(path.join(repo, 'README'), 'x\n');
+      spawnSync('bash', ['-c', 'git add . && git commit -qm seed'], { cwd: repo, env: identity });
+      const out = spawnSync('bash', ['-c', command], { cwd: repo, env: identity, encoding: 'utf8' });
+      assert.equal(out.status, 0, out.stderr);
+      return { repo, step: { command, output: out.stdout, timestamp: stamp(4) } };
+    };
+    const shipping = quietCommit('cd docs/plans && git rm -q demo.md && cd ../.. && git commit -qm ship');
+    blocked(runWithResults(`Step 3 done.\n${LEARN_SKIP}`, [writeOf(shipping.repo, 'impl.ts', sourceLines(300), stamp(1)), checked(stamp(3)), shipping.step], opts(shipping.repo)), ALL_NAMES);
+    const plain = quietCommit('echo y >> README && git commit -qam more');
+    quiet(runWithResults('Step 3 done.', [writeOf(plain.repo, 'impl.ts', sourceLines(300), stamp(1)), checked(stamp(3)), plain.step], opts(plain.repo)));
   });
 
   await t.test('the shipping commit over uncovered code is a checkpoint with no claim; runs after the write clear it', () => {
