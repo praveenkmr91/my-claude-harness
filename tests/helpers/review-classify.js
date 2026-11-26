@@ -91,7 +91,47 @@ function classifyTranscript({ main, agents, unreadable = [], onDisk = {}, commit
   return execFileSync('python3', [HOOK_PATH], { input: body, cwd: repo, encoding: 'utf8', env });
 }
 
+const written = (file, content) => (repo) => [writeOf(path.join(repo, file), content, { at: stamp(1) })];
+
+const skillMembers = ['security-review'];
+const runCall = (member, opts) => (skillMembers.includes(member) ? toolCall('Skill', { skill: member }, opts) : dispatchOf(member, opts));
+const plainRun = (member, { id = 'run', at = 2, error = false } = {}) => [runCall(member, { id, at: stamp(at) }), resultOf(id, { error, at: stamp(at) })];
+const linkedRun = (member, { id = 'run', agent = 'r1', at = 2 } = {}) => [
+  runCall(member, { id, at: stamp(at) }),
+  resultOf(id, { at: stamp(at), content: [{ type: 'text', text: skillMembers.includes(member) ? 'Launching skill' : `done\nagentId: ${agent} (use SendMessage to continue)` }] }),
+];
+const attachment = (body) => ({ type: 'attachment', attachment: body });
+const reviewer = (shown, { agent = 'r1', brief = 'review the change', blob = brief, instructions = 'house rules', gitStatus = 'clean', after = [] } = {}) => ({
+  [`agent-${agent}.jsonl`]: () => [
+    { type: 'user', message: { role: 'user', content: brief } },
+    { type: 'user', isMeta: true, message: { role: 'user', content: '<system-reminder>\nYour final report goes through the handback tool.\n</system-reminder>' } },
+    attachment({ type: 'instructions', files: [{ path: '/home/CLAUDE.md', type: 'User', content: instructions }] }),
+    attachment({ type: 'session_context', context: { gitStatus } }),
+    { type: 'api-request-blob', hash: 'h1', message: { role: 'user', content: [{ type: 'text', text: blob }] } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: `opened ${shown.join(' ')}` }] } },
+    ...after,
+  ],
+});
+
+const required = (members) => new RegExp(` required=${members.join(',')} `);
+const owedFor = (out, member) => (out.match(/ owed-files=([^\s>]*)>/)?.[1] ?? '').split(';').find((entry) => entry.startsWith(`${member}:`))?.slice(member.length + 1);
+const four = ['silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer'];
+const bigFive = required(['code-reviewer', ...four]);
+const bigSix = required(['code-reviewer', ...four, 'security-review']);
+const bigFiveWithout = (member) => required(['code-reviewer', ...four.filter((m) => m !== member)]);
+
 module.exports = {
+  written,
+  plainRun,
+  linkedRun,
+  attachment,
+  reviewer,
+  required,
+  owedFor,
+  four,
+  bigFive,
+  bigSix,
+  bigFiveWithout,
   HOOK_PATH,
   tmpDir,
   env,
