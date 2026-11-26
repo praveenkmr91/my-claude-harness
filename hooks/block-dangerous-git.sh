@@ -1,7 +1,7 @@
 #!/bin/bash
 
-INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
+INPUT=$(exec cat)
+COMMAND=$(exec jq -r '.tool_input.command' <<<"$INPUT")
 
 # Tokenized, not substring-matched: quoted text is data, but `git -C dir push`, wrappers, `sh -c`, $(…), backticks and
 # heredocs fed to a shell are still found. Unparseable input falls back to a raw substring scan (fail closed).
@@ -19,10 +19,10 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
 # EXTENDED_GLOB stays off, which would make `^` and `~` glob operators. The shared checkout is
 # never owned, and neither is anything for a subagent, whose hook input carries the parent session's transcript. A
 # transcript that cannot be read owns nothing.
-SESSION_CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
-AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
-DANGER=$(python3 -c '
+SESSION_CWD=$(exec jq -r '.cwd // empty' <<<"$INPUT")
+TRANSCRIPT=$(exec jq -r '.transcript_path // empty' <<<"$INPUT")
+AGENT_ID=$(exec jq -r '.agent_id // empty' <<<"$INPUT")
+DANGER=$(exec python3 -c '
 import json, os, re, shlex, subprocess, sys
 from datetime import datetime
 

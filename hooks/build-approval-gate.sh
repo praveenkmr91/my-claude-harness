@@ -10,21 +10,21 @@
 # Only typed_text counts, and a clause carrying <agent-message is dropped, so a message relayed from another session can never approve this session's build in the user's name.
 # Third-person or descriptive mentions ("new session will implement", "start app", "only start is deployed") and a prompt that defers ("ask for my approval") never approve.
 # Fails open (exit 0) on a subagent call, an unreadable transcript, no plan edit in the transcript, or an ungated target.
-IN=$(cat)
+IN=$(exec cat)
 
-[ -n "$(jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
-F=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
-T=$(jq -r '.transcript_path // empty' <<<"$IN")
+[ -n "$(exec jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
+F=$(exec jq -r '.tool_input.file_path // empty' <<<"$IN")
+T=$(exec jq -r '.transcript_path // empty' <<<"$IN")
 [ -r "$T" ] || exit 0
 
 if [ -n "$F" ]; then
   grep -qE '/\.claude/(hooks|tests)/|^(/private)?/tmp/claude-[0-9]+/[^/]+/[^/]+/scratchpad/' <<<"$F" && exit 0
   grep -qE '\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py|csv)$|(^|/)package\.json$' <<<"$F" || exit 0
 else
-  [ "$(jq -r '.tool_input.subagent_type // empty' <<<"$IN")" = implementer ] || exit 0
+  [ "$(exec jq -r '.tool_input.subagent_type // empty' <<<"$IN")" = implementer ] || exit 0
 fi
 
-UNAPPROVED_PLAN=$(jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -nRr 'include "approval"; unapproved_plan' "$T" 2>/dev/null)
+UNAPPROVED_PLAN=$(exec jq -L "$(exec dirname "${BASH_SOURCE[0]}")/lib" -nRr 'include "approval"; unapproved_plan' "$T" 2>/dev/null)
 [ -n "$UNAPPROVED_PLAN" ] || exit 0
 
 printf 'The plan %s was edited and no typed implement / build / start, or handoff to another session (`follow <session>\x27s instructions`, `take instructions from peer session`), has followed it. The word has to open an instruction (`implement`, `yes, implement chunk 2`); a question, a deferral (not / later / until I approve), a mention of someone else building or a handoff that points at no session does not count. Answer the open items, then wait for that word before writing source or dispatching `implementer`; once given, later edits to the same plan stay approved.\n' "$UNAPPROVED_PLAN" >&2

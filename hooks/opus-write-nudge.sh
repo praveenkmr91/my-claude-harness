@@ -5,16 +5,16 @@
 #   Both arms pass harness files under ~/.claude/ (plugin caches aside): those stay the main thread's.
 #   No retry pass: a one-shot block let "small" / "in context" skips through (2026-10-11).
 #   Also gates shell code edits (sed -i, perl -pi, git mv, git rm) relayed by bash-write-guard.js as shell_targets / unresolved_in.
-IN=$(cat)
+IN=$(exec cat)
 
-[ -n "$(jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
+[ -n "$(exec jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
 CODE_EXT='\.(jsx?|tsx?|mjs|cjs|vue|svelte|css|scss|html|swift|kt|dart|sh|py)$'
-SID=$(jq -r '.session_id // empty' <<<"$IN")
-F=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
-T=$(jq -r '.transcript_path // empty' <<<"$IN")
+SID=$(exec jq -r '.session_id // empty' <<<"$IN")
+F=$(exec jq -r '.tool_input.file_path // empty' <<<"$IN")
+T=$(exec jq -r '.transcript_path // empty' <<<"$IN")
 if [ -z "$F" ]; then
   F=$(jq -r '.tool_input.shell_targets[]? // empty' <<<"$IN" | grep -E "$CODE_EXT" | head -1)
-  [ -z "$F" ] && F=$(jq -r '.tool_input.unresolved_in // empty' <<<"$IN") && [ -n "$F" ] && UNRESOLVED=1
+  [ -z "$F" ] && F=$(exec jq -r '.tool_input.unresolved_in // empty' <<<"$IN") && [ -n "$F" ] && UNRESOLVED=1
 fi
 [ -n "$SID" ] && [ -n "$F" ] && [ -r "$T" ] || exit 0
 [ -n "$UNRESOLVED" ] || grep -qE "$CODE_EXT" <<<"$F" || exit 0
@@ -26,7 +26,7 @@ case "$MODEL" in *opus*|*fable*) ;; *) exit 0 ;; esac
 
 # Parsed, not grepped: harness sessions quote "subagent_type":"implementer" in Bash output.
 dispatched() {
-  jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? |
+  jq -L "$(exec dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? |
     (typed_text | "U"),
     (select(.type? == "assistant") | .message.content[]? | select(.type? == "tool_use" and .input.subagent_type? == "implementer") | "D")' "$T" 2>/dev/null \
     | awk '$0 == "U" { buf = ""; next } { buf = buf "\n" $0 } END { print buf }' \
@@ -35,7 +35,7 @@ dispatched() {
 
 # Typed prompts only: tool_result blocks, isMeta records, compaction summaries and `<`-prefixed harness wrappers (except pasted blocks) quote override tags too.
 typed_prompts() {
-  jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? | typed_text | gsub("\n"; " ")' 2>/dev/null
+  jq -L "$(exec dirname "${BASH_SOURCE[0]}")/lib" -rR 'include "turns"; fromjson? | typed_text | gsub("\n"; " ")' 2>/dev/null
 }
 
 # Last typed prompt carries [tier-override: <why>] — the same escape enforce-subagent-model.sh takes; a new typed prompt without it re-arms.

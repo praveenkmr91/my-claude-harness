@@ -8,16 +8,16 @@
 # /model switches, unlike settings.json). Fail-open on malformed input, unreadable
 # transcript, or unknown session model — EXCEPT fable, which fails closed.
 
-input=$(cat)
+input=$(exec cat)
 
 echo "$input" | jq -e . >/dev/null 2>&1 || exit 0
 
-subagent_type=$(echo "$input" | jq -r '.tool_input.subagent_type // ""')
-child_model=$(echo "$input" | jq -r '.tool_input.model // ""')
-override=$(echo "$input" | jq -r '.tool_input.prompt // "" | test("\\[tier-override:") | tostring')
-transcript=$(echo "$input" | jq -r '.transcript_path // ""')
-agent_id=$(echo "$input" | jq -r '.agent_id // ""')
-effort=$(echo "$input" | jq -r '.tool_input.effort // ""')
+subagent_type=$(exec jq -r '.tool_input.subagent_type // ""' <<<"$input")
+child_model=$(exec jq -r '.tool_input.model // ""' <<<"$input")
+override=$(exec jq -r '.tool_input.prompt // "" | test("\\[tier-override:") | tostring' <<<"$input")
+transcript=$(exec jq -r '.transcript_path // ""' <<<"$input")
+agent_id=$(exec jq -r '.agent_id // ""' <<<"$input")
+effort=$(exec jq -r '.tool_input.effort // ""' <<<"$input")
 
 [ "$subagent_type" = "fork" ] && exit 0
 
@@ -56,7 +56,7 @@ declares_own_model() {
   local definition="$HOME/.claude/agents/$1.md"
   [ -r "$definition" ] || return 1
   local declared
-  declared=$(awk '
+  declared=$(exec awk '
     NR == 1 && $0 != "---" { exit }
     NR > 1 && $0 == "---" { exit }
     /^model:/ { sub(/^model:[ \t]*/, ""); gsub(/[ \t\r"\047]/, ""); print; exit }
@@ -69,7 +69,7 @@ fable_asked=false
 sonnet_battery_asked=false
 if [ -n "$transcript" ] && [ -r "$transcript" ]; then
   # -R + fromjson?: tolerate the partial first line a byte-offset tail can produce.
-  tail_slice=$(tail -c 200000 "$transcript" 2>/dev/null)
+  tail_slice=$(exec tail -c 200000 "$transcript" 2>/dev/null)
   session_model=$(echo "$tail_slice" \
     | jq -rR 'fromjson? | select(.type? == "assistant") | .message.model // empty' 2>/dev/null \
     | tail -1)
@@ -86,11 +86,11 @@ if [ -n "$transcript" ] && [ -r "$transcript" ]; then
   # the last typed turn past 200 KB. ~0.35 s on a 27 MB transcript.
   # Typed-turn filter from hooks/lib/turns.jq: isMeta turns, compaction summaries and
   # "<…>"-leading text are stored as user turns, not something Praveen typed.
-  turns=$(jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -cR -n 'include "turns";
+  turns=$(exec jq -L "$(exec dirname "${BASH_SOURCE[0]}")/lib" -cR -n 'include "turns";
         [inputs | fromjson? | {type: "user", text: typed_text}, {type: "assistant", text: assistant_text}]' "$transcript" 2>/dev/null)
-  last_user_text=$(echo "$turns" | jq -r 'map(select(.type == "user")) | last | .text // empty' 2>/dev/null)
-  proposal_text=$(echo "$turns" | jq -r '(map(.type == "user") | rindex(true)) as $i
-        | if $i == null then empty else .[:$i] | map(select(.type == "assistant")) | last | .text // empty end' 2>/dev/null)
+  last_user_text=$(exec jq -r 'map(select(.type == "user")) | last | .text // empty' <<<"$turns" 2>/dev/null)
+  proposal_text=$(exec jq -r '(map(.type == "user") | rindex(true)) as $i
+        | if $i == null then empty else .[:$i] | map(select(.type == "assistant")) | last | .text // empty end' <<<"$turns" 2>/dev/null)
   if printf '%s' "$last_user_text" | grep -Eiq 'fable (review|battery|consult|opinion)\b|battery (on |with |using )?fable\b|(consult|opinion) fable\b|(review(ed)?|check(ed)?) by fable\b|(ask|get) fable to (review|check)\b|(have|let) fable (review|check)\b'; then
     fable_asked=true
   fi

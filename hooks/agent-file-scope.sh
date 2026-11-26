@@ -3,14 +3,14 @@
 # shortcut: Bash edits (sed -i, heredocs) are not Write/Edit tool_use and are invisible here; upgrade = parse Bash tool_result changed-file lists.
 # shortcut: any existing path in the brief counts as in scope, including one inside a "do not touch X" clause.
 
-input=$(cat)
+input=$(exec cat)
 echo "$input" | jq -e . >/dev/null 2>&1 || exit 0
 
-[ "$(echo "$input" | jq -r '.stop_hook_active // false')" = "true" ] && exit 0
+[ "$(exec jq -r '.stop_hook_active // false' <<<"$input")" = "true" ] && exit 0
 
-transcript=$(echo "$input" | jq -r '.agent_transcript_path // ""')
-cwd=$(echo "$input" | jq -r '.cwd // ""')
-agent_type=$(echo "$input" | jq -r '.agent_type // ""')
+transcript=$(exec jq -r '.agent_transcript_path // ""' <<<"$input")
+cwd=$(exec jq -r '.cwd // ""' <<<"$input")
+agent_type=$(exec jq -r '.agent_type // ""' <<<"$input")
 [ -r "$transcript" ] || exit 0
 
 written=$(jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | select(.name=="Write" or .name=="Edit" or .name=="NotebookEdit") | .input.file_path // .input.notebook_path // empty' "$transcript" | sort -u)
@@ -55,7 +55,7 @@ done <<<"$written"
 
 msg="Agent ($agent_type) wrote outside the files its brief named:"$'\n'"$unlisted""Review before trusting the hand-back; revert if not intended."
 printf '{"ts":"%s","hook":"agent-file-scope","level":"WARN","session_id":"%s","agent_id":"%s","agent_type":"%s","cwd":"%s","unlisted":%s}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(echo "$input" | jq -r '.session_id // ""')" "$(echo "$input" | jq -r '.agent_id // ""')" "$agent_type" "$cwd" \
-  "$(printf '%s' "$unlisted" | sed 's/^  //' | jq -R . | jq -sc .)" >> "$HOME/.claude/hooks-logs/$(date +%Y-%m-%d).jsonl"
+  "$(exec date -u +%Y-%m-%dT%H:%M:%SZ)" "$(exec jq -r '.session_id // ""' <<<"$input")" "$(exec jq -r '.agent_id // ""' <<<"$input")" "$agent_type" "$cwd" \
+  "$(printf '%s' "$unlisted" | sed 's/^  //' | jq -R . | jq -sc .)" >> "$HOME/.claude/hooks-logs/$(exec date +%Y-%m-%d).jsonl"
 jq -n --arg m "$msg" '{"systemMessage": $m}'
 exit 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-SID=$(jq -r '.session_id // empty')
+SID=$(exec jq -r '.session_id // empty')
 [ -z "$SID" ] && exit 0
 
 rm -f "/tmp/claude-docs-ctx-$SID" \

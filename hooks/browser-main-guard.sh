@@ -3,13 +3,13 @@
 # Policy: ~/.claude/external-io.md. Escape: "[browser-inline: <why>]" in the last typed turn.
 # A missing or unreadable transcript denies: the escape cannot be read.
 
-input=$(cat)
+input=$(exec cat)
 
 echo "$input" | jq -e . >/dev/null 2>&1 || exit 0
 
-tool_name=$(echo "$input" | jq -r '.tool_name // ""')
-agent_id=$(echo "$input" | jq -r '.agent_id // ""')
-transcript=$(echo "$input" | jq -r '.transcript_path // ""')
+tool_name=$(exec jq -r '.tool_name // ""' <<<"$input")
+agent_id=$(exec jq -r '.agent_id // ""' <<<"$input")
+transcript=$(exec jq -r '.transcript_path // ""' <<<"$input")
 
 case "$tool_name" in
   mcp__chrome-devtools__*) ;;
@@ -22,7 +22,7 @@ case "${tool_name#mcp__chrome-devtools__}" in
 esac
 
 if [ -n "$transcript" ] && [ -r "$transcript" ]; then
-  escaped=$(jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR -n 'include "turns";
+  escaped=$(exec jq -L "$(exec dirname "${BASH_SOURCE[0]}")/lib" -rR -n 'include "turns";
         [inputs | fromjson? | typed_text] | last // "" | test("\\[browser-inline: \\S")' "$transcript" 2>/dev/null)
   [ "$escaped" = "true" ] && exit 0
 fi

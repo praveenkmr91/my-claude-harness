@@ -5,7 +5,7 @@
 SETTINGS="$HOME/.claude/settings.json"
 SNAPSHOT="$HOME/.claude/plugin-curation.expected.json"
 
-LIVE=$(jq -S '.enabledPlugins // {}' "$SETTINGS" 2>/dev/null) || exit 0
+LIVE=$(exec jq -S '.enabledPlugins // {}' "$SETTINGS" 2>/dev/null) || exit 0
 
 if [ "$1" = "--accept" ] || [ ! -f "$SNAPSHOT" ]; then
   printf '%s\n' "$LIVE" > "$SNAPSHOT"
@@ -13,7 +13,7 @@ if [ "$1" = "--accept" ] || [ ! -f "$SNAPSHOT" ]; then
   exit 0
 fi
 
-if [ "$LIVE" != "$(cat "$SNAPSHOT")" ]; then
+if [ "$LIVE" != "$(exec cat "$SNAPSHOT")" ]; then
   CHANGES=$(diff <(cat "$SNAPSHOT") <(printf '%s\n' "$LIVE") | grep -E '^[<>]' | sed 's/^</  expected:/; s/^>/  live:    /')
   BANNER="⚠ PLUGIN DRIFT — enabledPlugins no longer matches the blessed snapshot:
 $CHANGES

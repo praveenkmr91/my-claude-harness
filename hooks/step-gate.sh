@@ -4,11 +4,11 @@
 #   ran a check (lint, type check, tests, or a checker dispatch) and a commit, or the dispatch prompt opens with `step gate: skip — <check|commit|step>: <why>`, one line per gate.
 #   A dispatch still running and a denied dispatch never gate the next.
 #   A check or commit counts only when its tool_result is not an error; nothing downstream re-checks a red run, so this hook does.
-IN=$(cat)
+IN=$(exec cat)
 
-[ -n "$(jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
-SID=$(jq -r '.session_id // empty' <<<"$IN")
-T=$(jq -r '.transcript_path // empty' <<<"$IN")
+[ -n "$(exec jq -r '.agent_id // empty' <<<"$IN")" ] && exit 0
+SID=$(exec jq -r '.session_id // empty' <<<"$IN")
+T=$(exec jq -r '.transcript_path // empty' <<<"$IN")
 [ -n "$SID" ] && [ -r "$T" ] || exit 0
 jq -e '.tool_input.subagent_type == "implementer"' <<<"$IN" >/dev/null || exit 0
 
@@ -25,7 +25,7 @@ HANDOFF='<cross-session-message[^>]*>\s*\[HANDOFF '
 SKIPS_DEF='def skips: def lead: if length > 0 and (.[0] | test($skip)) then (.[0] | match($skip).captures[1].string), (.[1:] | lead) else empty end; split("\n") | map(select(test("\\S"))) | lead;'
 
 # Parsed, not grepped: tool_result text, hand-back bodies and harness sessions quote `git commit` and `tsc`.
-EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg noop "$NOOP" --arg planpath "$PLAN_PATH" --arg handoff "$HANDOFF" 'include "turns"; fromjson? |
+EVENTS=$(set -o pipefail; tail -c 20000000 "$T" 2>/dev/null | jq -L "$(exec dirname "${BASH_SOURCE[0]}")/lib" -rR --arg quoted "$QUOTED" --arg check "$CHECK" --arg commit "$COMMIT" --arg noop "$NOOP" --arg planpath "$PLAN_PATH" --arg handoff "$HANDOFF" 'include "turns"; fromjson? |
   (select(.type? == "user" and .origin.handback? == true and .origin.name? == "implementer") | "H"),
   (select(.type? == "attachment" and .attachment.origin.handback? == true and .attachment.origin.name? == "implementer") | "H"),
   (select(.type? == "user") | .message.content | strings | select(test($handoff)) | "O"),
@@ -41,9 +41,9 @@ JQ_RC=$?
 case $JQ_RC in 2|3) printf 'step-gate: jq failed (rc %s), gate not enforced\n' "$JQ_RC" >&2; exit 0 ;; esac
 
 # The skip goes in the dispatch prompt: reply text from the same turn reaches the transcript only after PreToolUse has run.
-PROMPT_EVENTS=$(jq -r --arg planpath "$PLAN_PATH" --arg skip "$SKIP" "$SKIPS_DEF"' .tool_input.prompt // "" | (match($planpath; "g") | "P " + .string), (skips | "S " + .)' <<<"$IN")
+PROMPT_EVENTS=$(exec jq -r --arg planpath "$PLAN_PATH" --arg skip "$SKIP" "$SKIPS_DEF"' .tool_input.prompt // "" | (match($planpath; "g") | "P " + .string), (skips | "S " + .)' <<<"$IN")
 
-CWD=$(jq -r '.cwd // empty' <<<"$IN")
+CWD=$(exec jq -r '.cwd // empty' <<<"$IN")
 
 # A prompt that merely quotes a plans-dir path must not latch the build: `P <path>` becomes a bare `P` only when the file exists.
 keep_existing_plans() {

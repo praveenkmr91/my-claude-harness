@@ -6,7 +6,7 @@
 # Claim and evidence checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The checkpoint check also runs on every other turn that claims done or sends a REPORT, once the session has made a Write/Edit/MultiEdit to a code file or dispatched an agent. A `Pass: <verb>` line in the reply is checked on every turn.
 # A plan build's done-claim or shipping commit also needs one `/learn` pass in the transcript (typed or Skill) or a `learn: skip — <reason>` line: of 84 build sessions, 13 ran /learn (measured 2026-11-06).
 
-INPUT=$(cat)
+INPUT=$(exec cat)
 python3 - "$INPUT" <<'PY'
 import json,sys,re,subprocess,os,urllib.parse
 try: inp=json.loads(sys.argv[1])

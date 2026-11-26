@@ -4,19 +4,19 @@
 # Output is a systemMessage: shown to the user, never blocking and never a model turn.
 # The last count nudged is kept per session and is never reset on compaction, so the same count stays quiet and the next one speaks.
 # Fails open (exit 0, silent) on a subagent, an unreadable transcript or no session id.
-IN=$(cat)
+IN=$(exec cat)
 
-[ -n "$(jq -r '.agent_id // empty' <<<"$IN" 2>/dev/null)" ] && exit 0
-SID=$(jq -r '.session_id // empty' <<<"$IN" 2>/dev/null)
-T=$(jq -r '.transcript_path // empty' <<<"$IN" 2>/dev/null)
+[ -n "$(exec jq -r '.agent_id // empty' <<<"$IN" 2>/dev/null)" ] && exit 0
+SID=$(exec jq -r '.session_id // empty' <<<"$IN" 2>/dev/null)
+T=$(exec jq -r '.transcript_path // empty' <<<"$IN" 2>/dev/null)
 [ -n "$SID" ] && [ -r "$T" ] || exit 0
 
-COUNT=$(jq -nR '[inputs | fromjson? | select(.type? == "system" and .subtype? == "compact_boundary" and .isSidechain? != true)] | length' "$T" 2>/dev/null)
+COUNT=$(exec jq -nR '[inputs | fromjson? | select(.type? == "system" and .subtype? == "compact_boundary" and .isSidechain? != true)] | length' "$T" 2>/dev/null)
 [ "${COUNT:-0}" -ge 2 ] || exit 0
 
 SEEN="$HOME/.claude/state/close-nudge/$SID"
-LAST=$(cat "$SEEN" 2>/dev/null)
+LAST=$(exec cat "$SEEN" 2>/dev/null)
 [ "$COUNT" -gt "${LAST:-0}" ] || exit 0
-mkdir -p "$(dirname "$SEEN")" && printf '%s\n' "$COUNT" >"$SEEN"
+mkdir -p "$(exec dirname "$SEEN")" && printf '%s\n' "$COUNT" >"$SEEN"
 
 jq -n --arg m "This session has compacted $COUNT times. At the next stopping point: save state with /remember:remember, close it and start a new session." '{systemMessage: $m}'

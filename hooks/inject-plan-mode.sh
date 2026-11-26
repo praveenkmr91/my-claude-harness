@@ -2,13 +2,13 @@
 # $1 = PostToolUse (EnterPlanMode) | UserPromptSubmit (covers shift+tab entry via permission_mode)
 #    | PreToolUse (Write/Edit of a plan file — plan drift is edited outside plan mode). Once per session.
 # $2 = optional doc name under ~/.claude (default plan-mode.md); a named doc has its own once-per-session flag.
-IN=$(cat)
+IN=$(exec cat)
 EVENT="$1"
-SID=$(jq -r '.session_id // empty' <<<"$IN")
-MODE=$(jq -r '.permission_mode // empty' <<<"$IN")
+SID=$(exec jq -r '.session_id // empty' <<<"$IN")
+MODE=$(exec jq -r '.permission_mode // empty' <<<"$IN")
 [ "$EVENT" = "UserPromptSubmit" ] && [ "$MODE" != "plan" ] && exit 0
 if [ "$EVENT" = "PreToolUse" ]; then
-  FILE=$(jq -r '.tool_input.file_path // empty' <<<"$IN")
+  FILE=$(exec jq -r '.tool_input.file_path // empty' <<<"$IN")
   case "$FILE" in *.research.md) exit 0 ;; esac
   case "$FILE" in "$HOME/.claude/plans/"*.md|*/docs/plans/*.md) ;; *) exit 0 ;; esac
 fi

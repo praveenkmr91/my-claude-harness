@@ -6,34 +6,34 @@
 # ~/Documents (macOS privacy), while a session here can.
 # Every failure path exits 0 silently.
 if [ "$1" != --stamp ]; then
-  IN=$(cat)
+  IN=$(exec cat)
   if [ "$1" = --on-skill ]; then
     case "$(jq -r '.tool_input.skill // empty' <<<"$IN" | sed 's/.*://')" in
       delete-audit|a11y-audit|web-quality-audit|core-web-vitals|improve-codebase-architecture) set -- --stamp ;;
       *) exit 0 ;;
     esac
   else
-    SOURCE=$(jq -r '.source // empty' <<<"$IN")
+    SOURCE=$(exec jq -r '.source // empty' <<<"$IN")
     case "$SOURCE" in startup|resume) ;; *) exit 0 ;; esac
   fi
-  cd "$(jq -r '.cwd // empty' <<<"$IN")" 2>/dev/null || exit 0
+  cd "$(exec jq -r '.cwd // empty' <<<"$IN")" 2>/dev/null || exit 0
 fi
-TOP=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+TOP=$(exec git rev-parse --show-toplevel 2>/dev/null) || exit 0
 if [ "$1" != --stamp ]; then
-  REPORT=$(ls -t "$HOME/.claude/state/audits/$(basename "$TOP")"/*.md 2>/dev/null | head -1)
+  REPORT=$(ls -t "$HOME/.claude/state/audits/$(exec basename "$TOP")"/*.md 2>/dev/null | head -1)
   LANDED="$TOP/docs/audits/audit.md"
   # cp writes through a symlink, and the repo decides where one points, so a symlink anywhere on the path skips the landing.
   SYMLINKED=false
   for p in "$TOP/docs" "$TOP/docs/audits" "$LANDED"; do [ -L "$p" ] && SYMLINKED=true; done
   if [ -n "$REPORT" ] && [ "$SYMLINKED" = false ] && [ "$REPORT" -nt "$LANDED" ] && mkdir -p "$TOP/docs/audits" && cp "$REPORT" "$LANDED"; then
-    jq -n --arg m "Weekly audit $(basename "$REPORT" .md) landed in docs/audits/audit.md — review and commit it." '{systemMessage: $m}'
+    jq -n --arg m "Weekly audit $(exec basename "$REPORT" .md) landed in docs/audits/audit.md — review and commit it." '{systemMessage: $m}'
     exit 0
   fi
   [ "$SOURCE" = startup ] || exit 0
 fi
 DIR="$HOME/.claude/state/audit"
-STAMP="$DIR/$(tr '/' '_' <<<"$TOP")"
+STAMP="$DIR/$(exec tr '/' '_' <<<"$TOP")"
 if [ "$1" = --stamp ] || [ ! -e "$STAMP" ]; then mkdir -p "$DIR" && touch "$STAMP"; exit 0; fi
-[ -n "$(find "$STAMP" -mtime -30 2>/dev/null)" ] && exit 0
-DAYS=$(( ($(date +%s) - $(date -r "$STAMP" +%s)) / 86400 ))
-jq -n --arg m "Audit due for $(basename "$TOP") (no audit in $DAYS days) — type \`audit\` when convenient." '{systemMessage: $m}'
+[ -n "$(exec find "$STAMP" -mtime -30 2>/dev/null)" ] && exit 0
+DAYS=$(( ($(exec date +%s) - $(exec date -r "$STAMP" +%s)) / 86400 ))
+jq -n --arg m "Audit due for $(exec basename "$TOP") (no audit in $DAYS days) — type \`audit\` when convenient." '{systemMessage: $m}'
