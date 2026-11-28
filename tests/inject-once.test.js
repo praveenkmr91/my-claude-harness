@@ -48,6 +48,7 @@ test('inject-once hook', async (t) => {
   const entries = injectOnceEntries();
   const externalIo = entries.filter((e) => e.doc === 'external-io.md' && e.pattern);
   const committing = entries.filter((e) => e.doc === 'committing.md' && e.pattern);
+  const battery = entries.filter((e) => e.doc === 'review-battery.md' && e.pattern);
 
   await t.test('first call injects the named doc', () => {
     const out = context(run('subagent-tiers.md', call(newSession())));
@@ -81,6 +82,23 @@ test('inject-once hook', async (t) => {
     assert.equal(run('code-craft.md', read('/repo/docs/plan.md'), sourceOnly), '');
     assert.match(context(run('code-craft.md', read('/repo/src/app.tsx'), sourceOnly)), /code-craft\.md — injected once/);
     assert.equal(run('code-craft.md', read('/repo/src/other.ts'), sourceOnly), '');
+  });
+
+  const dispatch = (sessionId, subagentType) => ({ session_id: sessionId, tool_name: 'Agent', tool_input: { subagent_type: subagentType, prompt: 'review' } });
+
+  await t.test('a review-agent dispatch injects review-battery.md, with or without a plugin prefix', () => {
+    assert.equal(battery.length, 1);
+    for (const member of ['code-reviewer', 'x:silent-failure-hunter']) {
+      assert.match(context(run('review-battery.md', dispatch(newSession(), member), battery[0].pattern)), /review-battery\.md — injected once/, member);
+    }
+  });
+
+  await t.test('a dispatch of another agent stays quiet without spending the flag', () => {
+    for (const other of ['implementer', 'impeccable:impeccable-finish-reviewer', undefined]) {
+      const sid = newSession();
+      assert.equal(run('review-battery.md', dispatch(sid, other), battery[0].pattern), '', String(other));
+      assert.match(context(run('review-battery.md', dispatch(sid, 'reuse-analyzer'), battery[0].pattern)), /review-battery\.md — injected once/);
+    }
   });
 
   await t.test('settings carries a pattern on both gh/curl entries and the git entry', () => {
@@ -225,7 +243,7 @@ test('inject-once hook', async (t) => {
   });
 
   await t.test('every wired doc injects under the hook output ceiling', () => {
-    const patternInputs = [{ file_path: 'x.ts' }, { command: 'git status' }, { command: 'gh pr view 1' }];
+    const patternInputs = [{ file_path: 'x.ts' }, { command: 'git status' }, { command: 'gh pr view 1' }, { subagent_type: 'code-reviewer' }];
     for (const { doc, pattern } of entries) {
       const outputs = (pattern ? patternInputs : [{}])
         .map((toolInput) => run(doc, { session_id: newSession(), tool_name: 'Bash', tool_input: toolInput }, pattern))

@@ -1,4 +1,4 @@
-# Review battery — recipe (read on the `battery` verb, a Big done bar or a `required=` list)
+# Review battery — recipe (injected on a thread's first review-agent dispatch; read on the `battery` verb, a Big done bar or a `required=` list)
 
 | Member | Tier |
 |---|---|

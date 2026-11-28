@@ -7,7 +7,7 @@ SID=$(exec jq -r '.session_id // empty' <<<"$IN")
 [ -z "$SID" ] && exit 0
 AGENT_ID=$(exec jq -r '.agent_id // empty' <<<"$IN")
 if [ -n "$PATTERN" ]; then
-  TARGET=$(exec jq -r '.tool_input.file_path // .tool_input.command // empty' <<<"$IN")
+  TARGET=$(exec jq -r '.tool_input.file_path // .tool_input.command // .tool_input.subagent_type // empty' <<<"$IN")
   # Exempt text is stripped, never allowlisted: a command the exempt pattern does not recognise still injects.
   if [ -n "$AGENT_ID" ] && [ -n "$SUBAGENT_EXEMPT" ]; then
     TARGET=$(exec sed -E -e ':a' -e "s"$'\001'"$SUBAGENT_EXEMPT"$'\001'" "$'\001' -e 'ta' <<<"$TARGET")

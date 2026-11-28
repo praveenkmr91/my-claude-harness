@@ -173,6 +173,7 @@ test.describe('rule and hook agree', () => {
     ['settings.json', /inject-once\.sh external-io\.md/, 'CLAUDE.md', /external-io\.md`, injected on the first MCP, `gh` or `curl` call/],
     ['settings.json', /"if": "Bash\(gh:\*\)",[^}]*inject-once\.sh external-io\.md[^"]*"|inject-once\.sh external-io\.md[^"]*",[^}]*"if": "Bash\(gh:\*\)"/, 'CLAUDE.md', /injected on the first MCP, `gh` or `curl` call/],
     ['settings.json', /"if": "Bash\(curl:\*\)",[^}]*inject-once\.sh external-io\.md[^"]*"|inject-once\.sh external-io\.md[^"]*",[^}]*"if": "Bash\(curl:\*\)"/, 'CLAUDE.md', /injected on the first MCP, `gh` or `curl` call/],
+    ['settings.json', /inject-once\.sh review-battery\.md '\(\^\|:\)\(code-reviewer\|/, 'review-battery.md', /injected on a thread's first review-agent dispatch/],
     ['settings.json', /inject-once\.sh peer-sessions\.md/, 'CLAUDE.md', /injected on the first SendMessage/],
     ['settings.json', /inject-once\.sh code-craft\.md '\[\.\]\(tsx\?[^']*\|sh\|[^']*dart\)[$]'/, 'CLAUDE.md', /code-craft\.md`\*\*.*injected on the first Read, Write or Edit of a source file/],
     ['settings.json', /"if": "Bash\(git:\*\)",[^}]*inject-once\.sh committing\.md[^"]*"|inject-once\.sh committing\.md[^"]*",[^}]*"if": "Bash\(git:\*\)"/, 'CLAUDE.md', /committing\.md`\*\*, injected on the first git command/],
