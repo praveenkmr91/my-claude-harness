@@ -52,8 +52,8 @@ DIRECTIVE_COMMENT = re.compile(r'eslint-|oxlint-|@ts-|@type|@vitest-|<reference|
 SILENT_FAILURE = rx(r'catch\s*[({]|\.catch\(|\?\?|\|\|\s*(null|undefined|\[\]|\{\}|0|false)(\W|$)')
 TYPE_DECLARATION = rx(r'^\s*(export\s+)?(declare\s+)?(type|interface|enum|(abstract\s+)?class)\s+[A-Z]')
 COMMENT_LINE = rx(r'^\s*(//|/\*|\*)')
-# Matched a line at a time, so a parameter list a formatter wrapped counts by its opener: `= ({`, `= ([`, or `= (` after `async` or a type-parameter list. A bare `= (` at line end is left out: it also opens a wrapped expression or JSX.
-NEW_SYMBOL = rx(r'^\s*(export\s+)?(default\s+)?(async\s+)?function\s+[A-Za-z_$]|^\s*(export\s+)?const\s+[A-Za-z_$][\w$]*\s*(:[^=]+)?=\s*(async\s*)?(<[^>]*>\s*)?(\(\s*[{\[]\s*$|\([^)]*\)\s*(:[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)|^\s*(export\s+)?const\s+[A-Za-z_$][\w$]*\s*(:[^=]+)?=\s*(async\s*(<[^>]*>\s*)?|<[^>]*>\s*)\(\s*$')
+# Matched a line at a time, so a parameter list a formatter wrapped counts by its opener: `= ({`, `= ([`, or `= (` after `async` or a type-parameter list. A bare `= (` at line end is left out, since it also opens a wrapped expression or JSX; that function counts by the line closing its list, `) => {`.
+NEW_SYMBOL = rx(r'^\s*(export\s+)?(default\s+)?(async\s+)?function\s+[A-Za-z_$]|^\s*(export\s+)?const\s+[A-Za-z_$][\w$]*\s*(:[^=]+)?=\s*(async\s*)?(<[^>]*>\s*)?(\(\s*[{\[]\s*$|\([^)]*\)\s*(:[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)|^\s*(export\s+)?const\s+[A-Za-z_$][\w$]*\s*(:[^=]+)?=\s*(async\s*(<[^>]*>\s*)?|<[^>]*>\s*)\(\s*$|^\s*\)\s*(:[^=]+)?=>')
 LEGACY_SYNTAX = rx(r'(^|[^.\w$])var\s|\.indexOf\([^)]*\)\s*[!=<>]=*\s*-1|Object\.assign\(\s*\{\}|\.apply\(\s*(this|null)|\.substr\(|(^|[^.\w$])require\(')
 # Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
 CODE_PATHSPEC = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs', '*.vue', ':!*.test.*', ':!*.spec.*', ':!**/__tests__/**', ':!tests/**']

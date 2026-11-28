@@ -247,7 +247,7 @@ test('review-classify owed files and background runs', async (t) => {
   });
 
   await t.test('signal members: an arrow function whose parameter list a formatter wrapped, or that takes a type parameter, lists reuse-analyzer', () => {
-    for (const first of ['export const Card = ({\n  title,\n}: CardProps) => {', 'export const submit = async (\n  values: FormValues,\n): Promise<void> => {', 'export const identity = <T,>(value: T): T => value;']) {
+    for (const first of ['export const Card = ({\n  title,\n}: CardProps) => {', 'export const submit = async (\n  values: FormValues,\n): Promise<void> => {', 'export const identity = <T,>(value: T): T => value;', 'export const submit = (\n  values: FormValues,\n): number => {', 'export const pick = (\n  a: number,\n) => a;']) {
       assert.match(ownedBy(first), / required=code-reviewer,reuse-analyzer /, first);
     }
   });
