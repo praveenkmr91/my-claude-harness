@@ -246,8 +246,15 @@ test('review-classify owed files and background runs', async (t) => {
     assert.match(ownedBy('export const build = async (input: string): Promise<number> => 1;'), / required=code-reviewer,reuse-analyzer /);
   });
 
-  await t.test('signal members twin: 30 plain lines list code-reviewer alone', () => {
+  await t.test('signal members: an arrow function whose parameter list a formatter wrapped, or that takes a type parameter, lists reuse-analyzer', () => {
+    for (const first of ['export const Card = ({\n  title,\n}: CardProps) => {', 'export const submit = async (\n  values: FormValues,\n): Promise<void> => {', 'export const identity = <T,>(value: T): T => value;']) {
+      assert.match(ownedBy(first), / required=code-reviewer,reuse-analyzer /, first);
+    }
+  });
+
+  await t.test('signal members twin: 30 plain lines, or a wrapped expression opening `= (`, list code-reviewer alone', () => {
     assert.match(ownedBy(undefined), / required=code-reviewer /);
+    assert.match(ownedBy('export const total = (\n  1 + 2\n);'), / required=code-reviewer /);
   });
 
   await t.test('signal members: 30 lines holding three comment lines list code-reviewer and comment-analyzer', () => {
