@@ -1,5 +1,5 @@
 # Hook JSON on stdin (it may also carry review_base, the sha before a builder step, and review_scope=report for a REPORT, both set by done-claim-gate.sh), <review-joins> line out. done-claim-gate.sh parses verb=, lenses=, required= (matched as `code-added=<n> required=`) and owed-files= — keep those keys.
-# required= is the only clearing path: a write to a code file outside TEST_FILE_ANY is cleared for a member by a finished, non-errored main-thread run of that member started after the write and shown the file; every run up to this call counts. code-reviewer is owed at 20+ uncleared lines, silent-failure-hunter and type-design-analyzer at 20+ when their own uncleared web text holds their signal, and those two plus placement-analyzer and adversarial-reviewer when the 20+ reach 200 or a path is high-risk; security-review is owed at 20+ lines only with a high-risk path. security-review runs as a main-thread Skill call, the rest as agents. review_scope=report lists only the members the Big rule owes. owed-files= names each owed member's uncleared files.
+# required= is the only clearing path: a write to a code file outside TEST_FILE_ANY is cleared for a member by a finished, non-errored main-thread run of that member started after the write and shown the file; every run up to this call counts. code-reviewer is owed at 20+ uncleared lines, silent-failure-hunter and type-design-analyzer at 20+ when their own uncleared web text holds their signal, and those two plus placement-analyzer and adversarial-reviewer when the 20+ reach 200 or a path is high-risk; security-review is owed at 20+ lines only with a high-risk path. reuse-analyzer and comment-analyzer are owed at 20+ on their own signal alone, never by size. security-review runs as a main-thread Skill call, the rest as agents. review_scope=report lists only the members the Big rule owes. owed-files= names each owed member's uncleared files.
 import functools
 import glob
 import json
@@ -52,11 +52,13 @@ DIRECTIVE_COMMENT = re.compile(r'eslint-|oxlint-|@ts-|@type|@vitest-|<reference|
 SILENT_FAILURE = rx(r'catch\s*[({]|\.catch\(|\?\?|\|\|\s*(null|undefined|\[\]|\{\}|0|false)(\W|$)')
 TYPE_DECLARATION = rx(r'^\s*(export\s+)?(declare\s+)?(type|interface|enum|(abstract\s+)?class)\s+[A-Z]')
 COMMENT_LINE = rx(r'^\s*(//|/\*|\*)')
+NEW_SYMBOL = rx(r'^\s*(export\s+)?(default\s+)?(async\s+)?function\s+[A-Za-z_$]|^\s*(export\s+)?const\s+[A-Za-z_$][\w$]*\s*(:[^=]+)?=\s*(async\s*)?(\([^)]*\)|[A-Za-z_$][\w$]*)\s*(:[^=]+)?=>')
 LEGACY_SYNTAX = rx(r'(^|[^.\w$])var\s|\.indexOf\([^)]*\)\s*[!=<>]=*\s*-1|Object\.assign\(\s*\{\}|\.apply\(\s*(this|null)|\.substr\(|(^|[^.\w$])require\(')
 # Content signals read non-test web code only: Swift/Kotlin `var` and test-fixture strings trip the patterns.
 CODE_PATHSPEC = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs', '*.vue', ':!*.test.*', ':!*.spec.*', ':!**/__tests__/**', ':!tests/**']
 BIG_MEMBERS = ('silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer', 'security-review')
-OWED_MEMBERS = ('code-reviewer',) + BIG_MEMBERS
+SIGNAL_MEMBERS = ('reuse-analyzer', 'comment-analyzer')
+OWED_MEMBERS = ('code-reviewer',) + BIG_MEMBERS + SIGNAL_MEMBERS
 SKILL_MEMBERS = ('security-review',)
 
 
@@ -355,7 +357,8 @@ def member_owed(member, paths, text, report_scope):
         return not report_scope
     if member == 'security-review':
         return bool(high_risk(paths))
-    return big_owed(paths) or (not report_scope and member in signals(text))
+    signalled = not report_scope and member in signals(text)
+    return signalled if member in SIGNAL_MEMBERS else big_owed(paths) or signalled
 
 
 def owed_summary(member_lines, member_texts, report_scope):
@@ -381,6 +384,8 @@ def signals(text):
         found.append('comment-analyzer')
     if any(LEGACY_SYNTAX.search(line) for line in lines):
         found.append('modern-ts-analyzer')
+    if any(NEW_SYMBOL.search(line) for line in lines):
+        found.append('reuse-analyzer')
     return found
 
 

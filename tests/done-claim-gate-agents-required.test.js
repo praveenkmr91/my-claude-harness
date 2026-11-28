@@ -25,6 +25,14 @@ test('done-claim gate: required review agents', async (t) => {
     blocked(runWithResults(`${CLAIM}\nsilent-failure-hunter: 0 findings`, caught, opts(repo)), 'code-reviewer, silent-failure-hunter');
   });
 
+  await t.test('a claim over 30 lines holding a function declaration is blocked for code-reviewer and reuse-analyzer; quiet once both ran', () => {
+    const repo = scratchRepo();
+    const declared = writeOf(repo, 'impl.ts', sourceLines(30, 'export function build() { return 1; }'), stamp(1));
+    blocked(runWithResults(CLAIM, [declared, checked(stamp(3))], opts(repo)), 'code-reviewer, reuse-analyzer');
+    blocked(runWithResults(CLAIM, [declared, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo)), 'reuse-analyzer');
+    quiet(runWithResults(CLAIM, [declared, dispatchOf('code-reviewer', stamp(2)), dispatchOf('reuse-analyzer', stamp(2)), checked(stamp(3))], opts(repo)));
+  });
+
   await t.test('a claim over 200 unreviewed lines with code-reviewer dispatched is blocked for the four Big members alone', () => {
     const repo = scratchRepo();
     const big = writeOf(repo, 'impl.ts', sourceLines(200), stamp(1));

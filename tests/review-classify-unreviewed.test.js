@@ -237,11 +237,11 @@ test('review-classify unreviewed source lines', async (t) => {
     ...Array.from({ length: 26 }, (_, i) => `export const v${i} = ${i};`),
   ].join('\n') + '\n';
 
-  await t.test('signals: 30 code lines holding 3 comment lines and a legacy var join lenses, not required', () => {
+  await t.test('signals: 30 code lines holding 3 comment lines and a legacy var join lenses; comment-analyzer is required, modern-ts-analyzer is not', () => {
     const out = classifyTranscript({ onDisk: { 'impl.ts': lensFile }, main: written('impl.ts', lensFile) });
     assert.match(out, / lenses=\S*comment-analyzer/);
     assert.match(out, / lenses=\S*modern-ts-analyzer/);
-    assert.match(out, / required=code-reviewer /);
+    assert.match(out, / required=code-reviewer,comment-analyzer /);
   });
 
   const afterBig = (...records) => (repo) => [writeOf(path.join(repo, 'impl.ts'), sourceLines(200), { at: stamp(1) }), ...records.flat()];

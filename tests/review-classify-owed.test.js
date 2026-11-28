@@ -233,6 +233,51 @@ test('review-classify owed files and background runs', async (t) => {
     assert.match(catchThenPlain(sourceLines(25, withCatch)), / required=code-reviewer,silent-failure-hunter /);
   });
 
+  const declared = 'export function build() { return 1; }';
+  const threeComments = '// first\n// second\n// third';
+  const ownedBy = (first, count = 30, input) => classifyTranscript({ main: written('impl.ts', sourceLines(count, first)), ...(input && { input }) });
+  const declaredThenRun = (member) => {
+    const files = { 'a.ts': sourceLines(30, declared) };
+    return classifyTranscript({ onDisk: files, main: writesThenRun(files, member), agents: reviewer(['a.ts']) });
+  };
+
+  await t.test('signal members: 30 lines holding a function declaration list code-reviewer and reuse-analyzer', () => {
+    assert.match(ownedBy(declared), / required=code-reviewer,reuse-analyzer /);
+    assert.match(ownedBy('export const build = async (input: string): Promise<number> => 1;'), / required=code-reviewer,reuse-analyzer /);
+  });
+
+  await t.test('signal members twin: 30 plain lines list code-reviewer alone', () => {
+    assert.match(ownedBy(undefined), / required=code-reviewer /);
+  });
+
+  await t.test('signal members: 30 lines holding three comment lines list code-reviewer and comment-analyzer', () => {
+    assert.match(ownedBy(threeComments), / required=code-reviewer,comment-analyzer /);
+  });
+
+  await t.test('signal members twin: two comment lines list code-reviewer alone', () => {
+    assert.match(ownedBy('// first\n// second'), / required=code-reviewer /);
+  });
+
+  await t.test('signal members: a code-reviewer run shown the file leaves reuse-analyzer listed alone', () => {
+    assert.match(declaredThenRun('code-reviewer'), / required=reuse-analyzer /);
+  });
+
+  await t.test('signal members twin: a reuse-analyzer run shown the file drops it and code-reviewer stays listed', () => {
+    assert.match(declaredThenRun('reuse-analyzer'), / required=code-reviewer /);
+  });
+
+  await t.test('signal members guard: 15 lines holding a function declaration list nothing', () => {
+    assert.match(ownedBy(declared, 15), / required=none /);
+  });
+
+  await t.test('signal members guard: 250 plain lines list code-reviewer and the Big members, neither signal member', () => {
+    assert.match(ownedBy(undefined, 250), bigFive);
+  });
+
+  await t.test('signal members guard: report scope, the 30 lines with the declaration list nothing', () => {
+    assert.match(ownedBy(declared, 30, scoped), / required=none /);
+  });
+
   const allRuns = (members, shown = ['impl.ts']) => ({
     main: (repo) => [
       writeOf(path.join(repo, 'impl.ts'), sourceLines(250), { at: stamp(1) }),

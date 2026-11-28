@@ -212,6 +212,7 @@ test.describe('rule and hook agree', () => {
     ['hooks/review-classify.py', /code-added=%d required=%s/, 'review-routing.md', /`required=`/],
     ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-battery.md', /## Required members/],
     ['hooks/review-classify.py', /^BIG_MEMBERS = \('silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer', 'security-review'\)$/m, 'review-battery.md', /\*\*Big\.\*\* .*silent-failure-hunter and type-design-analyzer unsignalled, plus placement-analyzer and adversarial-reviewer; security-review joins/],
+    ['hooks/review-classify.py', /^SIGNAL_MEMBERS = \('reuse-analyzer', 'comment-analyzer'\)$/m, 'review-battery.md', /\*\*reuse-analyzer\*\* \(a function declaration or an arrow-function `const`\) and \*\*comment-analyzer\*\* \(three comment lines\)/],
     ['hooks/enforce-subagent-model.sh', /names its effort/, 'subagent-tiers-enforcement.md', /with no `effort`/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {
