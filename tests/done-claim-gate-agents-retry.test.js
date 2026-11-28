@@ -66,27 +66,27 @@ test('done-claim gate: review agents on worker writes, retries and commits', asy
     blocked(runWithResults(CLAIM, twoBlocks(sourceLines(30, withCatch)), opts(repo)), 'code-reviewer, silent-failure-hunter');
   });
 
-  await t.test('a claim over 200 uncleared lines holds every Big member however many blocks came before, on the retry too; a commit or a reply that claims nothing passes', () => {
+  await t.test('a claim over 200 uncleared lines holds every Big member however many blocks came before, on the retry too, and so does a commit after the blocks; a reply that claims nothing passes', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(200), stamp(1));
     const twoBlocks = [written, agentFeedback(), agentFeedback()];
     const retry = (reply, ...runs) => runWithResults(reply, runs, opts(repo, { stopHookActive: true }));
     blocked(runWithResults(CLAIM, [...twoBlocks, checked(stamp(3))], opts(repo)), ALL_NAMES);
     blocked(retry('The branch is ready to merge.', ...twoBlocks), ALL_NAMES);
-    quiet(retry('Committed as abc1234.', ...twoBlocks, committed(stamp(4))));
+    blocked(retry('Committed as abc1234.', ...twoBlocks, committed(stamp(4))), ALL_NAMES);
     quiet(retry('Findings are below.', ...twoBlocks));
     quiet(retry('The branch is ready to merge.', written, ...allRuns(stamp(2)), agentFeedback(), agentFeedback()));
   });
 
-  await t.test('however many blocks came before, no commit shape owes a review: a grep, an errored commit and a landed one pass; a claim over them is blocked', () => {
+  await t.test('however many blocks came before, a commit after them owes the review, errored or landed, as a claim does; a grep naming one passes', () => {
     const repo = scratchRepo();
     const twoBlocks = [writeOf(repo, 'impl.ts', sourceLines(250), stamp(1)), agentFeedback(), agentFeedback(), checked(stamp(3))];
     const grep = { command: 'grep -n "git commit" x.sh', output: 'x.sh:1', timestamp: stamp(4) };
     const failedCommit = { ...committed(stamp(4)), isError: true, output: 'Exit code 1' };
     for (const stopHookActive of [true, false]) {
       quiet(runWithResults('Findings are below.', [...twoBlocks, grep], opts(repo, { stopHookActive })));
-      quiet(runWithResults('Findings are below.', [...twoBlocks, failedCommit], opts(repo, { stopHookActive })));
-      quiet(runWithResults('Findings are below.', [...twoBlocks, committed(stamp(4))], opts(repo, { stopHookActive })));
+      blocked(runWithResults('Findings are below.', [...twoBlocks, failedCommit], opts(repo, { stopHookActive })), ALL_NAMES);
+      blocked(runWithResults('Findings are below.', [...twoBlocks, committed(stamp(4))], opts(repo, { stopHookActive })), ALL_NAMES);
       blocked(runWithResults(CLAIM, [...twoBlocks, committed(stamp(4))], opts(repo, { stopHookActive })), ALL_NAMES);
     }
   });
@@ -107,14 +107,14 @@ test('done-claim gate: review agents on worker writes, retries and commits', asy
     quiet(runWithResults('Step 2 passes verify.', runs, opts(repo, { stopHookActive: true })));
   });
 
-  await t.test('a retry after an unrelated block checks a reply that claims; a plain reply or a commit passes', () => {
+  await t.test('a retry after an unrelated block checks a reply that claims and a turn that commits; a plain reply passes', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
     const unrelated = feedbackOf('DONE-CLAIM WITHOUT EVIDENCE: the first line claims \'done\' but no test or runtime command ran this turn.');
     const retry = (reply, ...runs) => runWithResults(reply, runs, opts(repo, { stopHookActive: true }));
     blocked(retry(CLAIM, written, unrelated, checked(stamp(3))), 'code-reviewer');
     quiet(retry('Findings are below.', written, unrelated, checked(stamp(3))));
-    quiet(retry('Findings are below.', written, unrelated, committed(stamp(3))));
+    blocked(retry('Findings are below.', written, unrelated, committed(stamp(3))), 'code-reviewer');
   });
 
   await t.test('a dispatch before the last write does not clear a member; one after it does', () => {

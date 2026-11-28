@@ -213,6 +213,8 @@ test.describe('rule and hook agree', () => {
     ['hooks/done-claim-gate.sh', /REVIEW AGENTS NOT RUN/, 'review-battery.md', /## Required members/],
     ['hooks/review-classify.py', /^BIG_MEMBERS = \('silent-failure-hunter', 'type-design-analyzer', 'placement-analyzer', 'adversarial-reviewer', 'security-review'\)$/m, 'review-battery.md', /\*\*Big\.\*\* .*silent-failure-hunter and type-design-analyzer unsignalled, plus placement-analyzer and adversarial-reviewer; security-review joins/],
     ['hooks/review-classify.py', /^SIGNAL_MEMBERS = \('reuse-analyzer', 'comment-analyzer'\)$/m, 'review-battery.md', /\*\*reuse-analyzer\*\* \(a function declaration or an arrow-function `const`\) and \*\*comment-analyzer\*\* \(three comment lines\)/],
+    ['hooks/done-claim-gate.sh', /commit_due=any\(commit_at\.search\(c\) for c in cmds\[feedback_cmds:\]\)/, 'review-battery.md', /a commit while source is unreviewed, which is blocked once per commit/],
+    ['hooks/done-claim-gate.sh', /each at `effort: high`, or `effort: low` for a rerun/, 'review-routing.md', /\*\*high\*\* on HIGH risk \(below\), a loosened guard or an owed member's first run over a range/],
     ['hooks/enforce-subagent-model.sh', /names its effort/, 'subagent-tiers-enforcement.md', /with no `effort`/],
   ];
   for (const [hook, hookPattern, doc, docPattern] of pairs) {

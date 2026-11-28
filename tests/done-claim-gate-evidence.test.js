@@ -64,14 +64,14 @@ test('done-claim gate: evidence', async (t) => {
     assert.equal(run(`Done: the edits landed.\n${BASE_VERDICTS}`, { bashCommand: 'pnpm check:types && node --test', lint: false }), 0);
   });
 
-  await t.test('an automatic commit triggers the lint check like a commit ask, and owes no review', () => {
+  await t.test('an automatic commit triggers the lint check like a commit ask, and owes code-reviewer over 30 unreviewed lines', () => {
     const noLint = runFull(`Committed as abc1234.\n${BASE_VERDICTS}`, { bashCommand: 'git -C /repo commit --only src/app.ts -m x', lint: false });
     assert.equal(noLint.status, 2);
     assert.match(noLint.stderr, /LINT\/TSC NOT RUN: this turn edited web code and ran git commit/);
     const unreviewed = { cwd: scratchRepo(), written: 30 };
     const noLens = runFull('Committed as abc1234.', { bashCommand: 'git commit -m x', ...unreviewed });
-    assert.equal(noLens.status, 0, noLens.stderr);
-    assert.doesNotMatch(noLens.stderr, /REVIEW/);
+    assert.equal(noLens.status, 2, noLens.stderr);
+    assert.match(noLens.stderr, /REVIEW AGENTS NOT RUN for code-reviewer:/);
     assert.match(runFull('Done: committed.', { bashCommand: 'node --test tests/*.test.js && git commit -m x', ...unreviewed }).stderr, /REVIEW AGENTS NOT RUN/);
     assert.equal(run('Here is the history.', { bashCommand: 'git log --grep commit', lint: false }), 0);
   });

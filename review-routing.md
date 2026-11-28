@@ -3,7 +3,7 @@
 - Default ask is **review**; the hook's `<review-joins>` line picks verb + lenses — load exactly those. No `lenses=` on it → nothing in scope; the verb row's members apply.
 - A named verb overrides the hook's `verb=`, the heavier of two (battery > harden > review); its `lenses=` still ride along.
 - Announce the pass as `Pass: <verb>`, then do it — main thread, session tier, unless the verb says otherwise. A `Pass:` line names the check that was run (command, file read, probe); re-reading my own text is not a pass.
-- Effort (`effort=` on the joins line, only when the ask states one; xhigh / max read as high) sets depth, never members, and overrides the per-lens and threshold rules below. **low** → only findings verified at source with a reproduced failure scenario. **medium** or unstated → as below. **high** → every joined lens dispatched as an agent; findings 60-74 reported too, tagged uncertain. A stated level also goes to the `code-review` skill on PR asks and sets each agent's dispatch `effort`, above or below its frontmatter. Unstated, the dispatcher sets agent `effort` by risk and names it at launch: **high** on HIGH risk (below) or a loosened guard, **low** for a mechanical check, else **medium**.
+- Effort (`effort=` on the joins line, only when the ask states one; xhigh / max read as high) sets depth, never members, and overrides the per-lens and threshold rules below. **low** → only findings verified at source with a reproduced failure scenario. **medium** or unstated → as below. **high** → every joined lens dispatched as an agent; findings 60-74 reported too, tagged uncertain. A stated level also goes to the `code-review` skill on PR asks and sets each agent's dispatch `effort`, above or below its frontmatter. Unstated, the dispatcher sets agent `effort` by risk and names it at launch: **high** on HIGH risk (below), a loosened guard or an owed member's first run over a range, **low** for a mechanical check or the rerun after a fix-only round, else **medium**.
 
 | Verb | Members | Runs as |
 |---|---|---|
@@ -12,7 +12,7 @@
 | **harden** — also "security review", "find bugs", "bug hunt", "adversarial", "break it" | adversarial-reviewer agent + security-review skill | Cheap escalation for a hot path; joins battery on HIGH risk |
 | **trim** — also "simplify", "simplifier", "modernise", "modern", "comments", "de-vibe", "clean up", "tidy" | /delete-list, /simplify, comment-analyzer, modern-ts-analyzer, /shortcut-debt | Quality only, no bug hunt |
 | **audit** — bare = all, or `bloat` \| `a11y` \| `arch` \| `perf` | /delete-audit; a11y-audit; improve-codebase-architecture; web-quality-audit / core-web-vitals | Whole repo. Bare: fork per flavor, one ranked report; arch skips grilling; then `hooks/audit-due.sh --stamp`. Security → harden |
-| **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor if irreversible. A done-claim (first line not `Step N`), a REPORT or a shipping commit (it deletes `docs/plans/<slug>.md`) owes the `required=` members, each run as an agent or skill that was shown the files; a typed findings, skip or hand-pass line clears nothing. Plus one `/learn` pass per build session, or `learn: skip — <reason>`. | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
+| **verify** — also any "done / ready to ship" claim | verification-before-completion → runtime replay of the ticket's worked example → advisor if irreversible. A done-claim (first line not `Step N`), a REPORT, a shipping commit (it deletes `docs/plans/<slug>.md`) or a commit while source is unreviewed owes the `required=` members, each run as an agent or skill that was shown the files; a typed findings, skip or hand-pass line clears nothing. Plus one `/learn` pass per build session, or `learn: skip — <reason>`. | Before agreeing anything is done; `hooks/done-claim-gate.sh` enforces |
 
 Hook joins (scope = files this session edited; dirty tree only when none):
 - React files → react-best-practices; a finding needs a named rule id; no generic "could be slow".
@@ -24,7 +24,7 @@ Hook joins (scope = files this session edited; dirty tree only when none):
 - a11y-audit never auto-joins.
 - Per joined lens outside `required=`: hand pass first, reading its definition (`~/.claude/agents/`); agent only on a lead. One line per lens, `<lens>: N findings` or `<lens>: skip — <reason>`, for the reader; no hook counts it. Write a skip reason only after reading the diff, an implementer's included (sweeps: `subagent-tiers.md` residue census).
 - PR ask ("check PR", "review PR 12", a PR URL; joins show `pr=`) → the `code-review` skill on that PR, lenses scored from its diff. `--comment` only on explicit ask; the battery (`~/.claude/review-battery.md`) only on full / deep.
-- Auto: the Stop gate blocks a done-claim, a REPORT or the shipping commit while `required=` is non-empty, whatever the turn wrote; a commit or commit ask alone owes no review.
+- Auto: the Stop gate blocks a done-claim, a REPORT, the shipping commit and, once, a commit while source is unreviewed, while `required=` is non-empty, whatever the turn wrote; a commit ask alone owes no review.
 
 Explicit ask only: grilling (stress-test a plan), systematic-debugging (bug survived two hypotheses).
 

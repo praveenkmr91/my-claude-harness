@@ -69,8 +69,9 @@ test('done-claim gate: review agents on shipping commits, classifier failures an
     const withForeign = committedBy(ships[0]);
     withForeign.step.output = `[main deadbee] elsewhere\n${withForeign.step.output}`;
     blocked(runWithResults(reply, [writeOf(withForeign.repo, 'impl.ts', sourceLines(300), stamp(1)), checked(stamp(3)), withForeign.step], opts(withForeign.repo)), ALL_NAMES);
+    // No learn-skip line and nothing owed: read as a ship, this commit would raise LEARN NOT RUN.
     const { repo, step } = committedBy('echo y >> README && git add README && git commit -m tweak');
-    quiet(runWithResults(reply, [writeOf(repo, 'impl.ts', sourceLines(300), stamp(1)), checked(stamp(3)), step], opts(repo)));
+    quiet(runWithResults('Shipped.', [writeOf(repo, 'impl.ts', sourceLines(3), stamp(1)), checked(stamp(3)), step], opts(repo)));
   });
 
   await t.test('a dispatch with an errored result, or no result yet, leaves its member in the block', () => {
@@ -138,19 +139,19 @@ test('done-claim gate: review agents on shipping commits, classifier failures an
     blocked(runWithResults(CLAIM, turns(), opts(repo)), 'code-reviewer');
   });
 
-  await t.test('a turn with no edit that asks to commit or commits owes no review; "passes", outside a no-code turn\'s claim words, is no claim', () => {
+  await t.test('a turn with no edit that commits over 30 unreviewed lines is blocked for code-reviewer; its commit ask owes no review, and "passes", outside a no-code turn\'s claim words, is no claim', () => {
     const repo = scratchRepo();
     const turns = (...tail) => [writeOf(repo, 'impl.ts', sourceLines(30), stamp(1)), { prompt: 'next', timestamp: stamp(3) }, ...tail];
     quiet(runWithResults(ASK, turns(), opts(repo)));
-    quiet(runWithResults('Committed as abc1234.', turns(committed(stamp(4))), opts(repo)));
+    blocked(runWithResults('Committed as abc1234.', turns(committed(stamp(4))), opts(repo)), 'code-reviewer');
     quiet(runWithResults('The test passes because the cutoff sorts first.', turns(), opts(repo)));
   });
 
-  await t.test('a code turn that asks to commit or commits owes no review; its done claim does', () => {
+  await t.test('a code turn that asks to commit owes no review; its commit and its done claim do', () => {
     const repo = scratchRepo();
     const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
     quiet(runWithResults(ASK, [thirty, checked(stamp(3))], opts(repo)));
-    quiet(runWithResults('Committed as abc1234.', [thirty, checked(stamp(3)), committed(stamp(4))], opts(repo)));
+    blocked(runWithResults('Committed as abc1234.', [thirty, checked(stamp(3)), committed(stamp(4))], opts(repo)), 'code-reviewer');
     blocked(runWithResults(CLAIM, [thirty, checked(stamp(3)), committed(stamp(4))], opts(repo)), 'code-reviewer');
   });
 

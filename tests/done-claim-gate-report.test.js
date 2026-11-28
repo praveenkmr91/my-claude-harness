@@ -350,13 +350,13 @@ test('done-claim gate: report', async (t) => {
     sent(sendReport(builderThread([60, 250], [agentRuns(stamp(21))]), [feedback(), feedback()]));
   });
 
-  await t.test('a Stop claim in a window a REPORT opened owes the four Big members once the window got a hand-back; a commit alone owes none', () => {
+  await t.test('a Stop claim in a window a REPORT opened owes the four Big members once the window got a hand-back; so does a commit alone', () => {
     const claim = `Done: step 2 committed.\n${LEARN_SKIP}`;
     const commit = { command: 'git commit -m x', output: '', timestamp: stamp(25) };
     refusedFor(stopAfter(builderThread([60, 250]), claim, [commit]), BIG_NAMES);
     sent(stopAfter(builderThread([60, 250], [agentRuns(stamp(21))]), claim, [commit]));
     sent(stopAfter(builderThread([60, 60]), claim, [commit]));
-    sent(stopAfter(builderThread([60, 250]), 'Committed as abc1234.', [commit]));
+    refusedFor(stopAfter(builderThread([60, 250]), 'Committed as abc1234.', [commit]), BIG_NAMES);
   });
 
   await t.test('a REPORT sent after a delivered STOP-answering REPORT, with no edit in its window, is refused for the Big members still unrun; run, it is sent', () => {

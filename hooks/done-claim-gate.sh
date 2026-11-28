@@ -1,9 +1,9 @@
 #!/bin/bash
 # Stop hook, and PreToolUse SendMessage on a `[REPORT` send (window = since the previous sent REPORT, not the typed prompt, so a typed "granted" cannot empty it).
 # Claim = first line of the final reply (or the REPORT) only, so "not done yet" in the body never trips it; commit ask = last line; per-lens verdict lines are excluded from both.
-# One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which runs again on a retry that claims or ships, with no release however many blocks came before; a reply that claims nothing passes. A blocked REPORT re-blocks until it changes.
-# Review is owed at the checkpoint only: a done-claim whose first line is not "Step N", a REPORT, or the shipping commit. review-classify.py alone decides what is owed (`required=`, `owed-files=`) from the reviewer runs in the transcript and the files each was shown; this gate clears nothing and blocks while `required=` is non-empty, whatever findings, skip or hand-pass lines the reply holds. A commit or commit ask alone owes no review. A REPORT answering a STOP and a no-code Stop in the window it opened are exempt; a REPORT, and a Stop in a window a REPORT opened, send `review_scope=report`, so the classifier lists only the Big members.
-# Claim and evidence checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The checkpoint check also runs on every other turn that claims done or sends a REPORT, once the session has made a Write/Edit/MultiEdit to a code file or dispatched an agent. A `Pass: <verb>` line in the reply is checked on every turn.
+# One-shot on Stop: stop_hook_active passes the retry unchecked, except the REVIEW AGENTS NOT RUN check, which runs again on a retry that claims, ships or commits, with no release however many blocks came before; a reply that claims nothing passes unless a commit followed the window's last such block. A blocked REPORT re-blocks until it changes.
+# Review is owed at the checkpoint only: a done-claim whose first line is not "Step N", a REPORT, the shipping commit, or a commit while source is unreviewed, which is blocked once. review-classify.py alone decides what is owed (`required=`, `owed-files=`) from the reviewer runs in the transcript and the files each was shown; this gate clears nothing and blocks while `required=` is non-empty, whatever findings, skip or hand-pass lines the reply holds. A commit ask alone owes no review. A REPORT answering a STOP and a no-code Stop in the window it opened are exempt; a REPORT, and a Stop in a window a REPORT opened, send `review_scope=report`, so the classifier lists only the Big members.
+# Claim and evidence checks fire only on turns that edited a code file or got an `implementer` hand-back — answers, commits and doc edits carry no runtime claim. The checkpoint check also runs on every other turn that claims done, commits or sends a REPORT, once the session has made a Write/Edit/MultiEdit to a code file or dispatched an agent. A `Pass: <verb>` line in the reply is checked on every turn.
 # A plan build's done-claim or shipping commit also needs one `/learn` pass in the transcript (typed or Skill) or a `learn: skip — <reason>` line: of 84 build sessions, 13 ran /learn (measured 2026-11-06).
 
 INPUT=$(exec cat)
@@ -33,8 +33,8 @@ def lens_ran(b):
 # shortcut: lens and evidence checks are turn-scoped — a plan-file `rm` in one turn with its commit in the next escapes the shipping check, and so does a commit whose sha never reaches the transcript (`-q`, piped or redirected output) of a plan file removed by anything but a literal `rm docs/plans/…`; the review-agent check runs only once this session has Write/Edit-ed code or dispatched an agent, so a claim over an earlier session's unreviewed code, or over code written only by Bash, escapes it; upgrade = size Big by git range across sessions.
 def result_text(c): return c if isinstance(c,str) else ' '.join(b.get('text','') for b in c or [] if isinstance(b,dict))
 def reset(by_report=False,after_stop=False):
-    global texts,cmds,cmd_ids,commit_shas,results,edits,lens_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,window_report,stop_window
-    texts=[]; cmds=[]; cmd_ids=[]; commit_shas=[]; results={}; edits=[]; lens_calls=[]; tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; built_blind=False; hb_at=0; stopped=False; feedback_blocks=0; window_report=by_report; stop_window=after_stop
+    global texts,cmds,cmd_ids,commit_shas,results,edits,lens_calls,tools,handbacks,verifier_calls,nudged,built,built_blind,hb_at,stopped,feedback_blocks,feedback_cmds,window_report,stop_window
+    texts=[]; cmds=[]; cmd_ids=[]; commit_shas=[]; results={}; edits=[]; lens_calls=[]; tools=[]; handbacks=[]; verifier_calls=[]; nudged=False; built=False; built_blind=False; hb_at=0; stopped=False; feedback_blocks=0; feedback_cmds=0; window_report=by_report; stop_window=after_stop
 # An Agent dispatch result names the agent's own transcript (`output_file: …/<id>.output`); its Write/Edit calls are the hand-back's edit paths.
 agent_out={}
 output_file=re.compile(r'output_file:\s*(\S+/([^/\s]+)\.output)')
@@ -79,7 +79,7 @@ for line in transcript:
         if '<command-name>/learn</command-name>' in txt: learned=True
         # isMeta = skill bodies, peer hand-backs and this hook's own feedback — not a new prompt, or they reset `ran` and re-trip on the verbs they quote.
         if not report and txt.strip() and not txt.lstrip().startswith('<') and not r.get('isMeta') and not r.get('isCompactSummary'): reset(); base=None
-        if r.get('isMeta') and txt.lstrip().startswith('Stop hook feedback:') and 'REVIEW AGENTS NOT RUN' in txt: feedback_blocks+=1
+        if r.get('isMeta') and txt.lstrip().startswith('Stop hook feedback:') and 'REVIEW AGENTS NOT RUN' in txt: feedback_blocks+=1; feedback_cmds=len(cmds)
         if isinstance(c,str) and stop_msg.search(c): stopped=True
         if r.get('origin',{}).get('handback') and r['origin'].get('name')=='implementer': handback(r['origin'])
         if isinstance(c,str) and '<agent-message from=' in c: handbacks.append(c)
@@ -174,7 +174,7 @@ def unshown_line(member,files):
 def required_status(required,owed_files):
     if required=='none': return None
     owed=required.split(',')
-    block=f"REVIEW AGENTS NOT RUN for {', '.join(owed)}: source written in this session still owes each a run. Run `security-review` as a `Skill` call and the rest as agents, each with an `effort` (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. An agent run clears the files its transcript shows; `security-review` clears on its Skill call. Give each everything written since its last run, never the last commit alone."
+    block=f"REVIEW AGENTS NOT RUN for {', '.join(owed)}: source written in this session still owes each a run. Run `security-review` as a `Skill` call and the rest as agents, each at `effort: high`, or `effort: low` for a rerun after a round that only applied their findings (~/.claude/review-battery.md says what each is for); a typed findings or skip line does not count. An agent run clears the files its transcript shows; `security-review` clears on its Skill call. Give each everything written since its last run, never the last commit alone."
     return '\n'.join([block]+[unshown_line(m,owed_files[m]) for m in owed if m in owed_files])
 problems=[]
 # Mirrors the verb table in review-routing.md and review-battery.md — a member renamed there must be renamed here. The verb comes from the reply's `Pass:` line, never the prompt, because a prompt that only discusses a verb is not an ask for it.
@@ -213,6 +213,8 @@ if report and '/scratchpad/' not in final:
 # commit_at's value and path classes stop at a separator and a quote, so each token parses one way; otherwise a long command backtracks past the Stop timeout.
 commit_at=re.compile(r'(?:^|[;&|({`]|\b(?:ba|z)?sh\s+-\w*c\s+[\'"]|\beval\s+[\'"]?)\s*(?:(?:(?:time|then|do|if|elif|else|while|until|env|command|exec|nice)|!|xargs(?:\s+-[^\s;&|`]+)*|timeout\s+[^\s;&|`]+|\w+=(?:"[^"]*"|\'[^\']*\'|[^\s;&|`\'"]*))\s+)*(?:[^\s;&|`]*/)?'+commit_cmd.pattern,re.M)
 committed=any(commit_at.search(c) for c in cmds)
+# A commit is a review checkpoint once: one that ran before the window's last REVIEW AGENTS NOT RUN block has had its block, so a reply waiting on running reviewers passes.
+commit_due=any(commit_at.search(c) for c in cmds[feedback_cmds:])
 # Reads only the commits whose sha this turn printed; a quiet (`-q`) commit, a timeout or a git error leaves the literal `rm` text as the only ship signal.
 def commits_delete_plan():
     if not (commit_shas and cwd and os.path.isdir(cwd)): return False
@@ -250,7 +252,7 @@ stop_exempt=window_report and stop_window and not report and not code_turn
 if inp.get('stop_hook_active') and not report:
     # A step claim is exempt here only as it was on the first run: once an agent block is in the window, rewording to "Step N" must not pass.
     step_exempt=bool(step_claim) and not (ship or feedback_blocks)
-    if not step_exempt and not stop_exempt and (claim or ship):
+    if not step_exempt and not stop_exempt and (claim or ship or commit_due):
         _,_,required,owed_files=classify(window_report)
         block=required_status(required,owed_files)
         if block:
@@ -259,7 +261,7 @@ if inp.get('stop_hook_active') and not report:
     sys.exit(0)
 # A REPORT answering a STOP skips every check but `problems` (raw-output path, `Pass:` lines, plan gate); a no-code Stop in the window it opened skips the review-agent check too, until a typed prompt or the next REPORT.
 if (report and stopped) or not code_turn:
-    if not (report and stopped) and not stop_exempt and not step_turn and session_work and (claim or report):
+    if not (report and stopped) and not stop_exempt and not step_turn and session_work and (claim or report or commit_due):
         _,_,required,owed_files=classify(report or window_report)
         block=required_status(required,owed_files)
         if block: problems.append(block)
@@ -322,9 +324,9 @@ def repo_lints(cwd):
 lint_cmds=[c for _,c in fresh] if report else cmds
 if (claim_word or commit_ask or committed) and ((built_blind and repo_lints(cwd)) or any(web.search(e) and not e.startswith(harness) for e in edits)) and not any(static_check.search(c) for c in lint_cmds):
     problems.append(f"LINT/TSC NOT RUN: this turn edited web code and {why}, and no lint or type-check command ran. Run them and report the output (CLAUDE.md: run linter + type checker).")
-if claim_word or ship:
+if claim_word or ship or commit_due:
     _,lenses,required,owed_files=classify(report or window_report)
-    if 'impeccable' in lenses.split(',') and 'impeccable' not in ran:
+    if (claim_word or ship) and 'impeccable' in lenses.split(',') and 'impeccable' not in ran:
         problems.append("IMPECCABLE NOT RUN: this turn changed styling; run the `impeccable:impeccable` skill with `audit <changed files>` — a hand-written findings or skip line never satisfies it (review-routing.md).")
     owed_block=None if step_turn else required_status(required,owed_files)
     if owed_block: problems.append(owed_block)

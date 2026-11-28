@@ -16,7 +16,7 @@ test('done-claim gate: required review agents', async (t) => {
     const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
     const fires = runWithResults(CLAIM, [thirty, checked(stamp(3))], opts(repo));
     blocked(fires, 'code-reviewer');
-    assert.match(fires.stderr, /: source written in this session still owes each a run\. Run `security-review` as a `Skill` call and the rest as agents, each with an `effort`/);
+    assert.match(fires.stderr, /: source written in this session still owes each a run\. Run `security-review` as a `Skill` call and the rest as agents, each at `effort: high`, or `effort: low` for a rerun after a round that only applied their findings /);
     quiet(runWithResults(CLAIM, [thirty, dispatchOf('code-reviewer', stamp(2)), checked(stamp(3))], opts(repo)));
     for (const line of ['code-reviewer: 0 findings', 'code-reviewer: skip — reviewed by hand', 'code-reviewer: not run — small change']) {
       blocked(runWithResults(`${CLAIM}\n${line}`, [thirty, checked(stamp(3))], opts(repo)), 'code-reviewer');
@@ -129,22 +129,35 @@ test('done-claim gate: required review agents', async (t) => {
     assert.ok(fires.stderr.split('\n').includes('placement-analyzer has not been shown: my file.ts, f1.ts, f2.ts, f3.ts, f4.ts and 2 more.'), fires.stderr);
   });
 
-  await t.test('a typed turn that only commits owes no review over Big writes that only code-reviewer covered; the same turn claiming done does', () => {
+  await t.test('a typed turn that only commits over Big writes that only code-reviewer covered is blocked for the Big members, as the same turn claiming done is', () => {
     const repo = scratchRepo();
     const earlier = [writeOf(repo, 'impl.ts', sourceLines(200), stamp(1)), dispatchOf('code-reviewer', stamp(2)), { prompt: 'next', timestamp: stamp(3) }];
-    quiet(runWithResults('Committed as abc1234.', [...earlier, committed(stamp(5))], opts(repo)));
+    blocked(runWithResults('Committed as abc1234.', [...earlier, committed(stamp(5))], opts(repo)), BIG_NAMES);
     blocked(runWithResults(CLAIM, [...earlier, checked(stamp(4)), committed(stamp(5))], opts(repo)), BIG_NAMES);
     quiet(runWithResults(CLAIM, [...earlier, ...bigDispatches(stamp(4)), checked(stamp(4)), committed(stamp(5))], opts(repo)));
   });
 
-  await t.test('a commit turn with 300 uncovered lines and no claim owes no review, but the lint check still fires', () => {
+  await t.test('a commit turn with 300 uncovered lines and no claim is blocked for every owed member, beside the lint check', () => {
     const repo = scratchRepo();
     const written = writeOf(repo, 'impl.ts', sourceLines(300), stamp(1));
     const unlinted = runWithResults('Committed as abc1234.', [written, committed(stamp(4))], opts(repo));
-    assert.equal(unlinted.status, 2, unlinted.stderr);
+    blocked(unlinted, ALL_NAMES);
     assert.match(unlinted.stderr, /LINT\/TSC NOT RUN: this turn edited web code and ran git commit/);
-    assert.doesNotMatch(unlinted.stderr, NOT_RUN);
-    quiet(runWithResults('Committed as abc1234.', [written, checked(stamp(3)), committed(stamp(4))], opts(repo)));
+    blocked(runWithResults('Committed as abc1234.', [written, checked(stamp(3)), committed(stamp(4))], opts(repo)), ALL_NAMES);
+  });
+
+  await t.test('a commit turn over 30 uncovered lines with no claim is blocked for code-reviewer once: after that block a reply that claims nothing passes, and a second commit is blocked again', () => {
+    const repo = scratchRepo();
+    const thirty = writeOf(repo, 'impl.ts', sourceLines(30), stamp(1));
+    const commitTurn = [thirty, checked(stamp(3)), committed(stamp(4))];
+    blocked(runWithResults('Committed as abc1234.', commitTurn, opts(repo)), 'code-reviewer');
+    quiet(runWithResults('Diff is above.\nSay yes and I will commit.', [thirty, checked(stamp(3))], opts(repo)));
+    for (const stopHookActive of [true, false]) {
+      quiet(runWithResults('The reviewers are still running.', [...commitTurn, agentFeedback()], opts(repo, { stopHookActive })));
+      blocked(runWithResults('Committed the follow-up as def5678.', [...commitTurn, agentFeedback(), committed(stamp(5))], opts(repo, { stopHookActive })), 'code-reviewer');
+      blocked(runWithResults(CLAIM, [...commitTurn, agentFeedback()], opts(repo, { stopHookActive })), 'code-reviewer');
+    }
+    quiet(runWithResults('Committed as abc1234.', [writeOf(repo, 'small.ts', sourceLines(3), stamp(1)), checked(stamp(3)), committed(stamp(4))], opts(repo)));
   });
 
   await t.test('"Step 3 done." with a plain commit over 300 uncovered lines owes no review; with the shipping commit it names every owed member', () => {
